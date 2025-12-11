@@ -6,15 +6,14 @@
 
 import * as readline from 'readline';
 import { existsSync, readdirSync } from 'fs';
-import { logger, printHeader, printDivider } from '../utils/logger.js';
+import { printHeader, printDivider } from '../utils/logger.js';
 import { resolvePath, getDefaultRepoPath } from '../utils/paths.js';
 import type { QARunConfig, BallotPattern } from '../config/types.js';
 import chalk from 'chalk';
 
 const AVAILABLE_PATTERNS: { label: string; value: BallotPattern }[] = [
   { label: 'Blank (no votes)', value: 'blank' },
-  { label: 'Fully Filled (max votes)', value: 'fully_filled' },
-  { label: 'Partial (some votes)', value: 'partial' },
+  { label: 'Valid', value: 'valid' },
   { label: 'Overvote (too many votes)', value: 'overvote' },
 ];
 
@@ -123,7 +122,8 @@ async function multiSelectFromMenu(
 }
 
 /**
- * Find election files in a directory
+ * Find election package files in a directory
+ * Only looks for ZIP files since raw election.json is not sufficient
  */
 function findElectionFiles(dir: string): string[] {
   const files: string[] = [];
@@ -132,12 +132,7 @@ function findElectionFiles(dir: string): string[] {
     const entries = readdirSync(resolvePath(dir));
 
     for (const entry of entries) {
-      if (
-        entry.endsWith('.json') &&
-        (entry.includes('election') || entry.startsWith('election'))
-      ) {
-        files.push(entry);
-      }
+      // Only include ZIP files - raw JSON is not supported
       if (entry.endsWith('.zip')) {
         files.push(entry);
       }
@@ -188,14 +183,14 @@ export async function runInteractiveTUI(): Promise<QARunConfig> {
     let electionSource: string;
 
     if (foundFiles.length > 0) {
-      electionSource = await selectFromMenu(rl, 'Select election file:', electionOptions);
+      electionSource = await selectFromMenu(rl, 'Select election package (ZIP from VxDesign):', electionOptions);
     } else {
-      console.log(chalk.yellow('No election files found in current directory.\n'));
+      console.log(chalk.yellow('No election package (ZIP) files found in current directory.\n'));
       electionSource = '__custom__';
     }
 
     if (electionSource === '__custom__') {
-      electionSource = await ask(rl, 'Enter path to election file (JSON or ZIP):');
+      electionSource = await ask(rl, 'Enter path to election package (ZIP from VxDesign):');
     }
 
     // Validate election file exists

@@ -8,7 +8,7 @@
 
 import { spawn } from 'child_process';
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { join } from 'path';
 import { logger } from '../utils/logger.js';
 import type { ElectionDefinition } from './election-loader.js';
 import type { VotesDict } from './vote-generator.js';

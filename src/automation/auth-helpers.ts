@@ -6,8 +6,8 @@
 
 import { Page } from '@playwright/test';
 import { logger } from '../utils/logger.js';
-import { createMockCardController, DEFAULT_PIN } from '../mock-hardware/cards.js';
-import { waitForText, clickButton } from './browser.js';
+import { createMockCardController, DEFAULT_PIN, MockCardController } from '../mock-hardware/cards.js';
+import { waitForText, waitForTextInApp, clickButtonWithDebug } from './browser.js';
 
 /**
  * Enter the PIN on the PIN pad screen
@@ -20,17 +20,14 @@ export async function enterPin(page: Page, pin = DEFAULT_PIN): Promise<void> {
   for (const digit of pin) {
     await page.getByRole('button', { name: digit }).click();
   }
-
-  // Wait for the "remove card" prompt
-  await waitForText(page, 'Remove card', { timeout: 5000 });
 }
 
 /**
  * Log in as a system administrator
  */
-export async function logInAsSystemAdministrator(
+export async function dipSystemAdministratorCardAndLogin(
   page: Page,
-  electionPath?: string
+  electionPath?: string,
 ): Promise<void> {
   logger.step('Logging in as System Administrator');
 
@@ -50,8 +47,8 @@ export async function logInAsSystemAdministrator(
   // Remove card
   await cardController.removeCard();
 
-  // Wait for the logged-in state
-  await waitForText(page, 'Lock Machine', { timeout: 10000 });
+  // Wait for the logged-in state in the main app
+  await waitForTextInApp(page, 'Lock Machine', { timeout: 10000 });
 
   logger.debug('Logged in as System Administrator');
 }
@@ -59,9 +56,9 @@ export async function logInAsSystemAdministrator(
 /**
  * Log in as an election manager
  */
-export async function logInAsElectionManager(
+export async function dipElectionManagerCardAndLogin(
   page: Page,
-  electionPath?: string
+  electionPath?: string,
 ): Promise<void> {
   logger.step('Logging in as Election Manager');
 
@@ -81,19 +78,42 @@ export async function logInAsElectionManager(
   // Remove card
   await cardController.removeCard();
 
-  // Wait for the logged-in state
-  await waitForText(page, 'Lock Machine', { timeout: 10000 });
+  logger.debug('Logged in as Election Manager');
+}
+
+/**
+ * Log in as an election manager
+ */
+export async function insertElectionManagerCardAndLogin(
+  page: Page,
+  electionPath?: string,
+): Promise<MockCardController> {
+  logger.step('Logging in as Election Manager');
+
+  const cardController = createMockCardController();
+
+  // Set election if provided
+  if (electionPath) {
+    await cardController.setElection(electionPath);
+  }
+
+  // Insert election manager card
+  await cardController.insertCard('election_manager');
+
+  // Enter PIN
+  await enterPin(page);
 
   logger.debug('Logged in as Election Manager');
+  return cardController;
 }
 
 /**
  * Log in as a poll worker
  */
-export async function logInAsPollWorker(
-  page: Page,
-  electionPath?: string
-): Promise<void> {
+export async function insertPollWorkerCardAndLogin(
+  _page: Page,
+  electionPath?: string,
+): Promise<MockCardController> {
   logger.step('Logging in as Poll Worker');
 
   const cardController = createMockCardController();
@@ -106,25 +126,28 @@ export async function logInAsPollWorker(
   // Insert poll worker card
   await cardController.insertCard('poll_worker');
 
-  // Enter PIN
-  await enterPin(page);
-
-  // Remove card
-  await cardController.removeCard();
-
   logger.debug('Logged in as Poll Worker');
+
+  return cardController;
 }
 
 /**
  * Log out by clicking Lock Machine
  */
-export async function logOut(page: Page): Promise<void> {
+export async function logOut(page: Page, outputDir: string): Promise<void> {
   logger.debug('Logging out');
 
-  await clickButton(page, 'Lock Machine');
+  try {
+    // Wait for Lock Machine to be visible in the main app, then click it
+    await waitForTextInApp(page, 'Lock Machine', { timeout: 10000 });
+    await page.getByText('Lock Machine').click({ timeout: 10000 });
+  } catch (error) {
+    // If that fails, try the debug version for better error reporting
+    await clickButtonWithDebug(page, 'Lock Machine', { outputDir });
+  }
 
-  // Wait for the locked state
-  await waitForText(page, 'Locked', { timeout: 5000 });
+  // Wait for the locked state in the main app
+  await waitForTextInApp(page, 'Locked', { timeout: 5000 });
 }
 
 /**
@@ -155,5 +178,5 @@ export async function isLoggedIn(page: Page): Promise<boolean> {
  * Wait for the machine locked screen
  */
 export async function waitForLockedScreen(page: Page): Promise<void> {
-  await waitForText(page, 'Locked', { timeout: 10000 });
+  await waitForTextInApp(page, 'Locked', { timeout: 10000 });
 }

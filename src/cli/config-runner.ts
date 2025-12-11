@@ -9,16 +9,13 @@ import type { QARunConfig } from '../config/types.js';
 // Repository management
 import { cloneOrUpdateRepo, getCurrentCommit } from '../repo/clone.js';
 import { bootstrapRepo, checkPnpmAvailable, checkNodeVersion } from '../repo/bootstrap.js';
-import { clearAllState } from '../repo/state.js';
 
-// Ballot generation
-import { loadElection } from '../ballots/election-loader.js';
-import { generateVotePatterns, hasOvervote } from '../ballots/vote-generator.js';
-import { createPlaceholderBallot } from '../ballots/ballot-marker.js';
-import { saveBallotArtifacts } from '../ballots/pdf-renderer.js';
+// Election package loading
+import { loadElectionPackage } from '../ballots/election-loader.js';
 
 // App orchestration
 import { createAppOrchestrator, ensureNoAppsRunning } from '../apps/orchestrator.js';
+import { getBackendPort } from '../apps/env-config.js';
 
 // Browser automation
 import { createBrowserSession } from '../automation/browser.js';
@@ -28,6 +25,10 @@ import { runScanWorkflow, type BallotToScan } from '../automation/scan-workflow.
 // Reporting
 import { createArtifactCollector } from '../report/artifacts.js';
 import { generateHtmlReport } from '../report/html-generator.js';
+import { join } from 'node:path';
+import { createScreenshotManager } from '../automation/screenshot.js';
+import { State } from '../repo/state.js';
+import { writeFile } from 'node:fs/promises';
 
 export interface RunOptions {
   headless?: boolean;
@@ -66,68 +67,56 @@ export async function runQAWorkflow(
     // Phase 2: Clear state
     printDivider();
     logger.step('Phase 2: Clearing State');
-    await clearAllState(repoPath);
+    const state = State.defaultFor(repoPath)
+    await state.clear();
 
-    // Phase 3: Load election
+    // Phase 3: Load election package and ballots
     printDivider();
-    logger.step('Phase 3: Loading Election');
+    logger.step('Phase 3: Loading Election Package');
 
-    const electionPackage = await loadElection(config.election.source);
+    const electionSourcePath = resolvePath(config.election.source, config.basePath);
+    const { electionPackage, electionPackagePath } =
+      await loadElectionPackage(electionSourcePath, collector.getBallotsDir());
+
     const { election } = electionPackage.electionDefinition;
 
     logger.info(`Election: ${election.title}`);
     logger.info(`Ballot styles: ${election.ballotStyles.length}`);
     logger.info(`Contests: ${election.contests.length}`);
+    logger.info(`Ballot PDFs loaded: ${electionPackage.ballots.length}`);
 
-    // Phase 4: Generate ballots
+    // Phase 4: Prepare ballots for scanning
     printDivider();
-    logger.step('Phase 4: Generating Ballots');
+    logger.step('Phase 4: Preparing Ballots');
 
     const ballotsToScan: BallotToScan[] = [];
+    const ballotsPath = join(config.output.directory, 'ballots');
 
-    for (const ballotStyle of election.ballotStyles) {
-      logger.info(`Generating ballots for style: ${ballotStyle.id}`);
+    for (const ballot of electionPackage.ballots) {
+      logger.info(`Prepared ballot: ${ballot.ballotStyleId}/${ballot.precinctId}/${ballot.ballotMode}/${ballot.ballotType}`);
 
-      const votesMap = generateVotePatterns(
-        election,
-        ballotStyle.id,
-        config.ballots.patterns
-      );
+      const pdfName = `ballot-${ballot.ballotStyleId}-${ballot.precinctId}-${ballot.ballotMode}-${ballot.ballotType}.pdf`.replace(/[\/ ]/g, '_');
+      const pdfPath = join(ballotsPath, pdfName)
 
-      for (const [pattern, votes] of votesMap) {
-        // Generate ballot (using placeholder for now)
-        const pdfBytes = await createPlaceholderBallot(
-          ballotStyle.id,
-          pattern,
-          votes
-        );
+      await writeFile(pdfPath, ballot.pdfData);
 
-        // Save artifacts
-        const artifacts = await saveBallotArtifacts(
-          pdfBytes,
-          collector.getBallotsDir(),
-          ballotStyle.id,
-          pattern
-        );
+      collector.addBallot({
+        ballotStyleId: ballot.ballotStyleId,
+        precinctId: ballot.precinctId,
+        ballotType: ballot.ballotType,
+        ballotMode: ballot.ballotMode,
+        pdfPath,
+      });
 
-        collector.addBallot({
-          ballotStyleId: ballotStyle.id,
-          pattern,
-          pdfPath: artifacts.pdfPath,
-          pngPaths: artifacts.pngPaths,
-        });
-
-        // Add to scan list
-        ballotsToScan.push({
-          ballotStyleId: ballotStyle.id,
-          pattern,
-          pdfPath: artifacts.pdfPath,
-          expectedAccepted: !hasOvervote(votes, election.contests),
-        });
-      }
+      ballotsToScan.push({
+        ballotStyleId: ballot.ballotStyleId,
+        pattern: 'blank',
+        pdfPath,
+        expectedAccepted: true,
+      });
     }
 
-    logger.success(`Generated ${ballotsToScan.length} ballots`);
+    logger.success(`Prepared ${ballotsToScan.length} ballots for scanning`);
 
     // Phase 5: Run VxAdmin workflow
     printDivider();
@@ -139,14 +128,22 @@ export async function runQAWorkflow(
     const { browser, page } = await createBrowserSession({
       headless: options.headless ?? true,
     });
+    const screenshots = createScreenshotManager(page, config.output.directory);
 
+    // FIXME: It'd be nice to not need to hardcode this as the mock USB drive data location.
+    // Perhaps the dev dock API could offer a way to add files, or we'd use a mocking approach
+    // that happens more at the Linux system level.
+    const dataPath = join(config.vxsuite.repoPath, 'libs/usb-drive/dev-workspace/mock-usb-data');
     let exportedPackagePath: string;
 
     try {
       const adminResult = await runAdminWorkflow(
         page,
-        resolvePath(config.election.source),
-        config.output.directory
+        screenshots,
+        electionPackagePath, // Use the extracted election package ZIP
+        config.output.directory,
+        dataPath,
+        getBackendPort('admin')
       );
       exportedPackagePath = adminResult.exportedPackagePath;
     } finally {
@@ -162,10 +159,12 @@ export async function runQAWorkflow(
     try {
       const scanResult = await runScanWorkflow(
         page,
+        screenshots,
         exportedPackagePath,
-        resolvePath(config.election.source),
+        electionPackagePath, // Use the extracted election package ZIP
         ballotsToScan,
-        config.output.directory
+        config.output.directory,
+        dataPath,
       );
 
       collector.addScanResults(scanResult.scanResults);
@@ -197,6 +196,7 @@ export async function runQAWorkflow(
     const rejected = results.filter((r) => !r.accepted).length;
     logger.info(`Scan results: ${accepted} accepted, ${rejected} rejected`);
 
+    await state.copyWorkspacesTo(join(collector.getOutputDir(), 'workspaces'));
   } catch (error) {
     if (error instanceof Error) {
       collector.logError(error, 'workflow');

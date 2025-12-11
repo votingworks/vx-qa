@@ -92,7 +92,7 @@ export function spawnBackground(
  * Kill a process and all its children
  */
 export function killProcessTree(pid: number): Promise<void> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     treeKill(pid, 'SIGTERM', (err) => {
       if (err) {
         // Try SIGKILL if SIGTERM fails

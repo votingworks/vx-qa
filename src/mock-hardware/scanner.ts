@@ -35,8 +35,8 @@ export interface MockScannerController {
 /**
  * Create a mock scanner controller
  */
-export function createMockScannerController(port = 3004): MockScannerController {
-  const client: DevDockClient = createDevDockClient(port);
+export function createMockScannerController(): MockScannerController {
+  const client: DevDockClient = createDevDockClient();
 
   return {
     async insertSheet(pdfPath: string): Promise<void> {

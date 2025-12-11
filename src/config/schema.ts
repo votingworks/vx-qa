@@ -2,12 +2,13 @@
  * Zod validation schemas for configuration
  */
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
+import { resolvePath } from '../utils/paths.js';
+import { dirname } from 'node:path';
 
 export const BallotPatternSchema = z.enum([
   'blank',
-  'fully_filled',
-  'partial',
+  'valid',
   'overvote',
 ]);
 
@@ -44,8 +45,12 @@ export type QARunConfigOutput = z.output<typeof QARunConfigSchema>;
 /**
  * Validate a configuration object
  */
-export function validateConfig(config: unknown): QARunConfigOutput {
-  return QARunConfigSchema.parse(config);
+export function validateConfig(config: unknown, configPath: string): QARunConfigOutput {
+  const parsedConfig = QARunConfigSchema.parse(config);
+  const configDir = dirname(configPath);
+  parsedConfig.vxsuite.repoPath = resolvePath(parsedConfig.vxsuite.repoPath, configDir);
+  parsedConfig.election.source = resolvePath(parsedConfig.election.source, configDir);
+  return parsedConfig;
 }
 
 /**

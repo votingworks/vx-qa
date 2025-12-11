@@ -7,7 +7,6 @@ import type {
   Election,
   Contest,
   CandidateContest,
-  YesNoContest,
   Candidate,
 } from './election-loader.js';
 import { getContestsForBallotStyle } from './election-loader.js';
@@ -39,11 +38,8 @@ export function generateVotePatterns(
       case 'blank':
         result.set('blank', generateBlankVotes());
         break;
-      case 'fully_filled':
-        result.set('fully_filled', generateFullyFilledVotes(contests));
-        break;
-      case 'partial':
-        result.set('partial', generatePartialVotes(contests));
+      case 'valid':
+        result.set('valid', generateFullyFilledVotes(contests));
         break;
       case 'overvote':
         result.set('overvote', generateOvervotedVotes(contests));
@@ -73,30 +69,6 @@ function generateFullyFilledVotes(contests: Contest[]): VotesDict {
     } else if (contest.type === 'yesno') {
       // Vote 'yes' for yes/no contests
       votes[contest.id] = [contest.yesOption.id];
-    }
-  }
-
-  return votes;
-}
-
-/**
- * Generate partial votes (some contests voted, some blank)
- */
-function generatePartialVotes(contests: Contest[]): VotesDict {
-  const votes: VotesDict = {};
-
-  // Vote in every other contest
-  for (let i = 0; i < contests.length; i++) {
-    if (i % 2 === 0) {
-      const contest = contests[i];
-      if (contest.type === 'candidate') {
-        // Vote for fewer than max allowed
-        const numVotes = Math.max(1, Math.floor(contest.seats / 2));
-        votes[contest.id] = selectCandidates(contest, numVotes);
-      } else if (contest.type === 'yesno') {
-        // Alternate yes/no
-        votes[contest.id] = [i % 4 === 0 ? contest.yesOption.id : contest.noOption.id];
-      }
     }
   }
 

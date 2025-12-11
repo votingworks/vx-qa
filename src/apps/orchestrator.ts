@@ -3,9 +3,10 @@
  */
 
 import { ChildProcess } from 'child_process';
+import { createInterface } from 'readline';
 import { logger } from '../utils/logger.js';
 import { spawnBackground, killProcessTree, waitForPort, sleep } from '../utils/process.js';
-import { getMockEnvironment, APP_PORTS, type MachineType } from './env-config.js';
+import { getMockEnvironment, APP_PORTS, getBackendPort, type MachineType } from './env-config.js';
 import { waitForDevDock } from '../mock-hardware/client.js';
 
 export interface AppOrchestrator {
@@ -71,19 +72,24 @@ export function createAppOrchestrator(repoPath: string): AppOrchestrator {
         state.currentApp = app;
 
         // Log output for debugging
-        state.process.stdout?.on('data', (data) => {
-          const line = data.toString().trim();
-          if (line) {
-            logger.debug(`[${app}] ${line}`);
-          }
-        });
+        const { stdout, stderr } = state.process;
+        if (stdout) {
+          createInterface({ input: stdout, crlfDelay: Infinity })
+            .on('line', (line) => {
+              if (line) {
+                logger.debug(`[${app}] ${line.trim()}`);
+              }
+            });
+        }
 
-        state.process.stderr?.on('data', (data) => {
-          const line = data.toString().trim();
-          if (line && !line.includes('warning')) {
-            logger.debug(`[${app}:err] ${line}`);
-          }
-        });
+        if (stderr) {
+          createInterface({ input: stderr, crlfDelay: Infinity })
+            .on('line', (line) => {
+              if (line) {
+                logger.debug(`[${app}:err] ${line.trim()}`);
+              }
+            });
+        }
 
         state.process.on('exit', (code) => {
           logger.debug(`${app} process exited with code ${code}`);
@@ -99,15 +105,16 @@ export function createAppOrchestrator(repoPath: string): AppOrchestrator {
         }
 
         // Wait for backend to be ready
-        spinner.text = `Waiting for ${app} backend (port ${APP_PORTS.backend})...`;
-        const backendReady = await waitForPort(APP_PORTS.backend, 'localhost', 60000);
+        const backendPort = getBackendPort(app);
+        spinner.text = `Waiting for ${app} backend (port ${backendPort})...`;
+        const backendReady = await waitForPort(backendPort, 'localhost', 60000);
         if (!backendReady) {
-          throw new Error(`${app} backend did not start on port ${APP_PORTS.backend}`);
+          throw new Error(`${app} backend did not start on port ${backendPort}`);
         }
 
         // Wait for dev-dock to be available
         spinner.text = `Waiting for dev-dock API...`;
-        const devDockReady = await waitForDevDock(APP_PORTS.backend, 30000);
+        const devDockReady = await waitForDevDock(backendPort, 30000);
         if (!devDockReady) {
           logger.warn('Dev-dock API not responding, continuing anyway...');
         }
@@ -134,7 +141,8 @@ export function createAppOrchestrator(repoPath: string): AppOrchestrator {
         return;
       }
 
-      const spinner = logger.spinner(`Stopping ${state.currentApp} app...`);
+      const appName = state.currentApp;
+      const spinner = logger.spinner(`Stopping ${appName} app...`);
 
       try {
         const pid = state.process.pid;
@@ -159,7 +167,6 @@ export function createAppOrchestrator(repoPath: string): AppOrchestrator {
           });
         });
 
-        const appName = state.currentApp;
         state.process = null;
         state.currentApp = null;
 
@@ -183,12 +190,13 @@ export function createAppOrchestrator(repoPath: string): AppOrchestrator {
     },
 
     async waitForReady(timeout = 30000): Promise<boolean> {
-      if (!state.process) {
+      if (!state.process || !state.currentApp) {
         return false;
       }
 
+      const backendPort = getBackendPort(state.currentApp);
       const frontendReady = await waitForPort(APP_PORTS.frontend, 'localhost', timeout);
-      const backendReady = await waitForPort(APP_PORTS.backend, 'localhost', timeout);
+      const backendReady = await waitForPort(backendPort, 'localhost', timeout);
 
       return frontendReady && backendReady;
     },
@@ -205,7 +213,14 @@ export async function ensureNoAppsRunning(): Promise<void> {
 
   try {
     // Find any processes using our ports
-    const ports = [APP_PORTS.frontend, APP_PORTS.backend];
+    const ports = [
+      APP_PORTS.frontend,
+      3001, // mark
+      3002, // scan
+      3003, // mark-scan
+      3004, // admin
+      3005, // central-scan
+    ];
 
     for (const port of ports) {
       try {

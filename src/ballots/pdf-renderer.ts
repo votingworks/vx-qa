@@ -2,8 +2,8 @@
  * PDF to PNG rendering for ballot visualization
  */
 
-import { writeFileSync, mkdirSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
+import { join } from 'path';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -73,7 +73,6 @@ async function renderWithPdftoppm(
       }
 
       // Find generated PNG files
-      const { readdirSync } = require('fs');
       const files = readdirSync(outputDir)
         .filter((f: string) => f.startsWith(baseName) && f.endsWith('.png'))
         .map((f: string) => join(outputDir, f))

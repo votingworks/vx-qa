@@ -42,8 +42,8 @@ export interface MockCardController {
 /**
  * Create a mock card controller
  */
-export function createMockCardController(port = 3004): MockCardController {
-  const client: DevDockClient = createDevDockClient(port);
+export function createMockCardController(): MockCardController {
+  const client: DevDockClient = createDevDockClient();
 
   return {
     async setElection(electionPath: string): Promise<void> {

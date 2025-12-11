@@ -64,5 +64,25 @@ export function getMachineEnv(machineType: MachineType): Record<string, string> 
  */
 export const APP_PORTS = {
   frontend: 3000,
-  backend: 3004,
+  backend: 3004, // Default for VxAdmin
 } as const;
+
+/**
+ * Get backend port for a specific machine type
+ */
+export function getBackendPort(machineType: MachineType): number {
+  switch (machineType) {
+    case 'admin':
+      return 3004;
+    case 'scan':
+      return 3002;
+    case 'mark':
+      return 3001;
+    case 'mark-scan':
+      return 3003;
+    case 'central-scan':
+      return 3005;
+    default:
+      return 3004;
+  }
+}

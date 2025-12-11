@@ -58,7 +58,7 @@ export function createScreenshotManager(
       };
 
       screenshots.push(artifact);
-      logger.debug(`Screenshot: ${name}`);
+      logger.info(`Screenshot: ${name}`);
 
       return artifact;
     },

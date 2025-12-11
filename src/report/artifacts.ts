@@ -92,7 +92,7 @@ export function createArtifactCollector(
   return {
     addBallot(artifact: BallotArtifact): void {
       collection.ballots.push(artifact);
-      logger.debug(`Added ballot artifact: ${artifact.ballotStyleId} - ${artifact.pattern}`);
+      logger.debug(`Added ballot artifact: ${artifact.ballotStyleId}`);
     },
 
     addScreenshot(artifact: ScreenshotArtifact): void {

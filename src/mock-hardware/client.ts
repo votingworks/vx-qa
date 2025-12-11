@@ -15,7 +15,7 @@ export interface DevDockClient {
 /**
  * Create a dev-dock API client
  */
-export function createDevDockClient(port = 3004): DevDockClient {
+export function createDevDockClient(port = 3000): DevDockClient {
   const baseUrl = `http://localhost:${port}/dock`;
 
   return {
@@ -25,6 +25,7 @@ export function createDevDockClient(port = 3004): DevDockClient {
       logger.debug(`Calling dev-dock: ${method}`);
 
       try {
+        console.log('POST', url, 'BODY', JSON.stringify(params || {}));
         const response = await fetch(url, {
           method: 'POST',
           headers: {

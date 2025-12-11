@@ -2,7 +2,9 @@
  * Configuration types for VxSuite QA automation tool
  */
 
-export type BallotPattern = 'blank' | 'fully_filled' | 'partial' | 'overvote';
+import { BallotMode, BallotType } from "../ballots/election-loader.js";
+
+export type BallotPattern = 'blank' | 'valid' | 'overvote';
 
 export interface VxSuiteConfig {
   /** Path where VxSuite repo should be cloned */
@@ -33,6 +35,7 @@ export interface QARunConfig {
   election: ElectionConfig;
   ballots: BallotConfig;
   output: OutputConfig;
+  basePath?: string;
 }
 
 /** Result of scanning a single ballot */
@@ -58,9 +61,10 @@ export interface ArtifactCollection {
 
 export interface BallotArtifact {
   ballotStyleId: string;
-  pattern: BallotPattern;
+  precinctId: string;
+  ballotType: BallotType;
+  ballotMode: BallotMode;
   pdfPath: string;
-  pngPaths: string[];
 }
 
 export interface ScreenshotArtifact {
@@ -84,7 +88,7 @@ export const DEFAULT_CONFIG: Partial<QARunConfig> = {
     tag: 'v4.0.4',
   },
   ballots: {
-    patterns: ['blank', 'fully_filled', 'partial', 'overvote'],
+    patterns: ['blank', 'valid', 'overvote'],
   },
   output: {
     directory: './qa-output',

@@ -14,6 +14,7 @@ import { resolvePath, generateTimestampedDir, ensureDir } from './utils/paths.js
 import { runQAWorkflow } from './cli/config-runner.js';
 import { runInteractiveTUI } from './cli/interactive-tui.js';
 import type { QARunConfig } from './config/types.js';
+import { dirname } from 'path';
 
 const program = new Command();
 
@@ -49,7 +50,8 @@ program
 
         const configData = readFileSync(configPath, 'utf-8');
         const parsedConfig = JSON.parse(configData);
-        config = validateConfig(parsedConfig);
+        config = validateConfig(parsedConfig, configPath);
+        config.basePath = dirname(configPath);
         logger.info(`Loaded configuration from ${configPath}`);
       } else if (options.interactive || !options.config) {
         // Run interactive TUI
@@ -116,9 +118,7 @@ program
         console.log(JSON.stringify(result.data, null, 2));
       } else {
         logger.error('Configuration is invalid:');
-        result.error?.errors.forEach((err) => {
-          console.log(`  - ${err.path.join('.')}: ${err.message}`);
-        });
+        console.error(result.error?.message ?? 'unknown error')
         process.exit(1);
       }
     } catch (error) {
@@ -143,7 +143,7 @@ program
         source: './election.json',
       },
       ballots: {
-        patterns: ['blank', 'fully_filled', 'partial', 'overvote'],
+        patterns: ['blank', 'valid', 'overvote'],
       },
       output: {
         directory: './qa-output',

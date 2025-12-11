@@ -71,11 +71,3 @@ export function getDefaultOutputDir(): string {
   return resolvePath('./qa-output');
 }
 
-/**
- * Mock state directories that need to be cleared between runs
- */
-export const MOCK_STATE_DIRS = {
-  usb: '/tmp/mock-usb',
-  printer: '/tmp/mock-printer',
-  devDock: expandHome('~/.vx-dev-dock'),
-};

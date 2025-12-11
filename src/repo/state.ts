@@ -3,31 +3,78 @@
  */
 
 import { existsSync } from 'fs';
-import { rm, readdir, unlink } from 'fs/promises';
+import { rm, readdir, cp, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { logger } from '../utils/logger.js';
-import { MOCK_STATE_DIRS, resolvePath } from '../utils/paths.js';
+import { expandHome, resolvePath } from '../utils/paths.js';
 
-/**
- * Clear all mock state directories
- */
-export async function clearMockState(): Promise<void> {
-  const spinner = logger.spinner('Clearing mock state...');
+export class State {
+  static defaultFor(repoPath: string): State {
+    return new State(
+      repoPath,
+      join(repoPath, 'libs/usb-drive/dev-workspace'),
+      join(repoPath, 'libs/fujitsu-thermal-printer/dev-workspace'),
+      expandHome('~/.vx-dev-dock')
+    )
+  }
 
-  try {
-    // Clear USB mock state
-    await clearDirectory(MOCK_STATE_DIRS.usb);
+  private constructor(
+    private readonly repoPath: string,
+    private readonly usbDrivePath: string,
+    private readonly printerPath: string,
+    private readonly devDockPath: string,
+  ) { }
 
-    // Clear printer mock state
-    await clearDirectory(MOCK_STATE_DIRS.printer);
+  async clear(): Promise<void> {
+    logger.step('Clearing all state for fresh QA run...');
+    await this.clearMockState();
+    await this.clearAppWorkspaces();
+    logger.success('All state cleared');
+  }
 
-    // Clear dev-dock state
-    await clearDirectory(MOCK_STATE_DIRS.devDock);
+  private async clearMockState(): Promise<void> {
+    const spinner = logger.spinner('Clearing mock state...');
 
-    spinner.succeed('Mock state cleared');
-  } catch (error) {
-    spinner.fail('Failed to clear mock state');
-    throw error;
+    try {
+      await clearDirectory(this.usbDrivePath);
+      await clearDirectory(this.printerPath);
+      await clearDirectory(this.devDockPath);
+      await this.clearAppWorkspaces();
+
+      spinner.succeed('Mock state cleared');
+    } catch (error) {
+      spinner.fail('Failed to clear mock state');
+      throw error;
+    }
+  }
+
+  private async clearAppWorkspaces(): Promise<void> {
+    // Clear the dev workspace directory
+    const appsRoot = join(this.repoPath, 'apps');
+    const apps = await readdir(appsRoot);
+
+    for (const app of apps) {
+      const backendPath = join(appsRoot, app, 'backend');
+      const devWorkspace = join(backendPath, 'dev-workspace');
+      await clearDirectory(devWorkspace);
+      logger.debug(`[${app}] Cleared dev workspace`);
+    }
+  }
+
+  async copyWorkspacesTo(outputPath: string): Promise<void> {
+    const spinner = logger.spinner('Copying workspace data...');
+
+    try {
+      await Promise.all([['admin', join(this.repoPath, 'apps/admin/backend/dev-workspace')], ['scan', join(this.repoPath, 'apps/scan/backend/dev-workspace')], ['usb-drive', this.usbDrivePath], ['fujitsu-thermal-printer', this.printerPath]].map(async ([name, path]) => {
+        const workspacePath = join(outputPath, name);
+        await mkdir(workspacePath, { recursive: true });
+        await cp(path, workspacePath, { recursive: true });
+      }));
+      spinner.succeed('Workspace data copied to output');
+    } catch (error) {
+      spinner.fail('Failed to copy workspace data to output');
+      throw error;
+    }
   }
 }
 
@@ -49,69 +96,3 @@ async function clearDirectory(dirPath: string): Promise<void> {
   }
 }
 
-/**
- * Clear app databases (SQLite files)
- */
-export async function clearAppDatabases(repoPath: string): Promise<void> {
-  const apps = ['admin', 'scan'];
-
-  for (const app of apps) {
-    const backendPath = join(repoPath, 'apps', app, 'backend');
-    await clearSqliteFiles(backendPath);
-  }
-
-  logger.debug('App databases cleared');
-}
-
-/**
- * Find and clear SQLite database files in a directory
- */
-async function clearSqliteFiles(dirPath: string): Promise<void> {
-  if (!existsSync(dirPath)) {
-    return;
-  }
-
-  try {
-    const files = await readdir(dirPath);
-    const sqliteFiles = files.filter(
-      (f) => f.endsWith('.db') || f.endsWith('.sqlite') || f.endsWith('.sqlite3')
-    );
-
-    for (const file of sqliteFiles) {
-      const filePath = join(dirPath, file);
-      try {
-        await unlink(filePath);
-        logger.debug(`Removed database: ${filePath}`);
-      } catch (error) {
-        logger.warn(`Failed to remove ${filePath}: ${error}`);
-      }
-    }
-  } catch (error) {
-    logger.warn(`Failed to read directory ${dirPath}: ${error}`);
-  }
-}
-
-/**
- * Clear VxSuite workspace state
- */
-export async function clearWorkspaceState(repoPath: string): Promise<void> {
-  // Clear the dev workspace directory
-  const devWorkspace = join(repoPath, 'dev-workspace');
-  if (existsSync(devWorkspace)) {
-    await rm(devWorkspace, { recursive: true, force: true });
-    logger.debug('Cleared dev workspace');
-  }
-}
-
-/**
- * Clear all state for a fresh QA run
- */
-export async function clearAllState(repoPath: string): Promise<void> {
-  logger.step('Clearing all state for fresh QA run...');
-
-  await clearMockState();
-  await clearAppDatabases(repoPath);
-  await clearWorkspaceState(repoPath);
-
-  logger.success('All state cleared');
-}
