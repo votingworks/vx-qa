@@ -44,6 +44,10 @@ export async function runScanWorkflow(
 ): Promise<ScanWorkflowResult> {
   logger.step('Running VxScan workflow');
 
+  await page.setViewportSize({
+    width: 1920,
+    height: 1080,
+  });
   const usbController = createMockUsbController({ dataPath });
   const scannerController = createMockScannerController();
   const scanResults: ScanResult[] = [];

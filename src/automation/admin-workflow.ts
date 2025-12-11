@@ -37,6 +37,10 @@ export async function runAdminWorkflow(
 ): Promise<AdminWorkflowResult> {
   logger.step('Running VxAdmin workflow');
 
+  await page.setViewportSize({
+    width: 1920,
+    height: 1200,
+  });
   const usbController = createMockUsbController({ dataPath, port: backendPort });
 
   // Navigate to app
