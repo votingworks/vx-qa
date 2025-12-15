@@ -12,6 +12,7 @@ import {
   readFileAsBase64,
   getMimeType,
 } from './artifacts.js';
+import { generatePdfThumbnail } from './pdf-thumbnail.js';
 
 /**
  * Generate an HTML report from the artifact collection
@@ -25,7 +26,7 @@ export async function generateHtmlReport(
   const reportPath = join(outputDir, 'report.html');
 
   // Prepare data for the template
-  const data = prepareReportData(collection, outputDir);
+  const data = await prepareReportData(collection, outputDir);
 
   // Generate HTML
   const html = renderTemplate(data);
@@ -41,10 +42,10 @@ export async function generateHtmlReport(
 /**
  * Prepare data for the HTML template
  */
-function prepareReportData(
+async function prepareReportData(
   collection: ArtifactCollection,
   outputDir: string
-): ReportData {
+): Promise<ReportData> {
   // Collect screenshots with base64 data
   const screenshotsDir = join(outputDir, 'screenshots');
   const screenshotFiles = collectFilesInDir(screenshotsDir, ['.png', '.jpg', '.jpeg']);
@@ -64,6 +65,17 @@ function prepareReportData(
       : undefined,
   }));
 
+  // Collect Fujitsu thermal printer PDFs
+  const printsDir = join(outputDir, 'workspaces', 'fujitsu-thermal-printer', 'prints');
+  const printFiles = collectFilesInDir(printsDir, ['.pdf']);
+  const prints = await Promise.all(
+    printFiles.map(async (file) => ({
+      name: file.name,
+      path: `workspaces/fujitsu-thermal-printer/prints/${file.name}`,
+      thumbnail: await generatePdfThumbnail(file.path),
+    }))
+  );
+
   // Calculate statistics
   const totalScanned = collection.scanResults.length;
   const accepted = collection.scanResults.filter((r) => r.accepted).length;
@@ -73,8 +85,8 @@ function prepareReportData(
   const duration =
     collection.endTime && collection.startTime
       ? Math.round(
-          (collection.endTime.getTime() - collection.startTime.getTime()) / 1000
-        )
+        (collection.endTime.getTime() - collection.startTime.getTime()) / 1000
+      )
       : null;
 
   return {
@@ -97,9 +109,10 @@ function prepareReportData(
     },
     screenshots,
     ballots,
+    prints,
     scanResults: collection.scanResults.map((r) => ({
-      ballotStyleId: r.ballotStyleId,
-      pattern: r.pattern,
+      ballotStyleId: r.input.ballotStyleId,
+      pattern: r.input.pattern,
       status: r.accepted ? 'Accepted' : 'Rejected',
       reason: r.reason || '-',
       statusClass: r.accepted ? 'success' : 'error',
@@ -133,6 +146,7 @@ interface ReportData {
   };
   screenshots: { name: string; data: string }[];
   ballots: { name: string; isPdf: boolean; data?: string }[];
+  prints: { name: string; path: string; thumbnail: string | null }[];
   scanResults: {
     ballotStyleId: string;
     pattern: string;
@@ -361,6 +375,28 @@ function renderTemplate(data: ReportData): string {
           <div class="caption">{{name}} (PDF)</div>
         </div>
         {{/if}}
+        {{/each}}
+      </div>
+    </div>
+    {{/if}}
+
+    {{#if prints.length}}
+    <div class="card">
+      <h2>Fujitsu Thermal Printer Output</h2>
+      <div class="gallery">
+        {{#each prints}}
+        <div class="gallery-item">
+          {{#if thumbnail}}
+          <a href="{{path}}" target="_blank">
+            <img src="{{thumbnail}}" alt="{{name}}" loading="lazy">
+          </a>
+          {{else}}
+          <a href="{{path}}" target="_blank">
+            <div class="caption">{{name}}</div>
+          </a>
+          {{/if}}
+          <div class="caption">{{name}}</div>
+        </div>
         {{/each}}
       </div>
     </div>

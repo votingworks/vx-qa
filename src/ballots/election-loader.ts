@@ -29,6 +29,7 @@ export interface CandidateContest {
   seats: number;
   candidates: Candidate[];
   allowWriteIns: boolean;
+  districtId: string;
 }
 
 export interface YesNoContest {
@@ -37,6 +38,7 @@ export interface YesNoContest {
   title: string;
   yesOption: { id: string; label: string };
   noOption: { id: string; label: string };
+  districtId: string;
 }
 
 export type Contest = CandidateContest | YesNoContest;
@@ -83,6 +85,7 @@ export interface ElectionDefinition {
 
 export interface ElectionPackage {
   electionDefinition: ElectionDefinition;
+  systemSettings: Record<string, unknown>;
   ballots: BallotPdfInfo[];
   metadata?: {
     version: string;
@@ -210,12 +213,26 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
   // Validate we have what we need
   assert(ballots.length > 0, 'Election package contains no ballot PDFs.');
 
+  const systemSettingsFile = zip.file('systemSettings.json');
+  if (!systemSettingsFile) {
+    throw new Error(
+      `Invalid election package: election.json not found.\n` +
+      `This doesn't appear to be a valid VxDesign election package.\n` +
+      `Files found: ${fileNames.slice(0, 5).join(', ')}${fileNames.length > 5 ? '...' : ''}\n` +
+      `Source: ${sourcePath}`
+    );
+  }
+
+  const systemSettingsJson = await systemSettingsFile.async('string');
+  const systemSettings = JSON.parse(systemSettingsJson);
+
   return {
     electionDefinition: {
       election,
       electionData,
       ballotHash,
     },
+    systemSettings,
     ballots,
     metadata,
   };
@@ -244,9 +261,8 @@ export function getContestsForBallotStyle(
     throw new Error(`Ballot style not found: ${ballotStyleId}`);
   }
 
-  // In a real implementation, we'd filter by districts
-  // For now, return all contests
-  return election.contests;
+  const districts = ballotStyle.districts;
+  return election.contests.filter((c) => districts.includes(c.districtId));
 }
 
 /**

@@ -29,6 +29,7 @@ import { join } from 'node:path';
 import { createScreenshotManager } from '../automation/screenshot.js';
 import { State } from '../repo/state.js';
 import { writeFile } from 'node:fs/promises';
+import assert from 'node:assert';
 
 export interface RunOptions {
   headless?: boolean;
@@ -77,6 +78,7 @@ export async function runQAWorkflow(
     const electionSourcePath = resolvePath(config.election.source, config.basePath);
     const { electionPackage, electionPackagePath } =
       await loadElectionPackage(electionSourcePath, collector.getBallotsDir());
+    assert(electionPackage.systemSettings['disallowCastingOvervotes'], `System setting 'disallowCastingOvervotes' must be true`);
 
     const { election } = electionPackage.electionDefinition;
 
@@ -112,8 +114,22 @@ export async function runQAWorkflow(
         ballotStyleId: ballot.ballotStyleId,
         pattern: 'blank',
         pdfPath,
-        expectedAccepted: true,
+        expectedAccepted: ballot.ballotMode === 'official',
       });
+
+      if (ballot.ballotMode === 'official') {
+        ballotsToScan.push({
+          ballotStyleId: ballot.ballotStyleId,
+          pattern: 'valid',
+          pdfPath,
+          expectedAccepted: true,
+        }, {
+          ballotStyleId: ballot.ballotStyleId,
+          pattern: 'overvote',
+          pdfPath,
+          expectedAccepted: false
+        })
+      }
     }
 
     logger.success(`Prepared ${ballotsToScan.length} ballots for scanning`);
@@ -158,8 +174,10 @@ export async function runQAWorkflow(
 
     try {
       const scanResult = await runScanWorkflow(
+        repoPath,
         page,
         screenshots,
+        electionPackage,
         exportedPackagePath,
         electionPackagePath, // Use the extracted election package ZIP
         ballotsToScan,
@@ -175,7 +193,12 @@ export async function runQAWorkflow(
 
     // Phase 7: Generate report
     printDivider();
-    logger.step('Phase 7: Generating Report');
+    logger.step('Phase 7: Copy Workspaces');
+    await state.copyWorkspacesTo(join(collector.getOutputDir(), 'workspaces'));
+
+    // Phase 8: Generate report
+    printDivider();
+    logger.step('Phase 8: Generating Report');
 
     collector.complete();
     const reportPath = await generateHtmlReport(
@@ -195,8 +218,6 @@ export async function runQAWorkflow(
     const accepted = results.filter((r) => r.accepted).length;
     const rejected = results.filter((r) => !r.accepted).length;
     logger.info(`Scan results: ${accepted} accepted, ${rejected} rejected`);
-
-    await state.copyWorkspacesTo(join(collector.getOutputDir(), 'workspaces'));
   } catch (error) {
     if (error instanceof Error) {
       collector.logError(error, 'workflow');

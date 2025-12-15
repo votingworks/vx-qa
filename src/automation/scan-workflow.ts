@@ -17,6 +17,10 @@ import type { ScanResult, BallotPattern } from '../config/types.js';
 import { copyFileSync } from 'fs';
 import { basename, join } from 'path';
 import { createMockScannerController } from '../mock-hardware/scanner.js';
+import { generateMarkedBallotForPattern } from '../ballots/ballot-marker.js';
+import { Election, ElectionPackage } from '../ballots/election-loader.js';
+import { readFile, writeFile } from 'fs/promises';
+import { createHash } from 'crypto';
 
 export interface ScanWorkflowResult {
   scanResults: ScanResult[];
@@ -34,8 +38,10 @@ export interface BallotToScan {
  * Run the VxScan workflow
  */
 export async function runScanWorkflow(
+  repoPath: string,
   page: Page,
   screenshots: ScreenshotManager,
+  electionPackage: ElectionPackage,
   electionPackagePath: string,
   electionPath: string,
   ballotsToScan: BallotToScan[],
@@ -43,6 +49,7 @@ export async function runScanWorkflow(
   dataPath: string,
 ): Promise<ScanWorkflowResult> {
   logger.step('Running VxScan workflow');
+  const election = electionPackage.electionDefinition.election;
 
   await page.setViewportSize({
     width: 1920,
@@ -82,8 +89,7 @@ export async function runScanWorkflow(
   logger.debug('Opening polls');
 
   // Need poll worker to open polls - will be used when poll opening is implemented
-  // const pollWorkerCard = await insertPollWorkerCardAndLogin(page, electionPath, backendPort);
-  const pollWorkerCard = await insertPollWorkerCard(page, electionPath);
+  const pollWorkerCardForOpeningPolls = await insertPollWorkerCard(page, electionPath);
 
   await page.getByText('Do you want to open the polls?').isVisible();
 
@@ -98,7 +104,7 @@ export async function runScanWorkflow(
 
   await waitForTextInApp(page, 'Polls Opened');
   await screenshots.capture(SCREENSHOT_STEPS.SCAN_POLLS_OPEN, 'Polls opened');
-  pollWorkerCard.removeCard();
+  pollWorkerCardForOpeningPolls.removeCard();
 
   // Ready to scan
   await waitForTextInApp(page, 'Insert Your Ballot');
@@ -108,29 +114,31 @@ export async function runScanWorkflow(
   for (const ballot of ballotsToScan) {
     logger.debug(`Scanning ballot: ${ballot.ballotStyleId} - ${ballot.pattern}`);
 
-    const result = await scanBallot(page, scannerController, ballot, screenshots);
-    scanResults.push(result);
+    const result = await scanBallot(repoPath, election, page, scannerController, ballot, screenshots);
+    if (result) {
+      scanResults.push(result);
+    }
   }
-  //
-  // // Close polls
-  // logger.debug('Closing polls');
-  // await page.getByText('Do you want to close the polls?').isVisible();
-  //
-  // if (await isTextVisible(page, 'Close Polls')) {
-  //   await clickButtonWithDebug(page, 'Close Polls for All Precincts', {
-  //     timeout: 10000,
-  //     outputDir,
-  //     label: 'Confirming Close Polls',
-  //   });
-  // }
-  //
-  // await page.waitForTimeout(1000);
-  // await screenshots.capture(SCREENSHOT_STEPS.SCAN_RESULTS, 'Final results');
 
-  await page.waitForTimeout(10_000);
+  // Close polls
+  logger.debug('Closing polls');
+  const pollWorkerCardForClosingPolls = await insertPollWorkerCard(page, electionPath);
+  await waitForTextInApp(page, 'Do you want to close the polls?');
 
-  // Remove USB
+  await clickButtonWithDebug(page, 'Close Polls', {
+    timeout: 10000,
+    outputDir,
+    label: 'Confirming Close Polls',
+  });
+
+  await waitForTextInApp(page, 'Polls Closed');
+
+  // Clean up
+  await pollWorkerCardForClosingPolls.removeCard();
   await usbController.remove();
+
+  await waitForTextInApp(page, 'Voting is complete.');
+  await screenshots.capture(SCREENSHOT_STEPS.SCAN_POLLS_CLOSED, 'Polls Closed');
 
   return {
     scanResults,
@@ -138,20 +146,31 @@ export async function runScanWorkflow(
   };
 }
 
-// TODO: Implement ballot scanning workflow
-// The scanBallot function below is ready but not yet integrated into the workflow
 async function scanBallot(
+  repoPath: string,
+  election: Election,
   page: Page,
   scannerController: ReturnType<typeof createMockScannerController>,
   ballot: BallotToScan,
   screenshots: ReturnType<typeof createScreenshotManager>
-): Promise<ScanResult> {
+): Promise<ScanResult | undefined> {
   const { ballotStyleId, pattern, pdfPath } = ballot;
+  const markedBallotPdf = await generateMarkedBallotForPattern(repoPath, election, ballotStyleId, pattern, await readFile(pdfPath));
+
+  if (!markedBallotPdf) {
+    return undefined;
+  }
+
+  const hasher = createHash('sha256');
+  hasher.update(ballotStyleId).update(pattern).end();
+  const digest = hasher.digest('hex')
+  const markedBallotPdfPath = ballot.pdfPath.replace(/\.pdf$/i, `-${digest}.pdf`);
+  await writeFile(markedBallotPdfPath, markedBallotPdf.pdfBytes);
 
   // Insert ballot into scanner
   await waitForTextInApp(page, 'Insert Your Ballot');
   await page.waitForTimeout(1000);
-  await scannerController.insertSheet(pdfPath);
+  await scannerController.insertSheet(markedBallotPdfPath);
 
   // Wait for scan to process
   await waitForTextInApp(page, 'Please wait…');
@@ -171,8 +190,7 @@ async function scanBallot(
     await screenshots.capture(screenshotName, `Ballot accepted: ${ballotStyleId} ${pattern}`);
 
     return {
-      ballotStyleId,
-      pattern,
+      input: ballot,
       accepted: true,
       screenshotPath: screenshots.getAll().slice(-1)[0]?.path,
     };
@@ -180,19 +198,20 @@ async function scanBallot(
     await screenshots.capture(screenshotName, `Ballot rejected: ${ballotStyleId} ${pattern}`);
 
     // Handle rejected ballot - return it
-    const returnButton = page.getByRole('button', { name: /Return|Reject/i });
+    await page.waitForTimeout(1000);
+    const returnButton = page.getByRole('button', { name: 'Return Ballot' });
     if (await returnButton.isVisible()) {
       await returnButton.click();
+
+      // Wait until we're told to remove the ballot.
+      await waitForTextInApp(page, 'Remove Your Ballot');
     }
 
-    // Wait before removing.
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500);
     await scannerController.removeSheet();
-    await page.waitForTimeout(1000);
 
     return {
-      ballotStyleId,
-      pattern,
+      input: ballot,
       accepted: false,
       reason: pattern === 'overvote' ? 'overvote' : 'rejected',
       screenshotPath: screenshots.getAll().slice(-1)[0]?.path,

@@ -2,6 +2,7 @@
  * Configuration types for VxSuite QA automation tool
  */
 
+import { BallotToScan } from "../automation/scan-workflow.js";
 import { BallotMode, BallotType } from "../ballots/election-loader.js";
 
 export type BallotPattern = 'blank' | 'valid' | 'overvote';
@@ -40,8 +41,7 @@ export interface QARunConfig {
 
 /** Result of scanning a single ballot */
 export interface ScanResult {
-  ballotStyleId: string;
-  pattern: BallotPattern;
+  input: BallotToScan;
   accepted: boolean;
   reason?: string;
   screenshotPath?: string;
