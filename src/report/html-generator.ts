@@ -115,7 +115,7 @@ async function prepareReportData(
         description: output.description,
         path: output.path,
         data: output.data,
-        statusClass: output.data?.isExpected === true ? 'success' : 'error',
+        statusClass: output.data?.isExpected === true ? 'success' : (output.data?.isExpected === false ? 'error' : 'neutral'),
         thumbnail: output.type === 'print' && output.path
           ? await generatePdfThumbnail(join(outputDir, output.path))
           : null,
@@ -369,6 +369,7 @@ function renderTemplate(data: ReportData): string {
     .io-meta { font-size: 0.75rem; color: var(--gray-700); margin-top: 0.5rem; }
     .output-success { border-left: 4px solid var(--success); }
     .output-error { border-left: 4px solid var(--error); }
+    .output-neutral { border-left: 4px solid var(--gray-400); }
     .step-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
     .thumbnail-wrapper { margin-top: 0.5rem; }
     .thumbnail-wrapper img { max-width: 200px; border-radius: 0.25rem; }
