@@ -14,7 +14,8 @@ import {
 } from './browser.js';
 import { createScreenshotManager, SCREENSHOT_STEPS, ScreenshotManager } from './screenshot.js';
 import type { ScanResult, BallotPattern } from '../config/types.js';
-import { copyFileSync } from 'fs';
+import type { StepCollector, ArtifactCollector } from '../report/artifacts.js';
+import { copyFileSync, readdirSync, statSync } from 'fs';
 import { basename, join } from 'path';
 import { createMockScannerController } from '../mock-hardware/scanner.js';
 import { generateMarkedBallotForPattern } from '../ballots/ballot-marker.js';
@@ -29,6 +30,7 @@ export interface ScanWorkflowResult {
 
 export interface BallotToScan {
   ballotStyleId: string;
+  ballotMode: string;
   pattern: BallotPattern;
   pdfPath: string;
   expectedAccepted: boolean;
@@ -47,6 +49,8 @@ export async function runScanWorkflow(
   ballotsToScan: BallotToScan[],
   outputDir: string,
   dataPath: string,
+  openingPollsStep?: StepCollector,
+  collector?: ArtifactCollector,
 ): Promise<ScanWorkflowResult> {
   logger.step('Running VxScan workflow');
   const election = electionPackage.electionDefinition.election;
@@ -59,13 +63,25 @@ export async function runScanWorkflow(
   const scannerController = createMockScannerController();
   const scanResults: ScanResult[] = [];
 
+  // Track existing thermal printer files to avoid duplicates
+  const printerWorkspace = join(repoPath, 'libs/fujitsu-thermal-printer/dev-workspace');
+  const existingPrinterFiles = new Set<string>();
+  try {
+    const printsDir = join(printerWorkspace, 'prints');
+    const files = readdirSync(printsDir);
+    files.forEach(f => existingPrinterFiles.add(f));
+  } catch {
+    // Directory might not exist yet
+  }
+
   // Navigate to app and wait for it to load
   // Force a hard reload to ensure we're loading VxScan, not cached VxAdmin
   await page.goto(`http://localhost:3000/`, { waitUntil: 'domcontentloaded' });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(3000); // Give the app time to initialize (apps use polling)
   await toggleDevDock(page);
-  await screenshots.capture(SCREENSHOT_STEPS.SCAN_LOCKED, 'Initial locked screen');
+  const s1 = await screenshots.capture(SCREENSHOT_STEPS.SCAN_LOCKED, 'Initial locked screen');
+  openingPollsStep?.addScreenshot(s1);
 
   // Copy election package to USB
   const packageFilename = basename(electionPackagePath);
@@ -74,7 +90,8 @@ export async function runScanWorkflow(
 
   // Log in as election manager
   const electionManagerCard = await insertElectionManagerCardAndLogin(page, electionPath);
-  await screenshots.capture(SCREENSHOT_STEPS.SCAN_UNCONFIGURED, 'Logged in');
+  const s2 = await screenshots.capture(SCREENSHOT_STEPS.SCAN_UNCONFIGURED, 'Logged in');
+  openingPollsStep?.addScreenshot(s2);
 
   await debugPageState(page, 'After election manager login', outputDir);
 
@@ -82,7 +99,8 @@ export async function runScanWorkflow(
   await page.getByText("All Precincts", { exact: true }).click({ force: true });
   await page.getByText("Official Ballot Mode").click();
 
-  await screenshots.capture(SCREENSHOT_STEPS.SCAN_CONFIGURED, 'Configured');
+  const s3 = await screenshots.capture(SCREENSHOT_STEPS.SCAN_CONFIGURED, 'Configured');
+  openingPollsStep?.addScreenshot(s3);
   await electionManagerCard.removeCard();
 
   // Open polls
@@ -103,25 +121,53 @@ export async function runScanWorkflow(
   });
 
   await waitForTextInApp(page, 'Polls Opened');
-  await screenshots.capture(SCREENSHOT_STEPS.SCAN_POLLS_OPEN, 'Polls opened');
+  const s4 = await screenshots.capture(SCREENSHOT_STEPS.SCAN_POLLS_OPEN, 'Polls opened');
+  openingPollsStep?.addScreenshot(s4);
   pollWorkerCardForOpeningPolls.removeCard();
+
+  // Add thermal printer reports from opening polls
+  if (openingPollsStep) {
+    addThermalPrinterReports(printerWorkspace, openingPollsStep, existingPrinterFiles);
+  }
 
   // Ready to scan
   await waitForTextInApp(page, 'Insert Your Ballot');
-  await screenshots.capture(SCREENSHOT_STEPS.SCAN_READY, 'Ready to scan');
+  const s5 = await screenshots.capture(SCREENSHOT_STEPS.SCAN_READY, 'Ready to scan');
+  openingPollsStep?.addScreenshot(s5);
+
+  // Mark opening polls step as complete
+  openingPollsStep?.complete();
 
   // Scan each ballot
-  for (const ballot of ballotsToScan) {
+  for (const [index, ballot] of ballotsToScan.entries()) {
     logger.debug(`Scanning ballot: ${ballot.ballotStyleId} - ${ballot.pattern}`);
 
-    const result = await scanBallot(repoPath, election, page, scannerController, ballot, screenshots);
+    // Create step for this ballot right before scanning
+    const ballotStep = collector?.startStep(
+      `scan-ballot-${index + 1}`,
+      `Scan Ballot ${index + 1}: ${ballot.ballotStyleId} - ${ballot.pattern} (${ballot.ballotMode})`,
+      `Scan ${ballot.pattern} ballot for ballot style ${ballot.ballotStyleId} in ${ballot.ballotMode} mode`
+    );
+
+    const result = await scanBallot(repoPath, election, page, scannerController, ballot, screenshots, ballotStep);
     if (result) {
       scanResults.push(result);
     }
+
+    // Mark ballot step as complete
+    ballotStep?.complete();
   }
 
   // Close polls
   logger.debug('Closing polls');
+
+  // Create step for closing polls
+  const closingPollsStep = collector?.startStep(
+    'closing-polls',
+    'Closing Polls',
+    'Close the polls and print results reports'
+  );
+
   const pollWorkerCardForClosingPolls = await insertPollWorkerCard(page, electionPath);
   await waitForTextInApp(page, 'Do you want to close the polls?');
 
@@ -138,7 +184,16 @@ export async function runScanWorkflow(
   await usbController.remove();
 
   await waitForTextInApp(page, 'Voting is complete.');
-  await screenshots.capture(SCREENSHOT_STEPS.SCAN_POLLS_CLOSED, 'Polls Closed');
+  const s6 = await screenshots.capture(SCREENSHOT_STEPS.SCAN_POLLS_CLOSED, 'Polls Closed');
+  closingPollsStep?.addScreenshot(s6);
+
+  // Add thermal printer reports from closing polls
+  if (closingPollsStep) {
+    addThermalPrinterReports(printerWorkspace, closingPollsStep, existingPrinterFiles);
+  }
+
+  // Mark closing polls step as complete
+  closingPollsStep?.complete();
 
   return {
     scanResults,
@@ -152,7 +207,8 @@ async function scanBallot(
   page: Page,
   scannerController: ReturnType<typeof createMockScannerController>,
   ballot: BallotToScan,
-  screenshots: ReturnType<typeof createScreenshotManager>
+  screenshots: ReturnType<typeof createScreenshotManager>,
+  stepCollector?: StepCollector
 ): Promise<ScanResult | undefined> {
   const { ballotStyleId, pattern, pdfPath } = ballot;
   const markedBallotPdf = await generateMarkedBallotForPattern(repoPath, election, ballotStyleId, pattern, await readFile(pdfPath));
@@ -166,6 +222,14 @@ async function scanBallot(
   const digest = hasher.digest('hex')
   const markedBallotPdfPath = ballot.pdfPath.replace(/\.pdf$/i, `-${digest}.pdf`);
   await writeFile(markedBallotPdfPath, markedBallotPdf.pdfBytes);
+
+  // Add the marked ballot PDF as input to the step
+  stepCollector?.addInput({
+    type: 'ballot',
+    label: 'Marked Ballot',
+    description: `${ballotStyleId} - ${pattern}`,
+    path: markedBallotPdfPath,
+  });
 
   // Insert ballot into scanner
   await waitForTextInApp(page, 'Insert Your Ballot');
@@ -187,15 +251,31 @@ async function scanBallot(
   const screenshotName = `scan-${ballotStyleId}-${pattern}`;
 
   if (accepted) {
-    await screenshots.capture(screenshotName, `Ballot accepted: ${ballotStyleId} ${pattern}`);
+    const screenshot = await screenshots.capture(screenshotName, `Ballot accepted: ${ballotStyleId} ${pattern}`);
+    stepCollector?.addScreenshot(screenshot);
 
-    return {
+    const result: ScanResult = {
       input: ballot,
       accepted: true,
-      screenshotPath: screenshots.getAll().slice(-1)[0]?.path,
+      screenshotPath: screenshot.path,
     };
+
+    stepCollector?.addOutput({
+      type: 'scan-result',
+      label: 'Scan Result',
+      description: 'Ballot accepted',
+      data: {
+        accepted: result.accepted,
+        expected: ballot.expectedAccepted,
+        isExpected: result.accepted === ballot.expectedAccepted,
+        screenshotPath: result.screenshotPath,
+      },
+    });
+
+    return result;
   } else {
-    await screenshots.capture(screenshotName, `Ballot rejected: ${ballotStyleId} ${pattern}`);
+    const screenshot = await screenshots.capture(screenshotName, `Ballot rejected: ${ballotStyleId} ${pattern}`);
+    stepCollector?.addScreenshot(screenshot);
 
     // Handle rejected ballot - return it
     await page.waitForTimeout(1000);
@@ -210,12 +290,67 @@ async function scanBallot(
     await page.waitForTimeout(1500);
     await scannerController.removeSheet();
 
-    return {
+    const result: ScanResult = {
       input: ballot,
       accepted: false,
       reason: pattern === 'overvote' ? 'overvote' : 'rejected',
-      screenshotPath: screenshots.getAll().slice(-1)[0]?.path,
+      screenshotPath: screenshot.path,
     };
+
+    stepCollector?.addOutput({
+      type: 'scan-result',
+      label: 'Scan Result',
+      description: 'Ballot rejected',
+      data: {
+        accepted: result.accepted,
+        expected: ballot.expectedAccepted,
+        isExpected: result.accepted === ballot.expectedAccepted,
+        reason: result.reason,
+        screenshotPath: result.screenshotPath,
+      },
+    });
+
+    return result;
+  }
+}
+
+/**
+ * Add thermal printer reports from a workspace directory to a step
+ */
+function addThermalPrinterReports(
+  workspaceDir: string,
+  stepCollector: StepCollector,
+  existingFiles: Set<string>
+): void {
+  try {
+    // The prints are in a 'prints' subdirectory
+    const printsDir = join(workspaceDir, 'prints');
+    const files = readdirSync(printsDir);
+
+    for (const file of files) {
+      // Only add new files that weren't there before this step
+      if (file.endsWith('.pdf') && !existingFiles.has(file)) {
+        const filePath = join(printsDir, file);
+        const stats = statSync(filePath);
+
+        // Store a relative path that will work after workspaces are copied to output
+        // The workspace is copied to output/workspaces/fujitsu-thermal-printer/
+        const relativePath = join('workspaces', 'fujitsu-thermal-printer', 'prints', file);
+
+        stepCollector.addOutput({
+          type: 'print',
+          label: 'Thermal Printer Report',
+          description: file,
+          path: relativePath,
+          data: { size: stats.size, mtime: stats.mtime },
+        });
+
+        // Add to existing files so it won't be added again in subsequent steps
+        existingFiles.add(file);
+      }
+    }
+  } catch (error) {
+    logger.warn(`Failed to add thermal printer reports: ${error}`);
   }
 }
 

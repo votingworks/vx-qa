@@ -112,6 +112,7 @@ export async function runQAWorkflow(
 
       ballotsToScan.push({
         ballotStyleId: ballot.ballotStyleId,
+        ballotMode: ballot.ballotMode,
         pattern: 'blank',
         pdfPath,
         expectedAccepted: ballot.ballotMode === 'official',
@@ -120,11 +121,13 @@ export async function runQAWorkflow(
       if (ballot.ballotMode === 'official') {
         ballotsToScan.push({
           ballotStyleId: ballot.ballotStyleId,
+          ballotMode: ballot.ballotMode,
           pattern: 'valid',
           pdfPath,
           expectedAccepted: true,
         }, {
           ballotStyleId: ballot.ballotStyleId,
+          ballotMode: ballot.ballotMode,
           pattern: 'overvote',
           pdfPath,
           expectedAccepted: false
@@ -137,6 +140,19 @@ export async function runQAWorkflow(
     // Phase 5: Run VxAdmin workflow
     printDivider();
     logger.step('Phase 5: VxAdmin Configuration');
+
+    const adminStep = collector.startStep(
+      'programming-vxadmin',
+      'Programming VxAdmin',
+      'Configure VxAdmin with the election package and export election package for VxScan'
+    );
+
+    adminStep.addInput({
+      type: 'election-package',
+      label: 'Election Package',
+      description: `${election.title}`,
+      path: electionPackagePath,
+    });
 
     const orchestrator = createAppOrchestrator(repoPath);
     await orchestrator.startApp('admin');
@@ -159,9 +175,18 @@ export async function runQAWorkflow(
         electionPackagePath, // Use the extracted election package ZIP
         config.output.directory,
         dataPath,
-        getBackendPort('admin')
+        getBackendPort('admin'),
+        adminStep
       );
       exportedPackagePath = adminResult.exportedPackagePath;
+
+      adminStep.addOutput({
+        type: 'election-package',
+        label: 'Exported Election Package',
+        description: 'Election package exported for VxScan',
+        path: exportedPackagePath,
+      });
+      adminStep.complete();
     } finally {
       await orchestrator.stopApp();
     }
@@ -173,6 +198,20 @@ export async function runQAWorkflow(
     await orchestrator.startApp('scan');
 
     try {
+      // Create step for opening polls
+      const openingPollsStep = collector.startStep(
+        'opening-polls',
+        'Opening Polls',
+        'Configure VxScan and open the polls for voting'
+      );
+
+      openingPollsStep.addInput({
+        type: 'election-package',
+        label: 'Election Package',
+        description: `${election.title}`,
+        path: exportedPackagePath,
+      });
+
       const scanResult = await runScanWorkflow(
         repoPath,
         page,
@@ -183,6 +222,8 @@ export async function runQAWorkflow(
         ballotsToScan,
         config.output.directory,
         dataPath,
+        openingPollsStep,
+        collector, // Pass the collector so steps can be created on-demand
       );
 
       collector.addScanResults(scanResult.scanResults);

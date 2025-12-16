@@ -18,6 +18,7 @@ import {
 import { SCREENSHOT_STEPS, ScreenshotManager } from './screenshot.js';
 import { readFileSync } from 'fs';
 import { basename } from 'path';
+import type { StepCollector } from '../report/artifacts.js';
 
 export interface AdminWorkflowResult {
   exportedPackagePath: string;
@@ -33,7 +34,8 @@ export async function runAdminWorkflow(
   electionPackagePath: string,
   outputDir: string,
   dataPath: string,
-  backendPort = 3004
+  backendPort = 3004,
+  stepCollector?: StepCollector
 ): Promise<AdminWorkflowResult> {
   logger.step('Running VxAdmin workflow');
 
@@ -46,11 +48,13 @@ export async function runAdminWorkflow(
   // Navigate to app
   await navigateToApp(page);
   await toggleDevDock(page);
-  await screenshots.capture(SCREENSHOT_STEPS.ADMIN_LOCKED, 'Initial locked screen');
+  const s1 = await screenshots.capture(SCREENSHOT_STEPS.ADMIN_LOCKED, 'Initial locked screen');
+  stepCollector?.addScreenshot(s1);
 
   // Log in as system administrator
   await dipSystemAdministratorCardAndLogin(page, electionPackagePath);
-  await screenshots.capture(SCREENSHOT_STEPS.ADMIN_UNCONFIGURED, 'Logged in, unconfigured');
+  const s2 = await screenshots.capture(SCREENSHOT_STEPS.ADMIN_UNCONFIGURED, 'Logged in, unconfigured');
+  stepCollector?.addScreenshot(s2);
 
   // Need to load election from USB
   logger.debug('Loading election from USB');
@@ -70,7 +74,8 @@ export async function runAdminWorkflow(
   await usbController.insert();
   await page.waitForTimeout(2000); // Give more time for USB detection
 
-  await screenshots.capture(SCREENSHOT_STEPS.ADMIN_USB_DETECTED, 'USB drive detected');
+  const s3 = await screenshots.capture(SCREENSHOT_STEPS.ADMIN_USB_DETECTED, 'USB drive detected');
+  stepCollector?.addScreenshot(s3);
 
   // Debug: show what we're looking for
   logger.debug(`Looking for package filename in app: ${packageFilename}`);
@@ -91,7 +96,8 @@ export async function runAdminWorkflow(
     label: 'Waiting for election to be configured',
   });
 
-  await screenshots.capture(SCREENSHOT_STEPS.ADMIN_ELECTION_LOADED, 'Election loaded');
+  const s4 = await screenshots.capture(SCREENSHOT_STEPS.ADMIN_ELECTION_LOADED, 'Election loaded');
+  stepCollector?.addScreenshot(s4);
 
   // Debug: dump page state after login/config
   await debugPageState(page, 'After login/config', outputDir);
@@ -102,7 +108,8 @@ export async function runAdminWorkflow(
     outputDir,
     label: 'Looking for Election nav link',
   });
-  await screenshots.capture(SCREENSHOT_STEPS.ADMIN_CONFIGURED, 'Election configured');
+  const s5 = await screenshots.capture(SCREENSHOT_STEPS.ADMIN_CONFIGURED, 'Election configured');
+  stepCollector?.addScreenshot(s5);
 
   // Debug: dump page state after navigating to Election screen
   await debugPageState(page, 'On Election screen', outputDir);
@@ -125,7 +132,8 @@ export async function runAdminWorkflow(
     label: 'Clicking Save Election Package button',
   });
   await page.waitForTimeout(500);
-  await screenshots.captureModal(SCREENSHOT_STEPS.ADMIN_EXPORT_PACKAGE, 'Export dialog');
+  const s6 = await screenshots.captureModal(SCREENSHOT_STEPS.ADMIN_EXPORT_PACKAGE, 'Export dialog');
+  stepCollector?.addScreenshot(s6);
 
   // Confirm export - click the Save button in the modal
   await clickButtonWithDebug(page, 'Save', {
@@ -140,7 +148,8 @@ export async function runAdminWorkflow(
     outputDir,
     label: 'Waiting for Election Package Saved message',
   });
-  await screenshots.capture('admin-package-saved', 'Election package saved');
+  const s7 = await screenshots.capture('admin-package-saved', 'Election package saved');
+  stepCollector?.addScreenshot(s7);
 
   // Close the modal
   await page.getByRole('button', { name: 'Close' }).click();
@@ -150,7 +159,8 @@ export async function runAdminWorkflow(
 
   // Log out
   await logOut(page, outputDir);
-  await screenshots.capture('admin-logged-out', 'Logged out');
+  const s8 = await screenshots.capture('admin-logged-out', 'Logged out');
+  stepCollector?.addScreenshot(s8);
 
   // Remove USB
   await usbController.remove();

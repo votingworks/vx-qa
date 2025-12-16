@@ -12,7 +12,37 @@ import type {
   ScanResult,
   ErrorArtifact,
   QARunConfig,
+  WorkflowStep,
+  StepInput,
+  StepOutput,
 } from '../config/types.js';
+
+export interface StepCollector {
+  /**
+   * Add an input to the current step
+   */
+  addInput(input: StepInput): void;
+
+  /**
+   * Add an output to the current step
+   */
+  addOutput(output: StepOutput): void;
+
+  /**
+   * Add a screenshot to the current step
+   */
+  addScreenshot(artifact: ScreenshotArtifact): void;
+
+  /**
+   * Log an error in the current step
+   */
+  logError(error: Error): void;
+
+  /**
+   * Complete the current step
+   */
+  complete(): void;
+}
 
 export interface ArtifactCollector {
   /**
@@ -34,6 +64,11 @@ export interface ArtifactCollector {
    * Log an error
    */
   logError(error: Error, step: string): void;
+
+  /**
+   * Start a new workflow step
+   */
+  startStep(id: string, name: string, description: string): StepCollector;
 
   /**
    * Mark the run as complete
@@ -75,6 +110,7 @@ export function createArtifactCollector(
     screenshots: [],
     scanResults: [],
     errors: [],
+    steps: [],
   };
 
   // Create directory structure
@@ -114,6 +150,54 @@ export function createArtifactCollector(
       logger.error(`Error in ${step}: ${error.message}`);
     },
 
+    startStep(id: string, name: string, description: string): StepCollector {
+      const step: WorkflowStep = {
+        id,
+        name,
+        description,
+        startTime: new Date(),
+        inputs: [],
+        outputs: [],
+        screenshots: [],
+        errors: [],
+      };
+
+      collection.steps.push(step);
+      logger.debug(`Started step: ${name}`);
+
+      return {
+        addInput(input: StepInput): void {
+          step.inputs.push(input);
+        },
+
+        addOutput(output: StepOutput): void {
+          step.outputs.push(output);
+        },
+
+        addScreenshot(artifact: ScreenshotArtifact): void {
+          step.screenshots.push(artifact);
+          collection.screenshots.push(artifact);
+        },
+
+        logError(error: Error): void {
+          const artifact: ErrorArtifact = {
+            message: error.message,
+            step: step.name,
+            timestamp: new Date(),
+            stack: error.stack,
+          };
+          step.errors.push(artifact);
+          collection.errors.push(artifact);
+          logger.error(`Error in ${step.name}: ${error.message}`);
+        },
+
+        complete(): void {
+          step.endTime = new Date();
+          logger.debug(`Completed step: ${name}`);
+        },
+      };
+    },
+
     complete(): void {
       collection.endTime = new Date();
     },
@@ -142,13 +226,13 @@ export function createArtifactCollector(
 export function collectFilesInDir(
   dir: string,
   extensions?: string[]
-): { name: string; path: string; size: number }[] {
+): { name: string; path: string; size: number; mtime?: Date }[] {
   if (!existsSync(dir)) {
     return [];
   }
 
   const files = readdirSync(dir);
-  const results: { name: string; path: string; size: number }[] = [];
+  const results: { name: string; path: string; size: number; mtime?: Date }[] = [];
 
   for (const file of files) {
     const filePath = join(dir, file);
@@ -160,6 +244,7 @@ export function collectFilesInDir(
           name: file,
           path: filePath,
           size: stat.size,
+          mtime: stat.mtime,
         });
       }
     }

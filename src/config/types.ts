@@ -47,6 +47,37 @@ export interface ScanResult {
   screenshotPath?: string;
 }
 
+/** Workflow step in the QA run */
+export interface WorkflowStep {
+  id: string;
+  name: string;
+  description: string;
+  startTime: Date;
+  endTime?: Date;
+  inputs: StepInput[];
+  outputs: StepOutput[];
+  screenshots: ScreenshotArtifact[];
+  errors: ErrorArtifact[];
+}
+
+/** Input to a workflow step */
+export interface StepInput {
+  type: 'ballot' | 'election-package' | 'card' | 'config';
+  label: string;
+  description?: string;
+  path?: string;
+  data?: Record<string, unknown>;
+}
+
+/** Output from a workflow step */
+export interface StepOutput {
+  type: 'ballot' | 'election-package' | 'scan-result' | 'print' | 'screenshot';
+  label: string;
+  description?: string;
+  path?: string;
+  data?: Record<string, unknown>;
+}
+
 /** Collected artifacts from a QA run */
 export interface ArtifactCollection {
   runId: string;
@@ -57,6 +88,7 @@ export interface ArtifactCollection {
   screenshots: ScreenshotArtifact[];
   scanResults: ScanResult[];
   errors: ErrorArtifact[];
+  steps: WorkflowStep[];
 }
 
 export interface BallotArtifact {
