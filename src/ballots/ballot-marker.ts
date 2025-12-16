@@ -15,6 +15,7 @@ export interface MarkedBallot {
   ballotStyleId: string;
   pattern: BallotPattern;
   pdfBytes: Uint8Array;
+  votes?: VotesDict;
 }
 
 /**
@@ -52,6 +53,7 @@ export async function generateMarkedBallotForPattern(
         ballotStyleId,
         pattern,
         pdfBytes: baseBallotPdf,
+        votes: {},
       };
 
     case 'valid': {
@@ -60,6 +62,7 @@ export async function generateMarkedBallotForPattern(
         ballotStyleId,
         pattern,
         pdfBytes: await generateMarkedBallot(repoPath, election, ballotStyleId, votes, baseBallotPdf),
+        votes,
       };
     }
 
@@ -74,6 +77,7 @@ export async function generateMarkedBallotForPattern(
         ballotStyleId,
         pattern,
         pdfBytes: await generateMarkedBallot(repoPath, election, ballotStyleId, votes, baseBallotPdf),
+        votes,
       };
     }
 
@@ -115,17 +119,28 @@ export function generateOvervoteVotes(
   election: Election,
   ballotStyleId: string,
 ): VotesDict | undefined {
+  const votes: VotesDict = {};
+  let hasAnyOvervote = false;
+  
   for (const contest of getContestsForBallotStyle(election, ballotStyleId)) {
     switch (contest.type) {
       case 'candidate': {
         if (contest.candidates.length > contest.seats) {
-          return { [contest.id]: contest.candidates }
+          // Overvote by selecting all candidates
+          votes[contest.id] = contest.candidates;
+          hasAnyOvervote = true;
+        } else {
+          // Not enough candidates to overvote, just vote normally
+          votes[contest.id] = contest.candidates.slice(0, contest.seats);
         }
         break;
       }
 
       case 'yesno': {
-        return { [contest.id]: [contest.yesOption.id, contest.noOption.id] }
+        // Overvote by selecting both yes and no
+        votes[contest.id] = [contest.yesOption.id, contest.noOption.id];
+        hasAnyOvervote = true;
+        break;
       }
 
       default: {
@@ -135,5 +150,5 @@ export function generateOvervoteVotes(
     }
   }
 
-  return undefined;
+  return hasAnyOvervote ? votes : undefined;
 }

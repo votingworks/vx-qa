@@ -71,7 +71,7 @@ export interface StepInput {
 
 /** Output from a workflow step */
 export interface StepOutput {
-  type: 'ballot' | 'election-package' | 'scan-result' | 'print' | 'screenshot';
+  type: 'ballot' | 'election-package' | 'scan-result' | 'print' | 'screenshot' | 'pdf' | 'file';
   label: string;
   description?: string;
   path?: string;

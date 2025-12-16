@@ -94,6 +94,7 @@ async function prepareReportData(
   // Prepare steps for template with base64 screenshots and thumbnails
   const steps = await Promise.all(
     workflowSteps.map(async (step) => ({
+      id: step.name.toLowerCase().replace(/\s+/g, '-'),
       name: step.name,
       description: step.description,
       duration: step.endTime
@@ -116,7 +117,7 @@ async function prepareReportData(
         path: output.path,
         data: output.data,
         statusClass: output.data?.isExpected === true ? 'success' : (output.data?.isExpected === false ? 'error' : 'neutral'),
-        thumbnail: output.type === 'print' && output.path
+        thumbnail: (output.type === 'print' || output.type === 'pdf') && output.path
           ? await generatePdfThumbnail(join(outputDir, output.path))
           : null,
       }))),
@@ -139,6 +140,20 @@ async function prepareReportData(
   const rejected = collection.scanResults.filter((r) => !r.accepted).length;
   const handledAsExpected = collection.scanResults.filter((r) => r.input.expectedAccepted === r.accepted).length;
   const handledUnexpectedly = collection.scanResults.filter((r) => r.input.expectedAccepted !== r.accepted).length;
+
+  // Check for validation failures
+  const validationFailures: Array<{ step: string; message: string; stepId: string }> = [];
+  for (const step of workflowSteps) {
+    for (const output of step.outputs) {
+      if (output.data?.validationMessage && output.data?.isExpected === false) {
+        validationFailures.push({
+          step: step.name,
+          message: output.data.validationMessage as string,
+          stepId: step.id,
+        });
+      }
+    }
+  }
 
   // Calculate duration
   const duration =
@@ -194,6 +209,8 @@ async function prepareReportData(
       timestamp: e.timestamp.toISOString(),
     })),
     hasErrors: collection.errors.length > 0,
+    validationFailures,
+    hasValidationFailures: validationFailures.length > 0,
   };
 }
 
@@ -218,6 +235,7 @@ interface ReportData {
     handledUnexpectedly: number;
   };
   steps: {
+    id: string;
     name: string;
     description: string;
     duration: string;
@@ -257,6 +275,8 @@ interface ReportData {
   }[];
   errors: { step: string; message: string; timestamp: string }[];
   hasErrors: boolean;
+  validationFailures: { step: string; message: string; stepId: string }[];
+  hasValidationFailures: boolean;
 }
 
 /**
@@ -276,7 +296,7 @@ function formatDuration(seconds: number): string {
  */
 function renderTemplate(data: ReportData): string {
   // Register Handlebars helpers
-  Handlebars.registerHelper('eq', function(this: any, a: any, b: any, options: any) {
+  Handlebars.registerHelper('eq', function (this: any, a: any, b: any, options: any) {
     if (a === b) {
       return options.fn(this);
     } else {
@@ -430,6 +450,18 @@ function renderTemplate(data: ReportData): string {
     </div>
     {{/if}}
 
+    {{#if hasValidationFailures}}
+    <div class="card errors">
+      <h3>⚠️ Validation Failures</h3>
+      {{#each validationFailures}}
+      <div class="error-item">
+        <div class="error-step"><a href="#{{stepId}}">{{step}}</a></div>
+        <div class="error-message">{{message}}</div>
+      </div>
+      {{/each}}
+    </div>
+    {{/if}}
+
     <div class="card">
       <h2>Statistics</h2>
       <div class="stats">
@@ -459,7 +491,7 @@ function renderTemplate(data: ReportData): string {
     <h2>Workflow Steps</h2>
 
     {{#each steps}}
-    <div class="step">
+    <div class="step" id="{{id}}">
       <div class="step-header">
         <div class="step-title">{{name}}</div>
         <div class="step-duration">Duration: {{duration}}</div>
@@ -532,6 +564,13 @@ function renderTemplate(data: ReportData): string {
               {{#if data.expected}} • Expected: {{#if data.expected}}Accepted{{else}}Rejected{{/if}}{{/if}}
               {{#unless data.isExpected}} • ⚠️ Unexpected result{{/unless}}
             </div>
+            {{/eq}}
+            {{#eq type "pdf"}}
+            {{#if data.validationMessage}}
+            <div class="io-meta">
+              {{#if data.isExpected}}✓{{else}}✗{{/if}} {{data.validationMessage}}
+            </div>
+            {{/if}}
             {{/eq}}
             {{/if}}
             {{#if thumbnail}}

@@ -21,7 +21,6 @@ import { createMockScannerController } from '../mock-hardware/scanner.js';
 import { generateMarkedBallotForPattern } from '../ballots/ballot-marker.js';
 import { Election, ElectionPackage } from '../ballots/election-loader.js';
 import { readFile, writeFile } from 'fs/promises';
-import { createHash } from 'crypto';
 
 export interface ScanWorkflowResult {
   scanResults: ScanResult[];
@@ -34,6 +33,7 @@ export interface BallotToScan {
   pattern: BallotPattern;
   pdfPath: string;
   expectedAccepted: boolean;
+  votes?: Record<string, string[]>; // VotesDict - contestId -> array of candidate/option IDs
 }
 
 /**
@@ -217,10 +217,8 @@ async function scanBallot(
     return undefined;
   }
 
-  const hasher = createHash('sha256');
-  hasher.update(ballotStyleId).update(pattern).end();
-  const digest = hasher.digest('hex')
-  const markedBallotPdfPath = ballot.pdfPath.replace(/\.pdf$/i, `-${digest}.pdf`);
+  // Create descriptive filename: ballot-styleId-mode-pattern.pdf
+  const markedBallotPdfPath = ballot.pdfPath.replace(/\.pdf$/i, `-${ballot.ballotMode}-${pattern}.pdf`);
   await writeFile(markedBallotPdfPath, markedBallotPdf.pdfBytes);
 
   // Add the marked ballot PDF as input to the step
@@ -231,87 +229,140 @@ async function scanBallot(
     path: markedBallotPdfPath,
   });
 
-  // Insert ballot into scanner
-  await waitForTextInApp(page, 'Insert Your Ballot');
-  await page.waitForTimeout(1000);
-  await scannerController.insertSheet(markedBallotPdfPath);
+  // Split PDF into sheets (pairs of pages: front and back)
+  const { PDFDocument } = await import('pdf-lib');
+  const pdfDoc = await PDFDocument.load(markedBallotPdf.pdfBytes);
+  const pageCount = pdfDoc.getPageCount();
 
-  // Wait for scan to process
-  await waitForTextInApp(page, 'Please wait…');
-  await page.getByText('Please wait…').waitFor({ state: 'hidden' });
+  // Sheets are pairs of pages (front/back)
+  const sheetCount = Math.ceil(pageCount / 2);
+  logger.debug(`Ballot has ${pageCount} page(s), ${sheetCount} sheet(s)`);
 
-  const message = page.getByRole('heading').and(page.locator(':not([data-testid="ballot-count"])'));
-  await message.waitFor({ state: 'visible' });
-  const messageText = await message.innerText();
-  logger.info(`MESSAGE: ${messageText}`);
+  // Scan each sheet (2 pages at a time)
+  for (let sheetIndex = 0; sheetIndex < sheetCount; sheetIndex++) {
+    const frontPageIndex = sheetIndex * 2;
+    const backPageIndex = frontPageIndex + 1;
 
-  // Check result
-  const accepted = messageText === 'Your ballot was counted!';
+    // Create a new PDF with this sheet (front and back pages)
+    const sheetDoc = await PDFDocument.create();
 
-  const screenshotName = `scan-${ballotStyleId}-${pattern}`;
+    // Copy front page
+    const [frontPage] = await sheetDoc.copyPages(pdfDoc, [frontPageIndex]);
+    sheetDoc.addPage(frontPage);
 
-  if (accepted) {
-    const screenshot = await screenshots.capture(screenshotName, `Ballot accepted: ${ballotStyleId} ${pattern}`);
-    stepCollector?.addScreenshot(screenshot);
-
-    const result: ScanResult = {
-      input: ballot,
-      accepted: true,
-      screenshotPath: screenshot.path,
-    };
-
-    stepCollector?.addOutput({
-      type: 'scan-result',
-      label: 'Scan Result',
-      description: 'Ballot accepted',
-      data: {
-        accepted: result.accepted,
-        expected: ballot.expectedAccepted,
-        isExpected: result.accepted === ballot.expectedAccepted,
-        screenshotPath: result.screenshotPath,
-      },
-    });
-
-    return result;
-  } else {
-    const screenshot = await screenshots.capture(screenshotName, `Ballot rejected: ${ballotStyleId} ${pattern}`);
-    stepCollector?.addScreenshot(screenshot);
-
-    // Handle rejected ballot - return it
-    await page.waitForTimeout(1000);
-    const returnButton = page.getByRole('button', { name: 'Return Ballot' });
-    if (await returnButton.isVisible()) {
-      await returnButton.click();
-
-      // Wait until we're told to remove the ballot.
-      await waitForTextInApp(page, 'Remove Your Ballot');
+    // Copy back page if it exists
+    if (backPageIndex < pageCount) {
+      const [backPage] = await sheetDoc.copyPages(pdfDoc, [backPageIndex]);
+      sheetDoc.addPage(backPage);
     }
 
-    await page.waitForTimeout(1500);
-    await scannerController.removeSheet();
+    const sheetPdfBytes = await sheetDoc.save();
 
-    const result: ScanResult = {
-      input: ballot,
-      accepted: false,
-      reason: pattern === 'overvote' ? 'overvote' : 'rejected',
-      screenshotPath: screenshot.path,
-    };
+    // Write the sheet PDF
+    const sheetPdfPath = markedBallotPdfPath.replace(/\.pdf$/i, `-sheet${sheetIndex + 1}.pdf`);
+    await writeFile(sheetPdfPath, sheetPdfBytes);
 
-    stepCollector?.addOutput({
-      type: 'scan-result',
-      label: 'Scan Result',
-      description: 'Ballot rejected',
-      data: {
-        accepted: result.accepted,
-        expected: ballot.expectedAccepted,
-        isExpected: result.accepted === ballot.expectedAccepted,
-        reason: result.reason,
-        screenshotPath: result.screenshotPath,
-      },
-    });
+    // Insert sheet into scanner
+    await waitForTextInApp(page, 'Insert Your Ballot');
+    await page.waitForTimeout(1000);
+    await scannerController.insertSheet(sheetPdfPath);
 
-    return result;
+    // Wait for scan to process
+    await waitForTextInApp(page, 'Please wait…');
+    await page.getByText('Please wait…').waitFor({ state: 'hidden' });
+
+    logger.debug(`Scanned sheet ${sheetIndex + 1}/${sheetCount}`);
+    
+    // After each sheet, check if ballot was rejected
+    const message = page.getByRole('heading').and(page.locator(':not([data-testid="ballot-count"])'));
+    await message.waitFor({ state: 'visible', timeout: 5000 });
+    const messageText = await message.innerText();
+    logger.debug(`Message after sheet ${sheetIndex + 1}: ${messageText}`);
+    
+    // If rejected, handle immediately and stop scanning more sheets
+    if (messageText !== 'Your ballot was counted!' && messageText.toLowerCase().includes('ballot')) {
+      logger.info(`Ballot rejected after sheet ${sheetIndex + 1}/${sheetCount}: ${messageText}`);
+      
+      // Handle rejected ballot - return it
+      await page.waitForTimeout(1000);
+      const returnButton = page.getByRole('button', { name: 'Return Ballot' });
+      if (await returnButton.isVisible()) {
+        await returnButton.click();
+        await waitForTextInApp(page, 'Remove Your Ballot');
+      }
+      
+      await page.waitForTimeout(1500);
+      await scannerController.removeSheet();
+      
+      // Create rejection result and return immediately
+      const screenshot = await screenshots.capture(`scan-${ballotStyleId}-${pattern}`, `Ballot rejected: ${ballotStyleId} ${pattern}`);
+      stepCollector?.addScreenshot(screenshot);
+      
+      const result: ScanResult = {
+        input: ballot,
+        accepted: false,
+        reason: pattern === 'overvote' ? 'overvote' : 'rejected',
+        screenshotPath: screenshot.path,
+      };
+      
+      stepCollector?.addOutput({
+        type: 'scan-result',
+        label: 'Scan Result',
+        description: 'Ballot rejected',
+        data: {
+          accepted: result.accepted,
+          expected: ballot.expectedAccepted,
+          isExpected: result.accepted === ballot.expectedAccepted,
+        },
+      });
+      
+      return result;
+    }
   }
+
+  // If we got here, all sheets were scanned and ballot was accepted
+  const message = page.getByRole('heading').and(page.locator(':not([data-testid="ballot-count"])'));
+  const messageText = await message.innerText();
+  logger.info(`MESSAGE: ${messageText}`);
+  
+  const screenshot = await screenshots.capture(`scan-${ballotStyleId}-${pattern}`, `Ballot accepted: ${ballotStyleId} ${pattern}`);
+  stepCollector?.addScreenshot(screenshot);
+
+  const result: ScanResult = {
+    input: ballot,
+    accepted: true,
+    screenshotPath: screenshot.path,
+  };
+
+  // Convert votes to IDs for validation (handles both Candidate objects and string IDs)
+  const votesAsIds: Record<string, string[]> = {};
+  if (markedBallotPdf.votes) {
+    for (const [contestId, votes] of Object.entries(markedBallotPdf.votes)) {
+      votesAsIds[contestId] = votes.map(vote =>
+        typeof vote === 'string' ? vote : (vote as any).id
+      );
+    }
+  }
+
+  logger.debug(`Votes as IDs for ${ballotStyleId} ${pattern}: ${JSON.stringify(votesAsIds)}`);
+
+  stepCollector?.addOutput({
+    type: 'scan-result',
+    label: 'Scan Result',
+    description: 'Ballot accepted',
+    data: {
+      accepted: result.accepted,
+      expected: ballot.expectedAccepted,
+      isExpected: result.accepted === ballot.expectedAccepted,
+      screenshotPath: result.screenshotPath,
+      votes: votesAsIds, // Store votes as IDs for validation
+      ballotStyleId,
+      pattern,
+      ballotId: `${ballotStyleId}-${pattern}-${ballot.ballotMode}-${ballot.pdfPath}`, // Unique ID for this ballot (includes path to differentiate precinct/absentee)
+    },
+  });
+
+  return result;
 }
 
 /**

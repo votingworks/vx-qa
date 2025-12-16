@@ -21,6 +21,7 @@ import { getBackendPort } from '../apps/env-config.js';
 import { createBrowserSession } from '../automation/browser.js';
 import { runAdminWorkflow } from '../automation/admin-workflow.js';
 import { runScanWorkflow, type BallotToScan } from '../automation/scan-workflow.js';
+import { runAdminTallyWorkflow } from '../automation/admin-tally-workflow.js';
 
 // Reporting
 import { createArtifactCollector } from '../report/artifacts.js';
@@ -33,6 +34,7 @@ import assert from 'node:assert';
 
 export interface RunOptions {
   headless?: boolean;
+  limitBallots?: number;
 }
 
 /**
@@ -135,6 +137,13 @@ export async function runQAWorkflow(
       }
     }
 
+    // Apply ballot limit if specified
+    if (options.limitBallots && options.limitBallots > 0) {
+      const originalCount = ballotsToScan.length;
+      ballotsToScan.splice(options.limitBallots);
+      logger.info(`Limited ballots from ${originalCount} to ${ballotsToScan.length} for testing`);
+    }
+
     logger.success(`Prepared ${ballotsToScan.length} ballots for scanning`);
 
     // Phase 5: Run VxAdmin workflow
@@ -229,17 +238,54 @@ export async function runQAWorkflow(
       collector.addScanResults(scanResult.scanResults);
     } finally {
       await orchestrator.stopApp();
+    }
+
+    // Phase 7: Run VxAdmin Tally Workflow
+    printDivider();
+    logger.step('Phase 7: VxAdmin Tally');
+
+    await orchestrator.startApp('admin');
+
+    try {
+      // Create step for tallying CVRs
+      const tallyStep = collector.startStep(
+        'tallying-cvrs',
+        'Tallying CVRs in VxAdmin',
+        'Import CVRs from VxScan and generate tally reports'
+      );
+
+      tallyStep.addInput({
+        type: 'election-package',
+        label: 'Election Package',
+        description: `${election.title}`,
+        path: exportedPackagePath,
+      });
+
+      await runAdminTallyWorkflow(
+        page,
+        screenshots,
+        exportedPackagePath,
+        config.output.directory,
+        dataPath,
+        getBackendPort('admin'),
+        tallyStep,
+        collector
+      );
+
+      tallyStep.complete();
+    } finally {
+      await orchestrator.stopApp();
       await browser.close();
     }
 
-    // Phase 7: Generate report
+    // Phase 8: Copy Workspaces
     printDivider();
-    logger.step('Phase 7: Copy Workspaces');
+    logger.step('Phase 8: Copy Workspaces');
     await state.copyWorkspacesTo(join(collector.getOutputDir(), 'workspaces'));
 
-    // Phase 8: Generate report
+    // Phase 9: Generate report
     printDivider();
-    logger.step('Phase 8: Generating Report');
+    logger.step('Phase 9: Generating Report');
 
     collector.complete();
     const reportPath = await generateHtmlReport(
@@ -259,6 +305,16 @@ export async function runQAWorkflow(
     const accepted = results.filter((r) => r.accepted).length;
     const rejected = results.filter((r) => !r.accepted).length;
     logger.info(`Scan results: ${accepted} accepted, ${rejected} rejected`);
+
+    // Open the report in the default browser
+    if (reportPath) {
+      const { spawn } = await import('child_process');
+      // Spawn detached process so it doesn't block
+      spawn('open', [reportPath], {
+        detached: true,
+        stdio: 'ignore'
+      }).unref();
+    }
   } catch (error) {
     if (error instanceof Error) {
       collector.logError(error, 'workflow');

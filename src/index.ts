@@ -34,6 +34,7 @@ program
   .option('-e, --election <path>', 'Override election source path')
   .option('--headless', 'Run browser in headless mode (default)')
   .option('--no-headless', 'Run browser in headed mode for debugging')
+  .option('--limit-ballots <number>', 'Limit the number of ballots to scan (for testing)', parseInt)
   .action(async (options) => {
     printHeader('VxSuite QA Automation');
 
@@ -85,7 +86,10 @@ program
       config.output.directory = outputDir;
 
       // Run the workflow
-      await runQAWorkflow(config, { headless: options.headless !== false });
+      await runQAWorkflow(config, {
+        headless: options.headless !== false,
+        limitBallots: options.limitBallots,
+      });
     } catch (error) {
       if (error instanceof Error) {
         logger.error(error.message);
