@@ -5,7 +5,10 @@
 import { Page } from '@playwright/test';
 import { logger } from '../utils/logger.js';
 import { createMockUsbController } from '../mock-hardware/usb.js';
-import { insertElectionManagerCardAndLogin, insertPollWorkerCardAndLogin as insertPollWorkerCard } from './auth-helpers.js';
+import {
+  insertElectionManagerCardAndLogin,
+  insertPollWorkerCardAndLogin as insertPollWorkerCard,
+} from './auth-helpers.js';
 import {
   toggleDevDock,
   debugPageState,
@@ -69,7 +72,7 @@ export async function runScanWorkflow(
   try {
     const printsDir = join(printerWorkspace, 'prints');
     const files = await readdir(printsDir);
-    files.forEach(f => existingPrinterFiles.add(f));
+    files.forEach((f) => existingPrinterFiles.add(f));
   } catch {
     // Directory might not exist yet
   }
@@ -81,7 +84,7 @@ export async function runScanWorkflow(
   await page.waitForTimeout(3000); // Give the app time to initialize (apps use polling)
   await toggleDevDock(page);
   const s1 = await screenshots.capture('scan-locked', 'Initial locked screen');
-  openingPollsStep?.addScreenshot(s1);
+  openingPollsStep.addScreenshot(s1);
 
   // Copy election package to USB
   const packageFilename = basename(electionPackagePath);
@@ -91,16 +94,16 @@ export async function runScanWorkflow(
   // Log in as election manager
   const electionManagerCard = await insertElectionManagerCardAndLogin(page, electionPath);
   const s2 = await screenshots.capture('scan-unconfigured', 'Logged in');
-  openingPollsStep?.addScreenshot(s2);
+  openingPollsStep.addScreenshot(s2);
 
   await debugPageState(page, 'After election manager login', outputDir);
 
-  await page.getByText("Select a precinct…").click({ force: true });
-  await page.getByText("All Precincts", { exact: true }).click({ force: true });
-  await page.getByText("Official Ballot Mode").click();
+  await page.getByText('Select a precinct…').click({ force: true });
+  await page.getByText('All Precincts', { exact: true }).click({ force: true });
+  await page.getByText('Official Ballot Mode').click();
 
   const s3 = await screenshots.capture('scan-configured', 'Configured');
-  openingPollsStep?.addScreenshot(s3);
+  openingPollsStep.addScreenshot(s3);
   await electionManagerCard.removeCard();
 
   // Open polls
@@ -122,21 +125,19 @@ export async function runScanWorkflow(
 
   await waitForTextInApp(page, 'Polls Opened');
   const s4 = await screenshots.capture('scan-polls-open', 'Polls opened');
-  openingPollsStep?.addScreenshot(s4);
-  pollWorkerCardForOpeningPolls.removeCard();
+  openingPollsStep.addScreenshot(s4);
+  await pollWorkerCardForOpeningPolls.removeCard();
 
   // Add thermal printer reports from opening polls
-  if (openingPollsStep) {
-    addThermalPrinterReports(printerWorkspace, openingPollsStep, existingPrinterFiles);
-  }
+  await addThermalPrinterReports(printerWorkspace, openingPollsStep, existingPrinterFiles);
 
   // Ready to scan
   await waitForTextInApp(page, 'Insert Your Ballot');
   const s5 = await screenshots.capture('scan-ready', 'Ready to scan');
-  openingPollsStep?.addScreenshot(s5);
+  openingPollsStep.addScreenshot(s5);
 
   // Mark opening polls step as complete
-  openingPollsStep?.complete();
+  openingPollsStep.complete();
 
   // Scan each ballot
   for (const [index, ballot] of ballotsToScan.entries()) {
@@ -146,10 +147,18 @@ export async function runScanWorkflow(
     const ballotStep = collector.startStep(
       `scan-ballot-${index + 1}`,
       `Scan Ballot ${index + 1}: ${ballot.ballotStyleId} - ${ballot.pattern} (${ballot.ballotMode})`,
-      `Scan ${ballot.pattern} ballot for ballot style ${ballot.ballotStyleId} in ${ballot.ballotMode} mode`
+      `Scan ${ballot.pattern} ballot for ballot style ${ballot.ballotStyleId} in ${ballot.ballotMode} mode`,
     );
 
-    const results = await scanBallot(repoPath, election, page, scannerController, ballot, screenshots, ballotStep);
+    const results = await scanBallot(
+      repoPath,
+      election,
+      page,
+      scannerController,
+      ballot,
+      screenshots,
+      ballotStep,
+    );
     scanResults.push(...results);
 
     // Mark ballot step as complete
@@ -160,10 +169,10 @@ export async function runScanWorkflow(
   logger.debug('Closing polls');
 
   // Create step for closing polls
-  const closingPollsStep = collector?.startStep(
+  const closingPollsStep = collector.startStep(
     'closing-polls',
     'Closing Polls',
-    'Close the polls and print results reports'
+    'Close the polls and print results reports',
   );
 
   const pollWorkerCardForClosingPolls = await insertPollWorkerCard(page, electionPath);
@@ -183,15 +192,13 @@ export async function runScanWorkflow(
 
   await waitForTextInApp(page, 'Voting is complete.');
   const s6 = await screenshots.capture('scan-polls-closed', 'Polls Closed');
-  closingPollsStep?.addScreenshot(s6);
+  closingPollsStep.addScreenshot(s6);
 
   // Add thermal printer reports from closing polls
-  if (closingPollsStep) {
-    addThermalPrinterReports(printerWorkspace, closingPollsStep, existingPrinterFiles);
-  }
+  await addThermalPrinterReports(printerWorkspace, closingPollsStep, existingPrinterFiles);
 
   // Mark closing polls step as complete
-  closingPollsStep?.complete();
+  closingPollsStep.complete();
 
   return {
     scanResults,
@@ -200,11 +207,12 @@ export async function runScanWorkflow(
 }
 
 function votesWithOnlyIds(votes: VotesDict): Record<string, string[]> {
-  return Object.fromEntries(Object.entries(votes)
-    .map(([contestId, votes]) => [
+  return Object.fromEntries(
+    Object.entries(votes).map(([contestId, votes]) => [
       contestId,
-      votes.map((vote) => typeof vote === 'string' ? vote : vote.id)
-    ]));
+      votes.map((vote) => (typeof vote === 'string' ? vote : vote.id)),
+    ]),
+  );
 }
 
 async function scanBallot(
@@ -214,10 +222,16 @@ async function scanBallot(
   scannerController: ReturnType<typeof createMockScannerController>,
   ballot: BallotToScan,
   screenshots: ReturnType<typeof createScreenshotManager>,
-  stepCollector: StepCollector
+  stepCollector: StepCollector,
 ): Promise<ScanResult[]> {
   const { ballotStyleId, pattern: markPattern, pdfPath } = ballot;
-  const markedBallotPdf = await generateMarkedBallotForPattern(repoPath, election, ballotStyleId, markPattern, await readFile(pdfPath));
+  const markedBallotPdf = await generateMarkedBallotForPattern(
+    repoPath,
+    election,
+    ballotStyleId,
+    markPattern,
+    await readFile(pdfPath),
+  );
 
   if (!markedBallotPdf) {
     return [];
@@ -230,7 +244,10 @@ async function scanBallot(
   }
 
   // Create descriptive filename: ballot-styleId-mode-pattern.pdf
-  const markedBallotPdfPath = ballot.pdfPath.replace(/\.pdf$/i, `-${ballot.ballotMode}-${markPattern}.pdf`);
+  const markedBallotPdfPath = ballot.pdfPath.replace(
+    /\.pdf$/i,
+    `-${ballot.ballotMode}-${markPattern}.pdf`,
+  );
   await writeFile(markedBallotPdfPath, markedBallotPdf.pdfBytes);
 
   // Split PDF into sheets (pairs of pages: front and back)
@@ -248,16 +265,30 @@ async function scanBallot(
     const frontPageIndex = sheetIndex * 2;
     const backPageIndex = frontPageIndex + 1;
 
-    const votesForSheet: VotesDict = Object.fromEntries(Object.entries(markedBallotPdf.votes)
-      .map(([contestId, votes]) => [contestId, votes.filter((vote) => {
-        const optionId = typeof vote === 'string' ? vote : vote.id;
-        return gridLayout.gridPositions.some((p) => p.sheetNumber === sheetIndex + 1 && p.contestId === contestId && p.type === 'option' && p.optionId === optionId);
-      })]).filter(([, votes]) => votes.length > 0));
+    const votesForSheet: VotesDict = Object.fromEntries(
+      Object.entries(markedBallotPdf.votes)
+        .map(([contestId, votes]) => [
+          contestId,
+          votes.filter((vote) => {
+            const optionId = typeof vote === 'string' ? vote : vote.id;
+            return gridLayout.gridPositions.some(
+              (p) =>
+                p.sheetNumber === sheetIndex + 1 &&
+                p.contestId === contestId &&
+                p.type === 'option' &&
+                p.optionId === optionId,
+            );
+          }),
+        ])
+        .filter(([, votes]) => votes.length > 0),
+    );
 
     // Convert votes to IDs for validation (handles both Candidate objects and string IDs)
-    const votesAsIds = votesWithOnlyIds(votesForSheet)
+    const votesAsIds = votesWithOnlyIds(votesForSheet);
 
-    logger.debug(`Votes for ${ballotStyleId} ${markPattern} sheet #${sheetIndex + 1}: ${JSON.stringify(votesAsIds)}`);
+    logger.debug(
+      `Votes for ${ballotStyleId} ${markPattern} sheet #${sheetIndex + 1}: ${JSON.stringify(votesAsIds)}`,
+    );
 
     // Create a new PDF with this sheet (front and back pages)
     const sheetDoc = await PDFDocument.create();
@@ -297,16 +328,24 @@ async function scanBallot(
     logger.debug(`Scanned sheet ${sheetIndex + 1}/${sheetCount}`);
 
     // After each sheet, check if ballot was rejected
-    const message = page.getByRole('heading').and(page.locator(':not([data-testid="ballot-count"])'));
+    const message = page
+      .getByRole('heading')
+      .and(page.locator(':not([data-testid="ballot-count"])'));
     await message.waitFor({ state: 'visible', timeout: 5000 });
     const messageText = await message.innerText();
     logger.debug(`Message after sheet ${sheetIndex + 1}: ${messageText}`);
 
     // If rejected, handle immediately and stop scanning more sheets
-    if (messageText !== 'Your ballot was counted!' && messageText.toLowerCase().includes('ballot')) {
+    if (
+      messageText !== 'Your ballot was counted!' &&
+      messageText.toLowerCase().includes('ballot')
+    ) {
       logger.info(`Ballot rejected after sheet ${sheetIndex + 1}/${sheetCount}: ${messageText}`);
 
-      const screenshot = await screenshots.capture(`scan-${ballotStyleId}-${markPattern}-sheet-${sheetIndex + 1}`, `Ballot rejected: ${ballotStyleId} ${markPattern}`);
+      const screenshot = await screenshots.capture(
+        `scan-${ballotStyleId}-${markPattern}-sheet-${sheetIndex + 1}`,
+        `Ballot rejected: ${ballotStyleId} ${markPattern}`,
+      );
       stepCollector.addScreenshot(screenshot);
 
       // Handle rejected ballot - return it
@@ -341,7 +380,10 @@ async function scanBallot(
 
       results.push(result);
     } else {
-      const screenshot = await screenshots.capture(`scan-${ballotStyleId}-${markPattern}-sheet-${sheetIndex + 1}`, `Ballot accepted: ${ballotStyleId} ${markPattern} (${sheetIndex + 1}/${sheetCount})`);
+      const screenshot = await screenshots.capture(
+        `scan-${ballotStyleId}-${markPattern}-sheet-${sheetIndex + 1}`,
+        `Ballot accepted: ${ballotStyleId} ${markPattern} (${sheetIndex + 1}/${sheetCount})`,
+      );
       stepCollector.addScreenshot(screenshot);
 
       const result: ScanResult = {
@@ -375,7 +417,7 @@ async function scanBallot(
 async function addThermalPrinterReports(
   workspaceDir: string,
   stepCollector: StepCollector,
-  existingFiles: Set<string>
+  existingFiles: Set<string>,
 ): Promise<void> {
   try {
     // The prints are in a 'prints' subdirectory
@@ -401,7 +443,7 @@ async function addThermalPrinterReports(
       }
     }
   } catch (error) {
-    logger.warn(`Failed to add thermal printer reports: ${error}`);
+    logger.warn(`Failed to add thermal printer reports: ${(error as Error).message}`);
   }
 }
 

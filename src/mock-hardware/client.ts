@@ -43,7 +43,7 @@ export function createDevDockClient(port = 3000): DevDockClient {
       } catch (error) {
         if (error instanceof Error && error.message.includes('ECONNREFUSED')) {
           throw new Error(
-            `Cannot connect to dev-dock at ${baseUrl}. Is the app running with mock hardware enabled?`
+            `Cannot connect to dev-dock at ${baseUrl}. Is the app running with mock hardware enabled?`,
           );
         }
         throw error;
@@ -55,10 +55,7 @@ export function createDevDockClient(port = 3000): DevDockClient {
 /**
  * Wait for dev-dock to become available
  */
-export async function waitForDevDock(
-  port = 3004,
-  timeout = 30000
-): Promise<boolean> {
+export async function waitForDevDock(port = 3004, timeout = 30000): Promise<boolean> {
   const startTime = Date.now();
   const url = `http://localhost:${port}/dock/getMockSpec`;
 

@@ -28,10 +28,7 @@ export interface ScreenshotManager {
 /**
  * Create a screenshot manager
  */
-export function createScreenshotManager(
-  page: Page,
-  outputDir: string
-): ScreenshotManager {
+export function createScreenshotManager(page: Page, outputDir: string): ScreenshotManager {
   const screenshotsDir = join(outputDir, 'screenshots');
   const screenshots: ScreenshotArtifact[] = [];
 

@@ -6,10 +6,7 @@ import Handlebars from 'handlebars';
 import { join, relative } from 'path';
 import { logger } from '../utils/logger.js';
 import type { ArtifactCollection, WorkflowStep } from '../config/types.js';
-import {
-  collectFilesInDir,
-  readFileAsBase64,
-} from './artifacts.js';
+import { collectFilesInDir, readFileAsBase64 } from './artifacts.js';
 import { generatePdfThumbnail } from './pdf-thumbnail.js';
 import { readFile, writeFile } from 'fs/promises';
 import { pathsEqual } from '../utils/paths.js';
@@ -19,7 +16,7 @@ import { pathsEqual } from '../utils/paths.js';
  */
 export async function generateHtmlReport(
   collection: ArtifactCollection,
-  outputDir: string
+  outputDir: string,
 ): Promise<string> {
   logger.step('Generating HTML report');
 
@@ -45,9 +42,7 @@ export async function generateHtmlReport(
   return reportPath;
 }
 
-export async function regenerateHtmlReportFromRawData(
-  outputDir: string
-): Promise<string> {
+export async function regenerateHtmlReportFromRawData(outputDir: string): Promise<string> {
   logger.step('Regenerating HTML report from prior run using collection.json');
 
   const reportPath = join(outputDir, 'report.html');
@@ -117,7 +112,7 @@ function organizeIntoSteps(collection: ArtifactCollection, _outputDir: string): 
  */
 async function prepareReportData(
   collection: ArtifactCollection,
-  outputDir: string
+  outputDir: string,
 ): Promise<ReportData> {
   const screenshotsDir = join(outputDir, 'screenshots');
   const screenshotFiles = collectFilesInDir(screenshotsDir, ['.png', '.jpg', '.jpeg']);
@@ -132,7 +127,7 @@ async function prepareReportData(
       thumbnail: file.name.endsWith('.pdf')
         ? await generatePdfThumbnail(file.path)
         : `data:image/png;base64,${readFileAsBase64(file.path)}`,
-    }))
+    })),
   );
 
   // Collect Fujitsu thermal printer PDFs
@@ -143,7 +138,7 @@ async function prepareReportData(
       name: file.name,
       path: file.path,
       thumbnail: await generatePdfThumbnail(file.path),
-    }))
+    })),
   );
 
   // Organize artifacts into workflow steps
@@ -158,46 +153,63 @@ async function prepareReportData(
       duration: step.endTime
         ? formatDuration(Math.round((step.endTime.getTime() - step.startTime.getTime()) / 1000))
         : 'N/A',
-      inputs: await Promise.all(step.inputs.map(async (input) => ({
-        type: input.type,
-        label: input.label,
-        description: input.description,
-        path: input.path,
-        data: input.data,
-        thumbnail: input.type === 'ballot' && input.path
-          ? await generatePdfThumbnail(input.path)
-          : null,
-      }))),
-      outputs: await Promise.all(step.outputs.map(async (output) => ({
-        type: output.type,
-        label: output.label,
-        description: output.description,
-        path: output.path,
-        data: output.data,
-        statusClass: output.data?.isExpected === true ? 'success' : (output.data?.isExpected === false ? 'error' : 'neutral'),
-        thumbnail: (output.type === 'print' || output.type === 'pdf') && output.path
-          ? await generatePdfThumbnail(join(outputDir, output.path))
-          : null,
-      }))),
-      screenshots: step.screenshots.map((screenshot) => {
-        const file = screenshotFiles.find(f => pathsEqual(f.path, screenshot.path));
-        return file ? {
-          name: screenshot.name,
-          data: relative(outputDir, file.path),
-          caption: screenshot.step,
-        } : null;
-      }).filter((s) => s !== null),
+      inputs: await Promise.all(
+        step.inputs.map(async (input) => ({
+          type: input.type,
+          label: input.label,
+          description: input.description,
+          path: input.path,
+          data: input.data,
+          thumbnail:
+            input.type === 'ballot' && input.path ? await generatePdfThumbnail(input.path) : null,
+        })),
+      ),
+      outputs: await Promise.all(
+        step.outputs.map(async (output) => ({
+          type: output.type,
+          label: output.label,
+          description: output.description,
+          path: output.path,
+          data: output.data,
+          statusClass:
+            output.data?.isExpected === true
+              ? 'success'
+              : output.data?.isExpected === false
+                ? 'error'
+                : 'neutral',
+          thumbnail:
+            (output.type === 'print' || output.type === 'pdf') && output.path
+              ? await generatePdfThumbnail(join(outputDir, output.path))
+              : null,
+        })),
+      ),
+      screenshots: step.screenshots
+        .map((screenshot) => {
+          const file = screenshotFiles.find((f) => pathsEqual(f.path, screenshot.path));
+          return file
+            ? {
+                name: screenshot.name,
+                data: relative(outputDir, file.path),
+                caption: screenshot.step,
+              }
+            : null;
+        })
+        .filter((s) => s !== null),
       hasErrors: step.errors.length > 0,
       errors: step.errors,
-    }))
+    })),
   );
 
   // Calculate statistics
   const totalScanned = collection.scanResults.length;
   const accepted = collection.scanResults.filter((r) => r.accepted).length;
   const rejected = collection.scanResults.filter((r) => !r.accepted).length;
-  const handledAsExpected = collection.scanResults.filter((r) => r.input.expectedAccepted === r.accepted).length;
-  const handledUnexpectedly = collection.scanResults.filter((r) => r.input.expectedAccepted !== r.accepted).length;
+  const handledAsExpected = collection.scanResults.filter(
+    (r) => r.input.expectedAccepted === r.accepted,
+  ).length;
+  const handledUnexpectedly = collection.scanResults.filter(
+    (r) => r.input.expectedAccepted !== r.accepted,
+  ).length;
 
   // Check for validation failures
   const validationFailures: Array<{ step: string; message: string; stepId: string }> = [];
@@ -217,7 +229,7 @@ async function prepareReportData(
           stepId: step.id,
           message: output.data?.expected
             ? `Ballot sheet was expected to be accepted but was rejected.`
-            : `Ballot sheet was expected to be rejected but was accepted.`
+            : `Ballot sheet was expected to be rejected but was accepted.`,
         });
       }
     }
@@ -226,9 +238,7 @@ async function prepareReportData(
   // Calculate duration
   const duration =
     collection.endTime && collection.startTime
-      ? Math.round(
-        (collection.endTime.getTime() - collection.startTime.getTime()) / 1000
-      )
+      ? Math.round((collection.endTime.getTime() - collection.startTime.getTime()) / 1000)
       : null;
   const hasErrors = collection.errors.length > 0;
   const hasValidationFailures = validationFailures.length > 0;

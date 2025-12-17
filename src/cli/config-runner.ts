@@ -41,10 +41,7 @@ export interface RunOptions {
 /**
  * Run the QA workflow with the given configuration
  */
-export async function runQAWorkflow(
-  config: QARunConfig,
-  options: RunOptions = {}
-): Promise<void> {
+export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {}): Promise<void> {
   const startTime = Date.now();
   const collector = createArtifactCollector(config.output.directory, config);
 
@@ -71,7 +68,7 @@ export async function runQAWorkflow(
     // Phase 2: Clear state
     printDivider();
     logger.step('Phase 2: Clearing State');
-    const state = State.defaultFor(repoPath)
+    const state = State.defaultFor(repoPath);
     await state.clear();
 
     // Phase 3: Load election package and ballots
@@ -79,9 +76,14 @@ export async function runQAWorkflow(
     logger.step('Phase 3: Loading Election Package');
 
     const electionSourcePath = resolvePath(config.election.source, config.basePath);
-    const { electionPackage, electionPackagePath } =
-      await loadElectionPackage(electionSourcePath, collector.getBallotsDir());
-    assert(electionPackage.systemSettings['disallowCastingOvervotes'], `System setting 'disallowCastingOvervotes' must be true`);
+    const { electionPackage, electionPackagePath } = await loadElectionPackage(
+      electionSourcePath,
+      collector.getBallotsDir(),
+    );
+    assert(
+      electionPackage.systemSettings['disallowCastingOvervotes'],
+      `System setting 'disallowCastingOvervotes' must be true`,
+    );
 
     const { election } = electionPackage.electionDefinition;
 
@@ -98,10 +100,16 @@ export async function runQAWorkflow(
     const ballotsPath = join(config.output.directory, 'ballots');
 
     for (const ballot of electionPackage.ballots) {
-      logger.info(`Prepared ballot: ${ballot.ballotStyleId}/${ballot.precinctId}/${ballot.ballotMode}/${ballot.ballotType}`);
+      logger.info(
+        `Prepared ballot: ${ballot.ballotStyleId}/${ballot.precinctId}/${ballot.ballotMode}/${ballot.ballotType}`,
+      );
 
-      const pdfName = `ballot-${ballot.ballotStyleId}-${ballot.precinctId}-${ballot.ballotMode}-${ballot.ballotType}.pdf`.replace(/[\/ ]/g, '_');
-      const pdfPath = join(ballotsPath, pdfName)
+      const pdfName =
+        `ballot-${ballot.ballotStyleId}-${ballot.precinctId}-${ballot.ballotMode}-${ballot.ballotType}.pdf`.replace(
+          /[/ ]/g,
+          '_',
+        );
+      const pdfPath = join(ballotsPath, pdfName);
 
       await writeFile(pdfPath, ballot.pdfData);
 
@@ -122,19 +130,22 @@ export async function runQAWorkflow(
       });
 
       if (ballot.ballotMode === 'official') {
-        ballotsToScan.push({
-          ballotStyleId: ballot.ballotStyleId,
-          ballotMode: ballot.ballotMode,
-          pattern: 'valid',
-          pdfPath,
-          expectedAccepted: true,
-        }, {
-          ballotStyleId: ballot.ballotStyleId,
-          ballotMode: ballot.ballotMode,
-          pattern: 'overvote',
-          pdfPath,
-          expectedAccepted: false
-        })
+        ballotsToScan.push(
+          {
+            ballotStyleId: ballot.ballotStyleId,
+            ballotMode: ballot.ballotMode,
+            pattern: 'valid',
+            pdfPath,
+            expectedAccepted: true,
+          },
+          {
+            ballotStyleId: ballot.ballotStyleId,
+            ballotMode: ballot.ballotMode,
+            pattern: 'overvote',
+            pdfPath,
+            expectedAccepted: false,
+          },
+        );
       }
     }
 
@@ -154,7 +165,7 @@ export async function runQAWorkflow(
     const adminStep = collector.startStep(
       'programming-vxadmin',
       'Programming VxAdmin',
-      'Configure VxAdmin with the election package and export election package for VxScan'
+      'Configure VxAdmin with the election package and export election package for VxScan',
     );
 
     adminStep.addInput({
@@ -186,7 +197,7 @@ export async function runQAWorkflow(
         config.output.directory,
         dataPath,
         getBackendPort('admin'),
-        adminStep
+        adminStep,
       );
       exportedPackagePath = adminResult.exportedPackagePath;
 
@@ -212,7 +223,7 @@ export async function runQAWorkflow(
       const openingPollsStep = collector.startStep(
         'opening-polls',
         'Opening Polls',
-        'Configure VxScan and open the polls for voting'
+        'Configure VxScan and open the polls for voting',
       );
 
       openingPollsStep.addInput({
@@ -252,7 +263,7 @@ export async function runQAWorkflow(
       const tallyStep = collector.startStep(
         'tallying-cvrs',
         'Tallying CVRs in VxAdmin',
-        'Import CVRs from VxScan and generate tally reports'
+        'Import CVRs from VxScan and generate tally reports',
       );
 
       tallyStep.addInput({
@@ -270,7 +281,7 @@ export async function runQAWorkflow(
         dataPath,
         getBackendPort('admin'),
         tallyStep,
-        collector
+        collector,
       );
 
       tallyStep.complete();
@@ -289,10 +300,7 @@ export async function runQAWorkflow(
     logger.step('Phase 9: Generating Report');
 
     collector.complete();
-    const reportPath = await generateHtmlReport(
-      collector.getCollection(),
-      config.output.directory
-    );
+    const reportPath = await generateHtmlReport(collector.getCollection(), config.output.directory);
 
     // Summary
     printDivider();
@@ -312,7 +320,7 @@ export async function runQAWorkflow(
       // Spawn detached process so it doesn't block
       spawn('open', [reportPath], {
         detached: true,
-        stdio: 'ignore'
+        stdio: 'ignore',
       }).unref();
     }
   } catch (error) {
@@ -323,10 +331,7 @@ export async function runQAWorkflow(
     // Generate partial report on error
     collector.complete();
     try {
-      await generateHtmlReport(
-        collector.getCollection(),
-        config.output.directory
-      );
+      await generateHtmlReport(collector.getCollection(), config.output.directory);
     } catch {
       // Ignore report generation errors
     }
@@ -351,9 +356,7 @@ async function runPreflightChecks(): Promise<void> {
   // Check Node.js version
   const nodeVersion = await checkNodeVersion();
   if (!nodeVersion.compatible) {
-    throw new Error(
-      `Node.js ${nodeVersion.required}+ required, found ${nodeVersion.current}`
-    );
+    throw new Error(`Node.js ${nodeVersion.required}+ required, found ${nodeVersion.current}`);
   }
   logger.debug(`Node.js ${nodeVersion.current} is compatible`);
 

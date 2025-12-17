@@ -28,9 +28,7 @@ const DEFAULT_OPTIONS: BrowserOptions = {
 /**
  * Create a browser session for automation
  */
-export async function createBrowserSession(
-  options: BrowserOptions = {}
-): Promise<BrowserSession> {
+export async function createBrowserSession(options: BrowserOptions = {}): Promise<BrowserSession> {
   const opts = { ...DEFAULT_OPTIONS, ...options };
 
   logger.debug(`Launching browser (headless: ${opts.headless})`);
@@ -81,7 +79,7 @@ export async function waitForPageLoad(page: Page, timeout = 10000): Promise<void
 export async function takeScreenshot(
   page: Page,
   path: string,
-  options: { fullPage?: boolean } = {}
+  options: { fullPage?: boolean } = {},
 ): Promise<void> {
   await page.screenshot({
     path,
@@ -98,7 +96,7 @@ export async function takeScreenshot(
 export async function waitForText(
   page: Page,
   text: string,
-  options: { timeout?: number; exact?: boolean } = {}
+  options: { timeout?: number; exact?: boolean } = {},
 ): Promise<void> {
   const { timeout = 10000, exact = false } = options;
 
@@ -115,7 +113,7 @@ export async function waitForText(
 export async function clickButton(
   page: Page,
   name: string,
-  options: { exact?: boolean } = {}
+  options: { exact?: boolean } = {},
 ): Promise<void> {
   const { exact = false } = options;
   await page.getByRole('button', { name, exact }).click();
@@ -144,11 +142,7 @@ export function getCurrentUrl(page: Page): string {
 /**
  * Debug helper - dump current page state to console and take a screenshot
  */
-export async function debugPageState(
-  page: Page,
-  label: string,
-  outputDir?: string
-): Promise<void> {
+export async function debugPageState(page: Page, label: string, outputDir?: string): Promise<void> {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 
   console.log(`\n${'='.repeat(60)}`);
@@ -158,7 +152,10 @@ export async function debugPageState(
   console.log(`Title: ${await page.title()}`);
 
   // Get visible text content (first 2000 chars)
-  const bodyText = await page.locator('body').innerText().catch(() => 'Could not get body text');
+  const bodyText = await page
+    .locator('body')
+    .innerText()
+    .catch(() => 'Could not get body text');
   console.log(`\nVisible text (truncated):\n${bodyText.slice(0, 2000)}`);
 
   // List all buttons
@@ -168,7 +165,7 @@ export async function debugPageState(
       const text = await btn.innerText().catch(() => '(no text)');
       const isVisible = await btn.isVisible().catch(() => false);
       return `  - "${text}" (visible: ${isVisible})`;
-    })
+    }),
   );
   console.log(`\nButtons (first 20):\n${buttonTexts.join('\n')}`);
 
@@ -180,7 +177,7 @@ export async function debugPageState(
       const href = await link.getAttribute('href').catch(() => '(no href)');
       const isVisible = await link.isVisible().catch(() => false);
       return `  - "${text}" -> ${href} (visible: ${isVisible})`;
-    })
+    }),
   );
   console.log(`\nLinks (first 20):\n${linkTexts.join('\n')}`);
 
@@ -190,7 +187,7 @@ export async function debugPageState(
     headings.slice(0, 10).map(async (h) => {
       const text = await h.innerText().catch(() => '(no text)');
       return `  - ${text}`;
-    })
+    }),
   );
   console.log(`\nHeadings:\n${headingTexts.join('\n')}`);
 
@@ -210,7 +207,7 @@ export async function debugPageState(
 export async function waitForTextWithDebug(
   page: Page,
   text: string,
-  options: { timeout?: number; outputDir?: string; label?: string } = {}
+  options: { timeout?: number; outputDir?: string; label?: string } = {},
 ): Promise<void> {
   const { timeout = 10000, outputDir, label } = options;
 
@@ -228,7 +225,7 @@ export async function waitForTextWithDebug(
 export async function clickButtonWithDebug(
   page: Page,
   name: string,
-  options: { timeout?: number; outputDir?: string; label?: string } = {}
+  options: { timeout?: number; outputDir?: string; label?: string } = {},
 ): Promise<void> {
   const { timeout = 10000, outputDir, label } = options;
 
@@ -246,7 +243,7 @@ export async function clickButtonWithDebug(
 export async function clickLinkWithDebug(
   page: Page,
   name: string,
-  options: { timeout?: number; outputDir?: string; label?: string } = {}
+  options: { timeout?: number; outputDir?: string; label?: string } = {},
 ): Promise<void> {
   const { timeout = 10000, outputDir, label } = options;
 
@@ -274,7 +271,7 @@ export function getMainContent(page: Page) {
 export async function waitForTextInApp(
   page: Page,
   text: string,
-  options: { timeout?: number } = {}
+  options: { timeout?: number } = {},
 ): Promise<void> {
   const { timeout = 10000 } = options;
   const mainContent = getMainContent(page);
@@ -284,10 +281,7 @@ export async function waitForTextInApp(
 /**
  * Click text in the main app content (excluding dev-dock)
  */
-export async function clickTextInApp(
-  page: Page,
-  text: string
-): Promise<void> {
+export async function clickTextInApp(page: Page, text: string): Promise<void> {
   const mainContent = getMainContent(page);
   await mainContent.getByText(text).first().click();
 }

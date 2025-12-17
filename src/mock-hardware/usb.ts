@@ -60,7 +60,12 @@ export interface MockUsbController {
 /**
  * Create a mock USB controller
  */
-export function createMockUsbController({ dataPath }: { port?: number; dataPath: string }): MockUsbController {
+export function createMockUsbController({
+  dataPath,
+}: {
+  port?: number;
+  dataPath: string;
+}): MockUsbController {
   const client: DevDockClient = createDevDockClient();
 
   return {

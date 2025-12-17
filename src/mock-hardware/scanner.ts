@@ -30,7 +30,7 @@ export interface MockScannerController {
    */
   waitForStatus(
     expectedStatus: SheetStatus | SheetStatus[],
-    timeout?: number
+    timeout?: number,
   ): Promise<SheetStatus>;
 }
 
@@ -57,11 +57,9 @@ export function createMockScannerController(): MockScannerController {
 
     async waitForStatus(
       expectedStatus: SheetStatus | SheetStatus[],
-      timeout = 10000
+      timeout = 10000,
     ): Promise<SheetStatus> {
-      const expected = Array.isArray(expectedStatus)
-        ? expectedStatus
-        : [expectedStatus];
+      const expected = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
 
       const startTime = Date.now();
 
@@ -75,7 +73,7 @@ export function createMockScannerController(): MockScannerController {
 
       const currentStatus = await this.getSheetStatus();
       throw new Error(
-        `Timeout waiting for sheet status ${expected.join(' or ')}, current: ${currentStatus}`
+        `Timeout waiting for sheet status ${expected.join(' or ')}, current: ${currentStatus}`,
       );
     },
   };
@@ -138,12 +136,14 @@ export function createMockPrinterController(port = 3004): MockPrinterController 
         }
 
         // Get the most recent file
-        const sortedFiles = (await Promise.all(files
-          .map(async (f) => ({
-            name: f,
-            time: (await stat(join(printsDir, f))).mtime.getTime(),
-          }))))
-          .sort((a, b) => b.time - a.time);
+        const sortedFiles = (
+          await Promise.all(
+            files.map(async (f) => ({
+              name: f,
+              time: (await stat(join(printsDir, f))).mtime.getTime(),
+            })),
+          )
+        ).sort((a, b) => b.time - a.time);
 
         return join(printsDir, sortedFiles[0].name);
       } catch {

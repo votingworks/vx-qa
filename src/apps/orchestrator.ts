@@ -75,21 +75,19 @@ export function createAppOrchestrator(repoPath: string): AppOrchestrator {
         // Log output for debugging
         const { stdout, stderr } = state.process;
         if (stdout) {
-          createInterface({ input: stdout, crlfDelay: Infinity })
-            .on('line', (line) => {
-              if (line) {
-                logger.debug(`[${app}] ${line.trim()}`);
-              }
-            });
+          createInterface({ input: stdout, crlfDelay: Infinity }).on('line', (line) => {
+            if (line) {
+              logger.debug(`[${app}] ${line.trim()}`);
+            }
+          });
         }
 
         if (stderr) {
-          createInterface({ input: stderr, crlfDelay: Infinity })
-            .on('line', (line) => {
-              if (line) {
-                logger.debug(`[${app}:err] ${line.trim()}`);
-              }
-            });
+          createInterface({ input: stderr, crlfDelay: Infinity }).on('line', (line) => {
+            if (line) {
+              logger.debug(`[${app}:err] ${line.trim()}`);
+            }
+          });
         }
 
         state.process.on('exit', (code) => {
@@ -176,7 +174,7 @@ export function createAppOrchestrator(repoPath: string): AppOrchestrator {
 
         spinner.succeed(`${appName} app stopped`);
       } catch (error) {
-        spinner.fail(`Error stopping app: ${error}`);
+        spinner.fail(`Error stopping app: ${(error as Error).message}`);
         state.process = null;
         state.currentApp = null;
       }

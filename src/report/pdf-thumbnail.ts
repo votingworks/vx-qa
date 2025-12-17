@@ -26,7 +26,7 @@ export async function generatePdfThumbnail(pdfPath: string): Promise<string | nu
 
     return null;
   } catch (error) {
-    logger.warn(`Failed to generate thumbnail for PDF ${pdfPath}: ${error}`);
+    logger.warn(`Failed to generate thumbnail for PDF ${pdfPath}: ${(error as Error).message}`);
     return null;
   }
 }

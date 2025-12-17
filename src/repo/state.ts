@@ -14,8 +14,8 @@ export class State {
       repoPath,
       join(repoPath, 'libs/usb-drive/dev-workspace'),
       join(repoPath, 'libs/fujitsu-thermal-printer/dev-workspace'),
-      expandHome('~/.vx-dev-dock')
-    )
+      expandHome('~/.vx-dev-dock'),
+    );
   }
 
   private constructor(
@@ -23,7 +23,7 @@ export class State {
     private readonly usbDrivePath: string,
     private readonly printerPath: string,
     private readonly devDockPath: string,
-  ) { }
+  ) {}
 
   async clear(): Promise<void> {
     logger.step('Clearing all state for fresh QA run...');
@@ -65,11 +65,18 @@ export class State {
     const spinner = logger.spinner('Copying workspace data...');
 
     try {
-      await Promise.all([['admin', join(this.repoPath, 'apps/admin/backend/dev-workspace')], ['scan', join(this.repoPath, 'apps/scan/backend/dev-workspace')], ['usb-drive', this.usbDrivePath], ['fujitsu-thermal-printer', this.printerPath]].map(async ([name, path]) => {
-        const workspacePath = join(outputPath, name);
-        await mkdir(workspacePath, { recursive: true });
-        await cp(path, workspacePath, { recursive: true });
-      }));
+      await Promise.all(
+        [
+          ['admin', join(this.repoPath, 'apps/admin/backend/dev-workspace')],
+          ['scan', join(this.repoPath, 'apps/scan/backend/dev-workspace')],
+          ['usb-drive', this.usbDrivePath],
+          ['fujitsu-thermal-printer', this.printerPath],
+        ].map(async ([name, path]) => {
+          const workspacePath = join(outputPath, name);
+          await mkdir(workspacePath, { recursive: true });
+          await cp(path, workspacePath, { recursive: true });
+        }),
+      );
       spinner.succeed('Workspace data copied to output');
     } catch (error) {
       spinner.fail('Failed to copy workspace data to output');
@@ -92,7 +99,6 @@ async function clearDirectory(dirPath: string): Promise<void> {
     await rm(resolved, { recursive: true, force: true });
     logger.debug(`Cleared ${resolved}`);
   } catch (error) {
-    logger.warn(`Failed to clear ${resolved}: ${error}`);
+    logger.warn(`Failed to clear ${resolved}: ${(error as Error).message}`);
   }
 }
-

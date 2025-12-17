@@ -61,10 +61,7 @@ export async function bootstrapRepo(repoPath: string): Promise<void> {
 /**
  * Build a specific app in the repository
  */
-export async function buildApp(
-  repoPath: string,
-  app: 'admin' | 'scan'
-): Promise<void> {
+export async function buildApp(repoPath: string, app: 'admin' | 'scan'): Promise<void> {
   const spinner = logger.spinner(`Building ${app} app...`);
 
   try {

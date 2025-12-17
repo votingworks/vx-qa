@@ -79,31 +79,32 @@ export interface Election {
 
 export interface GridLayout {
   ballotStyleId: string;
-  optionBoundsFromTargetMark: Rect,
-  gridPositions: GridPosition[],
+  optionBoundsFromTargetMark: Rect;
+  gridPositions: GridPosition[];
 }
 
 export type BallotSide = 'front' | 'back';
 
-export type GridPosition = {
-  type: "option";
-  sheetNumber: number;
-  side: BallotSide;
-  column: number;
-  row: number;
-  contestId: string;
-  optionId: string;
-} |
-{
-  type: "write-in",
-  sheetNumber: number;
-  side: BallotSide;
-  column: number;
-  row: number;
-  contestId: string;
-  writeInIndex: number;
-  writeInArea: Rect;
-};
+export type GridPosition =
+  | {
+      type: 'option';
+      sheetNumber: number;
+      side: BallotSide;
+      column: number;
+      row: number;
+      contestId: string;
+      optionId: string;
+    }
+  | {
+      type: 'write-in';
+      sheetNumber: number;
+      side: BallotSide;
+      column: number;
+      row: number;
+      contestId: string;
+      writeInIndex: number;
+      writeInArea: Rect;
+    };
 
 export interface Outset {
   top: number;
@@ -161,15 +162,17 @@ export async function loadElection(source: string, basePath?: string): Promise<E
   } else if (ext === '.json') {
     throw new Error(
       `Cannot use raw election.json file directly.\n\n` +
-      `VxAdmin requires a complete election package (ZIP) that includes ballot templates.\n` +
-      `Please use VxDesign to generate an election package:\n` +
-      `  1. Open VxDesign and create/import your election\n` +
-      `  2. Export the election package\n` +
-      `  3. Provide the exported ZIP file to this tool\n\n` +
-      `Provided file: ${sourcePath}`
+        `VxAdmin requires a complete election package (ZIP) that includes ballot templates.\n` +
+        `Please use VxDesign to generate an election package:\n` +
+        `  1. Open VxDesign and create/import your election\n` +
+        `  2. Export the election package\n` +
+        `  3. Provide the exported ZIP file to this tool\n\n` +
+        `Provided file: ${sourcePath}`,
     );
   } else {
-    throw new Error(`Unsupported election source format: ${ext}. Expected a .zip election package.`);
+    throw new Error(
+      `Unsupported election source format: ${ext}. Expected a .zip election package.`,
+    );
   }
 }
 
@@ -184,10 +187,14 @@ async function loadElectionFromZip(zipPath: string): Promise<ElectionPackage> {
 
   // List all files in the ZIP for debugging
   const fileNames = Object.keys(zip.files);
-  logger.debug(`ZIP contains ${fileNames.length} files: ${fileNames.slice(0, 10).join(', ')}${fileNames.length > 10 ? '...' : ''}`);
+  logger.debug(
+    `ZIP contains ${fileNames.length} files: ${fileNames.slice(0, 10).join(', ')}${fileNames.length > 10 ? '...' : ''}`,
+  );
 
   // Check if this is a nested "election-package-and-ballots" ZIP from VxDesign
-  const innerPackageFile = fileNames.find(f => f.startsWith('election-package-') && f.endsWith('.zip'));
+  const innerPackageFile = fileNames.find(
+    (f) => f.startsWith('election-package-') && f.endsWith('.zip'),
+  );
   if (innerPackageFile) {
     logger.debug(`Found nested election package: ${innerPackageFile}`);
     const innerZipData = await zip.file(innerPackageFile)!.async('uint8array');
@@ -210,9 +217,9 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
   if (!electionFile) {
     throw new Error(
       `Invalid election package: election.json not found.\n` +
-      `This doesn't appear to be a valid VxDesign election package.\n` +
-      `Files found: ${fileNames.slice(0, 5).join(', ')}${fileNames.length > 5 ? '...' : ''}\n` +
-      `Source: ${sourcePath}`
+        `This doesn't appear to be a valid VxDesign election package.\n` +
+        `Files found: ${fileNames.slice(0, 5).join(', ')}${fileNames.length > 5 ? '...' : ''}\n` +
+        `Source: ${sourcePath}`,
     );
   }
 
@@ -247,7 +254,7 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
       const pdfData = Buffer.from(encodedBallot, 'base64');
       ballots.push({ ...props, pdfData });
     } catch (e) {
-      logger.warn(`Failed to parse ballot entry: ${e}`);
+      logger.warn(`Failed to parse ballot entry: ${(e as Error).message}`);
     }
   }
   logger.debug(`Loaded ${ballots.length} ballot PDFs`);
@@ -259,9 +266,9 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
   if (!systemSettingsFile) {
     throw new Error(
       `Invalid election package: election.json not found.\n` +
-      `This doesn't appear to be a valid VxDesign election package.\n` +
-      `Files found: ${fileNames.slice(0, 5).join(', ')}${fileNames.length > 5 ? '...' : ''}\n` +
-      `Source: ${sourcePath}`
+        `This doesn't appear to be a valid VxDesign election package.\n` +
+        `Files found: ${fileNames.slice(0, 5).join(', ')}${fileNames.length > 5 ? '...' : ''}\n` +
+        `Source: ${sourcePath}`,
     );
   }
 
@@ -288,16 +295,16 @@ async function calculateHash(data: string): Promise<string> {
   const dataBuffer = encoder.encode(data);
   const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+  return hashArray
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 16);
 }
 
 /**
  * Get contests for a specific ballot style
  */
-export function getContestsForBallotStyle(
-  election: Election,
-  ballotStyleId: string
-): Contest[] {
+export function getContestsForBallotStyle(election: Election, ballotStyleId: string): Contest[] {
   const ballotStyle = election.ballotStyles.find((bs) => bs.id === ballotStyleId);
   if (!ballotStyle) {
     throw new Error(`Ballot style not found: ${ballotStyleId}`);
@@ -318,11 +325,11 @@ export function getPrecinctName(election: Election, precinctId: string): string 
 export const RawBallotPdfInfo = z.strictObject({
   ballotStyleId: z.string(),
   precinctId: z.string(),
-  ballotType: z.union([z.literal("precinct"), z.literal("absentee")]),
-  ballotMode: z.union([z.literal("official"), z.literal("test")]),
+  ballotType: z.union([z.literal('precinct'), z.literal('absentee')]),
+  ballotMode: z.union([z.literal('official'), z.literal('test')]),
   compact: z.boolean(),
   encodedBallot: z.string(),
-})
+});
 
 export type BallotType = 'precinct' | 'absentee';
 export type BallotMode = 'official' | 'test';
@@ -356,7 +363,7 @@ export interface UnpackedElectionPackage {
  */
 export async function loadElectionPackage(
   sourcePath: string,
-  outputDir: string
+  outputDir: string,
 ): Promise<UnpackedElectionPackage> {
   if (!existsSync(sourcePath)) {
     throw new Error(`Election source not found: ${sourcePath}`);
@@ -366,7 +373,7 @@ export async function loadElectionPackage(
   if (ext !== '.zip') {
     throw new Error(
       `Expected a .zip election package, got: ${ext}\n` +
-      `Please provide a VxDesign election package (election-package-and-ballots-*.zip)`
+        `Please provide a VxDesign election package (election-package-and-ballots-*.zip)`,
     );
   }
 
@@ -379,13 +386,15 @@ export async function loadElectionPackage(
   logger.debug(`ZIP contains: ${fileNames.join(', ')}`);
 
   // Find the election-package-*.zip and ballots-*.zip
-  const electionPackageFile = fileNames.find(f => f.startsWith('election-package-') && f.endsWith('.zip'));
+  const electionPackageFile = fileNames.find(
+    (f) => f.startsWith('election-package-') && f.endsWith('.zip'),
+  );
 
   if (!electionPackageFile) {
     throw new Error(
       `No election-package-*.zip found in the archive.\n` +
-      `Files found: ${fileNames.join(', ')}\n` +
-      `Please provide a complete VxDesign export (election-package-and-ballots-*.zip)`
+        `Files found: ${fileNames.join(', ')}\n` +
+        `Please provide a complete VxDesign export (election-package-and-ballots-*.zip)`,
     );
   }
 
@@ -409,4 +418,3 @@ export async function loadElectionPackage(
     electionPackagePath,
   };
 }
-

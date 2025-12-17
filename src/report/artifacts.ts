@@ -96,10 +96,7 @@ export interface ArtifactCollector {
 /**
  * Create an artifact collector
  */
-export function createArtifactCollector(
-  outputDir: string,
-  config: QARunConfig
-): ArtifactCollector {
+export function createArtifactCollector(outputDir: string, config: QARunConfig): ArtifactCollector {
   const runId = basename(outputDir);
   const startTime = new Date();
 
@@ -222,7 +219,7 @@ export function createArtifactCollector(
 }
 
 /**
- * Loads a serialized collection as a 
+ * Loads a serialized collection as a
  */
 export async function loadCollection(path: string): Promise<ArtifactCollection> {
   return JSON.parse(await readFile(path, 'utf8'), (key, value) => {
@@ -244,7 +241,7 @@ export async function loadCollection(path: string): Promise<ArtifactCollection> 
  */
 export function collectFilesInDir(
   dir: string,
-  extensions?: string[]
+  extensions?: string[],
 ): { name: string; path: string; size: number; mtime?: Date }[] {
   if (!existsSync(dir)) {
     return [];
@@ -279,4 +276,3 @@ export function readFileAsBase64(filePath: string): string {
   const buffer = readFileSync(filePath);
   return buffer.toString('base64');
 }
-

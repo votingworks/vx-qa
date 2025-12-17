@@ -18,7 +18,7 @@ export interface ProcessResult {
 export function execCommand(
   command: string,
   args: string[],
-  options: SpawnOptions = {}
+  options: SpawnOptions = {},
 ): Promise<ProcessResult> {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
@@ -53,7 +53,7 @@ export function execCommand(
 export function execCommandWithOutput(
   command: string,
   args: string[],
-  options: SpawnOptions = {}
+  options: SpawnOptions = {},
 ): Promise<number | null> {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
@@ -77,7 +77,7 @@ export function execCommandWithOutput(
 export function spawnBackground(
   command: string,
   args: string[],
-  options: SpawnOptions = {}
+  options: SpawnOptions = {},
 ): ChildProcess {
   const proc = spawn(command, args, {
     ...options,
@@ -116,7 +116,7 @@ export async function waitForPort(
   port: number,
   host = 'localhost',
   timeout = 60000,
-  interval = 500
+  interval = 500,
 ): Promise<boolean> {
   const startTime = Date.now();
 

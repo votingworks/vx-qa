@@ -35,7 +35,7 @@ export async function runAdminWorkflow(
   outputDir: string,
   dataPath: string,
   backendPort = 3004,
-  stepCollector?: StepCollector
+  stepCollector?: StepCollector,
 ): Promise<AdminWorkflowResult> {
   logger.step('Running VxAdmin workflow');
 
@@ -158,7 +158,7 @@ export async function runAdminWorkflow(
   const exportedPackagePath = await getExportedPackagePath(usbController.getDataPath());
 
   // Log out
-  await logOut(page, outputDir);
+  await logOut(page);
   const s8 = await screenshots.capture('admin-logged-out', 'Logged out');
   stepCollector?.addScreenshot(s8);
 
@@ -205,9 +205,9 @@ async function getExportedPackagePath(usbDataPath: string): Promise<string> {
   }
 
   // Return the most recently modified ZIP file
-  const sorted = (await Promise.all(zipFiles
-    .map(async (path) => ({ path, mtime: (await stat(path)).mtime }))))
-    .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+  const sorted = (
+    await Promise.all(zipFiles.map(async (path) => ({ path, mtime: (await stat(path)).mtime })))
+  ).sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
   return sorted[0].path;
 }

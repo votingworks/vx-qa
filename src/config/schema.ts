@@ -6,11 +6,7 @@ import { z } from 'zod/v4';
 import { resolvePath } from '../utils/paths.js';
 import { dirname } from 'node:path';
 
-export const BallotPatternSchema = z.enum([
-  'blank',
-  'valid',
-  'overvote',
-]);
+export const BallotPatternSchema = z.enum(['blank', 'valid', 'overvote']);
 
 export const VxSuiteConfigSchema = z.object({
   repoPath: z.string().min(1, 'Repository path is required'),
@@ -23,9 +19,7 @@ export const ElectionConfigSchema = z.object({
 });
 
 export const BallotConfigSchema = z.object({
-  patterns: z
-    .array(BallotPatternSchema)
-    .min(1, 'At least one ballot pattern is required'),
+  patterns: z.array(BallotPatternSchema).min(1, 'At least one ballot pattern is required'),
 });
 
 export const OutputConfigSchema = z.object({

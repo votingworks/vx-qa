@@ -6,8 +6,12 @@
 
 import { Page } from '@playwright/test';
 import { logger } from '../utils/logger.js';
-import { createMockCardController, DEFAULT_PIN, MockCardController } from '../mock-hardware/cards.js';
-import { waitForText, waitForTextInApp, clickButtonWithDebug } from './browser.js';
+import {
+  createMockCardController,
+  DEFAULT_PIN,
+  MockCardController,
+} from '../mock-hardware/cards.js';
+import { waitForText, waitForTextInApp } from './browser.js';
 
 /**
  * Enter the PIN on the PIN pad screen
@@ -134,17 +138,10 @@ export async function insertPollWorkerCardAndLogin(
 /**
  * Log out by clicking Lock Machine
  */
-export async function logOut(page: Page, outputDir: string): Promise<void> {
+export async function logOut(page: Page): Promise<void> {
   logger.debug('Logging out');
 
-  try {
-    // Wait for Lock Machine to be visible in the main app, then click it
-    await waitForTextInApp(page, 'Lock Machine', { timeout: 10000 });
-    await page.getByText('Lock Machine').click({ timeout: 10000 });
-  } catch (error) {
-    // If that fails, try the debug version for better error reporting
-    await clickButtonWithDebug(page, 'Lock Machine', { outputDir });
-  }
+  await waitForTextInApp(page, 'Lock Machine', { timeout: 10000 });
 
   // Wait for the locked state in the main app
   await waitForTextInApp(page, 'Locked', { timeout: 5000 });

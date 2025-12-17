@@ -2,9 +2,9 @@
  * Configuration types for VxSuite QA automation tool
  */
 
-import { BallotToScan } from "../automation/scan-workflow.js";
-import { BallotMode, BallotType } from "../ballots/election-loader.js";
-import { VotesDict } from "../ballots/vote-generator.js";
+import { BallotToScan } from '../automation/scan-workflow.js';
+import { BallotMode, BallotType } from '../ballots/election-loader.js';
+import { VotesDict } from '../ballots/vote-generator.js';
 
 export type BallotPattern = 'blank' | 'valid' | 'overvote';
 
@@ -71,37 +71,42 @@ export interface StepInput {
 }
 
 /** Output from a workflow step */
-export type StepOutput = {
-  type: 'ballot'
-  label: string;
-  description?: string;
-  path: string;
-} | {
-  type: 'election-package';
-  label: string;
-  description?: string;
-  path: string;
-} | {
-  type: 'scan-result';
-  label: string;
-  description?: string;
-  accepted: boolean;
-  expected: boolean;
-  screenshotPath: string;
-  ballotStyleId: string;
-  markPattern: BallotPattern;
-  votes: VotesDict;
-} | {
-  type: 'print';
-  label: string;
-  description?: string;
-  path: string;
-} | {
-  type: 'report';
-  label: string;
-  description?: string;
-  path: string;
-}
+export type StepOutput =
+  | {
+      type: 'ballot';
+      label: string;
+      description?: string;
+      path: string;
+    }
+  | {
+      type: 'election-package';
+      label: string;
+      description?: string;
+      path: string;
+    }
+  | {
+      type: 'scan-result';
+      label: string;
+      description?: string;
+      accepted: boolean;
+      expected: boolean;
+      screenshotPath: string;
+      ballotStyleId: string;
+      markPattern: BallotPattern;
+      votes: VotesDict;
+    }
+  | {
+      type: 'print';
+      label: string;
+      description?: string;
+      path: string;
+    }
+  | {
+      type: 'report';
+      label: string;
+      description?: string;
+      path: string;
+    };
 
 /** Collected artifacts from a QA run */
 export interface ArtifactCollection {

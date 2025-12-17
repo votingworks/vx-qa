@@ -3,12 +3,7 @@
  */
 
 import type { BallotPattern } from '../config/types.js';
-import type {
-  Election,
-  Contest,
-  CandidateContest,
-  Candidate,
-} from './election-loader.js';
+import type { Election, Contest, CandidateContest, Candidate } from './election-loader.js';
 import { getContestsForBallotStyle } from './election-loader.js';
 import { logger } from '../utils/logger.js';
 
@@ -26,7 +21,7 @@ export type VotesDict = Record<string, Vote[]>;
 export function generateVotePatterns(
   election: Election,
   ballotStyleId: string,
-  patterns: BallotPattern[]
+  patterns: BallotPattern[],
 ): Map<BallotPattern, VotesDict> {
   const contests = getContestsForBallotStyle(election, ballotStyleId);
   const result = new Map<BallotPattern, VotesDict>();
@@ -83,15 +78,12 @@ function generateOvervotedVotes(contests: Contest[]): VotesDict {
 
   // Find a candidate contest to overvote
   const candidateContest = contests.find(
-    (c): c is CandidateContest => c.type === 'candidate' && c.candidates.length > c.seats
+    (c): c is CandidateContest => c.type === 'candidate' && c.candidates.length > c.seats,
   );
 
   if (candidateContest) {
     // Vote for seats + 1 candidates (overvote)
-    votes[candidateContest.id] = selectCandidates(
-      candidateContest,
-      candidateContest.seats + 1
-    );
+    votes[candidateContest.id] = selectCandidates(candidateContest, candidateContest.seats + 1);
   }
 
   // Vote normally in other contests

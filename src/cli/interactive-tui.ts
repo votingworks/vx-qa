@@ -46,7 +46,7 @@ function ask(rl: readline.Interface, question: string): Promise<string> {
 async function selectFromMenu(
   rl: readline.Interface,
   prompt: string,
-  options: { label: string; value: string }[]
+  options: { label: string; value: string }[],
 ): Promise<string> {
   console.log(chalk.cyan('? ') + prompt);
 
@@ -73,7 +73,7 @@ async function multiSelectFromMenu(
   rl: readline.Interface,
   prompt: string,
   options: { label: string; value: string }[],
-  defaults: string[] = []
+  defaults: string[] = [],
 ): Promise<string[]> {
   const selected = new Set<string>(defaults);
 
@@ -183,7 +183,11 @@ export async function runInteractiveTUI(): Promise<QARunConfig> {
     let electionSource: string;
 
     if (foundFiles.length > 0) {
-      electionSource = await selectFromMenu(rl, 'Select election package (ZIP from VxDesign):', electionOptions);
+      electionSource = await selectFromMenu(
+        rl,
+        'Select election package (ZIP from VxDesign):',
+        electionOptions,
+      );
     } else {
       console.log(chalk.yellow('No election package (ZIP) files found in current directory.\n'));
       electionSource = '__custom__';
@@ -213,7 +217,7 @@ export async function runInteractiveTUI(): Promise<QARunConfig> {
       rl,
       'Select ballot patterns to generate:',
       patternOptions,
-      ['blank', 'fully_filled', 'partial', 'overvote']
+      ['blank', 'fully_filled', 'partial', 'overvote'],
     );
 
     console.log(chalk.green(`  Selected: ${patterns.join(', ')}\n`));

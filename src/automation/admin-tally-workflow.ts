@@ -36,7 +36,7 @@ export async function runAdminTallyWorkflow(
   dataPath: string,
   backendPort = 3004,
   stepCollector: StepCollector,
-  artifactCollector: ArtifactCollector
+  artifactCollector: ArtifactCollector,
 ): Promise<AdminTallyWorkflowResult> {
   logger.step('Running VxAdmin tally workflow');
 
@@ -129,7 +129,10 @@ export async function runAdminTallyWorkflow(
       label: 'Waiting for CVRs to be loaded',
     });
 
-    const s5 = await screenshots.capture('admin-tally-cvrs-loaded-success', 'CVRs loaded successfully');
+    const s5 = await screenshots.capture(
+      'admin-tally-cvrs-loaded-success',
+      'CVRs loaded successfully',
+    );
     stepCollector?.addScreenshot(s5);
 
     // Close the modal
@@ -211,14 +214,22 @@ export async function runAdminTallyWorkflow(
   // Validate CSV against ballot data if we have both
   let validationResult: { isValid: boolean; message: string } | undefined;
   if (exportedCsvPath && artifactCollector) {
-    validationResult = await validateTallyResults(exportedCsvPath, artifactCollector.getCollection());
+    validationResult = await validateTallyResults(
+      exportedCsvPath,
+      artifactCollector.getCollection(),
+    );
     logger.info(`Tally validation: ${validationResult.message}`);
   }
 
   if (exportedPdfPath) {
     // The files will be copied to workspaces/ after the workflow completes
     // Construct the path where it will be: workspaces/usb-drive/mock-usb-data/...
-    const relativePath = join('workspaces', 'usb-drive', 'mock-usb-data', relative(usbDataPath, exportedPdfPath));
+    const relativePath = join(
+      'workspaces',
+      'usb-drive',
+      'mock-usb-data',
+      relative(usbDataPath, exportedPdfPath),
+    );
 
     logger.debug(`Exported PDF path: ${exportedPdfPath}`);
     logger.debug(`Relative path: ${relativePath}`);
@@ -232,7 +243,12 @@ export async function runAdminTallyWorkflow(
   }
 
   if (exportedCsvPath) {
-    const relativePath = join('workspaces', 'usb-drive', 'mock-usb-data', relative(usbDataPath, exportedCsvPath));
+    const relativePath = join(
+      'workspaces',
+      'usb-drive',
+      'mock-usb-data',
+      relative(usbDataPath, exportedCsvPath),
+    );
 
     stepCollector.addOutput({
       type: 'report',
@@ -294,9 +310,9 @@ async function findExportedTallyReport(usbDataPath: string): Promise<string | un
   }
 
   // Return the most recently modified PDF file
-  const sorted = (await Promise.all(pdfFiles
-    .map(async (path) => ({ path, mtime: (await stat(path)).mtime }))))
-    .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+  const sorted = (
+    await Promise.all(pdfFiles.map(async (path) => ({ path, mtime: (await stat(path)).mtime })))
+  ).sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
   return sorted[0].path;
 }
@@ -334,9 +350,9 @@ async function findExportedTallyCsv(usbDataPath: string): Promise<string | undef
   }
 
   // Return the most recently modified CSV file
-  const sorted = (await Promise.all(csvFiles
-    .map(async (path) => ({ path, mtime: (await stat(path)).mtime }))))
-    .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+  const sorted = (
+    await Promise.all(csvFiles.map(async (path) => ({ path, mtime: (await stat(path)).mtime })))
+  ).sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
   return sorted[0].path;
 }
@@ -346,7 +362,7 @@ async function findExportedTallyCsv(usbDataPath: string): Promise<string | undef
  */
 async function validateTallyResults(
   csvPath: string,
-  collection: ArtifactCollection
+  collection: ArtifactCollection,
 ): Promise<{ isValid: boolean; message: string }> {
   try {
     // Read the CSV file
@@ -384,11 +400,12 @@ async function validateTallyResults(
     let totalExpectedVotes = 0;
     let totalActualVotes = 0;
 
-    for (let i = 2; i < lines.length; i += 1) { // Skip header row at index 1
+    for (let i = 2; i < lines.length; i += 1) {
+      // Skip header row at index 1
       const line = lines[i];
       if (!line.trim()) continue;
 
-      const fields = line.split(',').map(f => f.trim().replace(/^"|"$/g, ''));
+      const fields = line.split(',').map((f) => f.trim().replace(/^"|"$/g, ''));
       if (fields.length >= 5) {
         const selectionId = fields[3];
         const votes = parseInt(fields[4] || '0', 10);
@@ -416,7 +433,9 @@ async function validateTallyResults(
       for (const [candidateId, expectedCount] of Object.entries(candidates)) {
         const actualCount = actualVotes[candidateId] || 0;
         if (actualCount !== expectedCount) {
-          mismatches.push(`Contest ${contestId}, Candidate ${candidateId}: expected ${expectedCount}, got ${actualCount}`);
+          mismatches.push(
+            `Contest ${contestId}, Candidate ${candidateId}: expected ${expectedCount}, got ${actualCount}`,
+          );
         }
       }
     }
@@ -437,30 +456,33 @@ async function validateTallyResults(
       }
     }
 
-    logger.debug(`Validation - Expected votes: ${totalExpectedVotes}, Actual votes: ${totalActualVotes}`);
+    logger.debug(
+      `Validation - Expected votes: ${totalExpectedVotes}, Actual votes: ${totalActualVotes}`,
+    );
 
     if (mismatches.length > 0) {
       return {
         isValid: false,
-        message: `Tally mismatch: ${mismatches.join('; ')}`
+        message: `Tally mismatch: ${mismatches.join('; ')}`,
       };
     }
 
     return {
       isValid: true,
-      message: `Tally validated: ${totalExpectedVotes} vote(s) match CSV exactly`
+      message: `Tally validated: ${totalExpectedVotes} vote(s) match CSV exactly`,
     };
-
   } catch (error) {
     return {
       isValid: false,
-      message: `Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      message: `Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
     };
   }
 }
 
-export async function revalidateTallyResults(outputDir: string): Promise<{ isValid: boolean; message: string }> {
-  const csvPath = await findExportedTallyCsv(outputDir)
+export async function revalidateTallyResults(
+  outputDir: string,
+): Promise<{ isValid: boolean; message: string }> {
+  const csvPath = await findExportedTallyCsv(outputDir);
 
   if (!csvPath) {
     throw new Error('Unable to locate exported tally CSV path');

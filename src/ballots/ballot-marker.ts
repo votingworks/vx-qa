@@ -26,7 +26,7 @@ export async function generateMarkedBallot(
   election: Election,
   ballotStyleId: string,
   votes: VotesDict,
-  baseBallotPdf: Uint8Array
+  baseBallotPdf: Uint8Array,
 ): Promise<Uint8Array> {
   logger.debug(`Generating marked ballot for style ${ballotStyleId}`);
 
@@ -45,7 +45,7 @@ export async function generateMarkedBallotForPattern(
   election: Election,
   ballotStyleId: string,
   pattern: BallotPattern,
-  baseBallotPdf: Uint8Array
+  baseBallotPdf: Uint8Array,
 ): Promise<MarkedBallot | undefined> {
   switch (pattern) {
     case 'blank':
@@ -61,7 +61,13 @@ export async function generateMarkedBallotForPattern(
       return {
         ballotStyleId,
         pattern,
-        pdfBytes: await generateMarkedBallot(repoPath, election, ballotStyleId, votes, baseBallotPdf),
+        pdfBytes: await generateMarkedBallot(
+          repoPath,
+          election,
+          ballotStyleId,
+          votes,
+          baseBallotPdf,
+        ),
         votes,
       };
     }
@@ -76,22 +82,25 @@ export async function generateMarkedBallotForPattern(
       return {
         ballotStyleId,
         pattern,
-        pdfBytes: await generateMarkedBallot(repoPath, election, ballotStyleId, votes, baseBallotPdf),
+        pdfBytes: await generateMarkedBallot(
+          repoPath,
+          election,
+          ballotStyleId,
+          votes,
+          baseBallotPdf,
+        ),
         votes,
       };
     }
 
     default: {
       const _: never = pattern;
-      throw new Error(`Unexpected ballot marking pattern: ${_}`);
+      throw new Error(`Unexpected ballot marking pattern: ${_ as string}`);
     }
   }
 }
 
-export function generateValidVotes(
-  election: Election,
-  ballotStyleId: string
-): VotesDict {
+export function generateValidVotes(election: Election, ballotStyleId: string): VotesDict {
   const votes: VotesDict = {};
   const contests = getContestsForBallotStyle(election, ballotStyleId);
 

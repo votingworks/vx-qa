@@ -31,6 +31,7 @@ pnpm start run
 ```
 
 This launches an interactive wizard to configure:
+
 - VxSuite version/tag
 - Election source file
 - Ballot patterns to generate

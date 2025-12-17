@@ -124,7 +124,7 @@ program
         console.log(JSON.stringify(result.data, null, 2));
       } else {
         logger.error('Configuration is invalid:');
-        console.error(result.error?.message ?? 'unknown error')
+        console.error(result.error?.message ?? 'unknown error');
         process.exit(1);
       }
     } catch (error) {
@@ -149,7 +149,6 @@ program
       process.exitCode = 1;
     }
   });
-
 
 program
   .command('rebuild-report')
