@@ -7,6 +7,7 @@ import { existsSync } from 'fs';
 import { logger } from '../utils/logger.js';
 import { ensureDir, resolvePath } from '../utils/paths.js';
 import type { VxSuiteConfig } from '../config/types.js';
+import { rm } from 'node:fs/promises';
 
 const VXSUITE_REPO_URL = 'https://github.com/votingworks/vxsuite.git';
 
@@ -18,7 +19,6 @@ export async function cloneOrUpdateRepo(config: VxSuiteConfig): Promise<string> 
 
   if (config.forceClone && existsSync(repoPath)) {
     logger.info('Force clone requested, removing existing repository...');
-    const { rm } = await import('fs/promises');
     await rm(repoPath, { recursive: true, force: true });
   }
 

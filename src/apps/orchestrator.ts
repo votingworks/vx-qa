@@ -2,12 +2,13 @@
  * App orchestration - starting and stopping VxSuite apps
  */
 
-import { ChildProcess } from 'child_process';
+import { ChildProcess, execFile } from 'child_process';
 import { createInterface } from 'readline';
 import { logger } from '../utils/logger.js';
 import { spawnBackground, killProcessTree, waitForPort, sleep } from '../utils/process.js';
 import { getMockEnvironment, APP_PORTS, getBackendPort, type MachineType } from './env-config.js';
 import { waitForDevDock } from '../mock-hardware/client.js';
+import { promisify } from 'util';
 
 export interface AppOrchestrator {
   /**
@@ -207,9 +208,7 @@ export function createAppOrchestrator(repoPath: string): AppOrchestrator {
  * Ensure no VxSuite apps are running (useful for cleanup)
  */
 export async function ensureNoAppsRunning(): Promise<void> {
-  const { exec } = await import('child_process');
-  const { promisify } = await import('util');
-  const execAsync = promisify(exec);
+  const execFileAsync = promisify(execFile);
 
   try {
     // Find any processes using our ports
@@ -224,7 +223,7 @@ export async function ensureNoAppsRunning(): Promise<void> {
 
     for (const port of ports) {
       try {
-        const { stdout } = await execAsync(`lsof -ti:${port}`);
+        const { stdout } = await execFileAsync('lsof', [`-ti:${port}`]);
         const pids = stdout.trim().split('\n').filter(Boolean);
 
         for (const pid of pids) {

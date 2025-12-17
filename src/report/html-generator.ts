@@ -3,16 +3,16 @@
  */
 
 import Handlebars from 'handlebars';
-import { writeFileSync } from 'fs';
-import { join } from 'path';
+import { join, relative } from 'path';
 import { logger } from '../utils/logger.js';
 import type { ArtifactCollection, WorkflowStep } from '../config/types.js';
 import {
   collectFilesInDir,
   readFileAsBase64,
-  getMimeType,
 } from './artifacts.js';
 import { generatePdfThumbnail } from './pdf-thumbnail.js';
+import { readFile, writeFile } from 'fs/promises';
+import { pathsEqual } from '../utils/paths.js';
 
 /**
  * Generate an HTML report from the artifact collection
@@ -24,6 +24,8 @@ export async function generateHtmlReport(
   logger.step('Generating HTML report');
 
   const reportPath = join(outputDir, 'report.html');
+  const collectionPath = join(outputDir, 'collection.json');
+  const reportDataPath = join(outputDir, 'report-data.json');
 
   // Prepare data for the template
   const data = await prepareReportData(collection, outputDir);
@@ -31,8 +33,70 @@ export async function generateHtmlReport(
   // Generate HTML
   const html = renderTemplate(data);
 
-  // Write report
-  writeFileSync(reportPath, html, 'utf-8');
+  // Write files
+  await Promise.all([
+    writeFile(reportPath, html, 'utf-8'),
+    writeFile(collectionPath, JSON.stringify(collection, null, 2), 'utf-8'),
+    writeFile(reportDataPath, JSON.stringify(data, null, 2), 'utf-8'),
+  ]);
+
+  logger.success(`Report saved: ${reportPath}`);
+
+  return reportPath;
+}
+
+export async function regenerateHtmlReportFromRawData(
+  outputDir: string
+): Promise<string> {
+  logger.step('Regenerating HTML report from prior run using collection.json');
+
+  const reportPath = join(outputDir, 'report.html');
+  const collectionPath = join(outputDir, 'collection.json');
+  const reportDataPath = join(outputDir, 'report-data.json');
+
+  const collection: ArtifactCollection = JSON.parse(await readFile(collectionPath, 'utf8'));
+
+  for (const step of collection.steps) {
+    if (typeof step.startTime === 'string') {
+      step.startTime = new Date(step.startTime);
+    }
+
+    if (typeof step.endTime === 'string') {
+      step.endTime = new Date(step.endTime);
+    }
+
+    for (const output of step.outputs) {
+      if (typeof output.data?.mtime === 'string') {
+        output.data.mtime = new Date(output.data.mtime);
+      }
+    }
+
+    for (const screenshot of step.screenshots) {
+      if (typeof screenshot.timestamp === 'string') {
+        screenshot.timestamp = new Date(screenshot.timestamp);
+      }
+    }
+  }
+
+  if (typeof collection.startTime === 'string') {
+    collection.startTime = new Date(collection.startTime);
+  }
+
+  if (typeof collection.endTime === 'string') {
+    collection.endTime = new Date(collection.endTime);
+  }
+
+  // Prepare data for the template
+  const data = await prepareReportData(collection, outputDir);
+
+  // Generate HTML
+  const html = renderTemplate(data);
+
+  // Write files
+  await Promise.all([
+    writeFile(reportPath, html, 'utf-8'),
+    writeFile(reportDataPath, JSON.stringify(data, null, 2), 'utf-8'),
+  ]);
 
   logger.success(`Report saved: ${reportPath}`);
 
@@ -55,13 +119,8 @@ async function prepareReportData(
   collection: ArtifactCollection,
   outputDir: string
 ): Promise<ReportData> {
-  // Collect screenshots with base64 data
   const screenshotsDir = join(outputDir, 'screenshots');
   const screenshotFiles = collectFilesInDir(screenshotsDir, ['.png', '.jpg', '.jpeg']);
-  const screenshots = screenshotFiles.map((file) => ({
-    name: file.name,
-    data: `data:${getMimeType(file.path)};base64,${readFileAsBase64(file.path)}`,
-  }));
 
   // Collect ballot images
   const ballotsDir = join(outputDir, 'ballots');
@@ -70,7 +129,6 @@ async function prepareReportData(
     ballotFiles.map(async (file) => ({
       name: file.name,
       path: `ballots/${file.name}`,
-      isPdf: file.name.endsWith('.pdf'),
       thumbnail: file.name.endsWith('.pdf')
         ? await generatePdfThumbnail(file.path)
         : `data:image/png;base64,${readFileAsBase64(file.path)}`,
@@ -83,7 +141,7 @@ async function prepareReportData(
   const prints = await Promise.all(
     printFiles.map(async (file) => ({
       name: file.name,
-      path: `workspaces/fujitsu-thermal-printer/prints/${file.name}`,
+      path: file.path,
       thumbnail: await generatePdfThumbnail(file.path),
     }))
   );
@@ -94,7 +152,7 @@ async function prepareReportData(
   // Prepare steps for template with base64 screenshots and thumbnails
   const steps = await Promise.all(
     workflowSteps.map(async (step) => ({
-      id: step.name.toLowerCase().replace(/\s+/g, '-'),
+      id: step.id,
       name: step.name,
       description: step.description,
       duration: step.endTime
@@ -122,13 +180,13 @@ async function prepareReportData(
           : null,
       }))),
       screenshots: step.screenshots.map((screenshot) => {
-        const file = screenshotFiles.find(f => f.path === screenshot.path);
+        const file = screenshotFiles.find(f => pathsEqual(f.path, screenshot.path));
         return file ? {
           name: screenshot.name,
-          data: `data:image/png;base64,${readFileAsBase64(file.path)}`,
+          data: relative(outputDir, file.path),
           caption: screenshot.step,
         } : null;
-      }).filter((s): s is { name: string; data: string; caption: string } => s !== null),
+      }).filter((s) => s !== null),
       hasErrors: step.errors.length > 0,
       errors: step.errors,
     }))
@@ -148,8 +206,18 @@ async function prepareReportData(
       if (output.data?.validationMessage && output.data?.isExpected === false) {
         validationFailures.push({
           step: step.name,
-          message: output.data.validationMessage as string,
           stepId: step.id,
+          message: output.data.validationMessage as string,
+        });
+      }
+
+      if (output.data?.accepted !== output.data?.expected) {
+        validationFailures.push({
+          step: step.name,
+          stepId: step.id,
+          message: output.data?.expected
+            ? `Ballot sheet was expected to be accepted but was rejected.`
+            : `Ballot sheet was expected to be rejected but was accepted.`
         });
       }
     }
@@ -162,13 +230,17 @@ async function prepareReportData(
         (collection.endTime.getTime() - collection.startTime.getTime()) / 1000
       )
       : null;
+  const hasErrors = collection.errors.length > 0;
+  const hasValidationFailures = validationFailures.length > 0;
+  const pass = !hasErrors && !hasValidationFailures;
 
   return {
-    title: 'VxSuite QA Report',
+    title: `VxSuite QA Report ${pass ? 'PASS' : 'FAIL'}`,
     runId: collection.runId,
     startTime: collection.startTime.toISOString(),
     endTime: collection.endTime?.toISOString() || 'In Progress',
     duration: duration ? formatDuration(duration) : 'N/A',
+    pass,
     config: {
       tag: collection.config.vxsuite.tag,
       election: collection.config.election.source,
@@ -185,7 +257,6 @@ async function prepareReportData(
     },
     steps,
     prints,
-    screenshots,
     ballots,
     scanResults: collection.scanResults.map((r) => {
       const expected = r.input.expectedAccepted;
@@ -220,6 +291,7 @@ interface ReportData {
   startTime: string;
   endTime: string;
   duration: string;
+  pass: boolean;
   config: {
     tag: string;
     election: string;
@@ -261,8 +333,7 @@ interface ReportData {
     errors: { step: string; message: string; timestamp: Date }[];
   }[];
   prints: { name: string; path: string; thumbnail: string | null }[];
-  screenshots: { name: string; data: string }[];
-  ballots: { name: string; path: string; isPdf: boolean; thumbnail: string | null }[];
+  ballots: { name: string; path: string; thumbnail: string | null }[];
   scanResults: {
     ballotStyleId: string;
     ballotMode: string;
@@ -330,8 +401,7 @@ function renderTemplate(data: ReportData): string {
     }
     .container { max-width: 1200px; margin: 0 auto; }
     h1 { color: var(--primary); margin-bottom: 0.5rem; }
-    h2 { margin: 2rem 0 1rem; border-bottom: 2px solid var(--gray-200); padding-bottom: 0.5rem; }
-    h3 { margin: 1.5rem 0 0.75rem; color: var(--gray-700); }
+    h2 { margin: 0 0 1rem; border-bottom: 2px solid var(--gray-200); padding-bottom: 0.5rem; }
 
     .header {
       background: white;
@@ -339,6 +409,7 @@ function renderTemplate(data: ReportData): string {
       border-radius: 0.5rem;
       box-shadow: 0 1px 3px rgba(0,0,0,0.1);
       margin-bottom: 2rem;
+      border-left: 4px solid {{#if pass}}var(--success){{else}}var(--error){{/if}};
     }
     .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem; }
     .meta-item { background: var(--gray-100); padding: 0.75rem; border-radius: 0.25rem; }
@@ -475,7 +546,7 @@ function renderTemplate(data: ReportData): string {
         </div>
         <div class="stat">
           <div class="stat-value">{{statistics.totalScanned}}</div>
-          <div class="stat-label">Ballots Scanned</div>
+          <div class="stat-label">Sheets Scanned</div>
         </div>
         <div class="stat success">
           <div class="stat-value">{{statistics.handledAsExpected}}</div>
@@ -491,7 +562,8 @@ function renderTemplate(data: ReportData): string {
     <h2>Workflow Steps</h2>
 
     {{#each steps}}
-    <div class="step" id="{{id}}">
+    <div class="step">
+      <a name="{{id}}"></a>
       <div class="step-header">
         <div class="step-title">{{name}}</div>
         <div class="step-duration">Duration: {{duration}}</div>

@@ -15,7 +15,7 @@ export interface MarkedBallot {
   ballotStyleId: string;
   pattern: BallotPattern;
   pdfBytes: Uint8Array;
-  votes?: VotesDict;
+  votes: VotesDict;
 }
 
 /**
@@ -121,7 +121,7 @@ export function generateOvervoteVotes(
 ): VotesDict | undefined {
   const votes: VotesDict = {};
   let hasAnyOvervote = false;
-  
+
   for (const contest of getContestsForBallotStyle(election, ballotStyleId)) {
     switch (contest.type) {
       case 'candidate': {

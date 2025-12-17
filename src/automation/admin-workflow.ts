@@ -16,9 +16,9 @@ import {
   toggleDevDock,
 } from './browser.js';
 import { SCREENSHOT_STEPS, ScreenshotManager } from './screenshot.js';
-import { readFileSync } from 'fs';
-import { basename } from 'path';
+import { basename, join } from 'node:path';
 import type { StepCollector } from '../report/artifacts.js';
+import { readdir, readFile, stat } from 'node:fs/promises';
 
 export interface AdminWorkflowResult {
   exportedPackagePath: string;
@@ -65,7 +65,7 @@ export async function runAdminWorkflow(
 
   // Copy election package to USB
   const packageFilename = basename(electionPackagePath);
-  const packageData = readFileSync(electionPackagePath);
+  const packageData = await readFile(electionPackagePath);
   logger.debug(`Copying election package to USB: ${packageFilename} (${packageData.length} bytes)`);
   await usbController.writeFile(packageFilename, packageData);
 
@@ -175,21 +175,18 @@ export async function runAdminWorkflow(
  * Find the exported election package on the USB drive
  */
 async function getExportedPackagePath(usbDataPath: string): Promise<string> {
-  const { readdirSync, statSync } = await import('fs');
-  const { join } = await import('path');
-
   // Look for ZIP files in the USB data directory
-  const findZipFiles = (dir: string): string[] => {
+  const findZipFiles = async (dir: string): Promise<string[]> => {
     const results: string[] = [];
 
     try {
-      const entries = readdirSync(dir, { withFileTypes: true });
+      const entries = await readdir(dir, { withFileTypes: true });
 
       for (const entry of entries) {
         const fullPath = join(dir, entry.name);
 
         if (entry.isDirectory()) {
-          results.push(...findZipFiles(fullPath));
+          results.push(...(await findZipFiles(fullPath)));
         } else if (entry.name.endsWith('.zip')) {
           results.push(fullPath);
         }
@@ -201,15 +198,15 @@ async function getExportedPackagePath(usbDataPath: string): Promise<string> {
     return results;
   };
 
-  const zipFiles = findZipFiles(usbDataPath);
+  const zipFiles = await findZipFiles(usbDataPath);
 
   if (zipFiles.length === 0) {
     throw new Error('No election package found on USB drive');
   }
 
   // Return the most recently modified ZIP file
-  const sorted = zipFiles
-    .map((path) => ({ path, mtime: statSync(path).mtime }))
+  const sorted = (await Promise.all(zipFiles
+    .map(async (path) => ({ path, mtime: (await stat(path)).mtime }))))
     .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
   return sorted[0].path;

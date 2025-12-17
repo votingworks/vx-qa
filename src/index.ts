@@ -15,6 +15,8 @@ import { runQAWorkflow } from './cli/config-runner.js';
 import { runInteractiveTUI } from './cli/interactive-tui.js';
 import type { QARunConfig } from './config/types.js';
 import { dirname } from 'path';
+import { regenerateHtmlReportFromRawData } from './report/html-generator.js';
+import { revalidateTallyResults } from './automation/admin-tally-workflow.js';
 
 const program = new Command();
 
@@ -131,6 +133,30 @@ program
       }
       process.exit(1);
     }
+  });
+
+program
+  .command('validate-tally')
+  .description('Validates the vote tally from a prior run')
+  .argument('<outputDir>', 'Path to output from prior run')
+  .action(async (outputDir) => {
+    const result = await revalidateTallyResults(outputDir);
+    if (result.isValid) {
+      logger.info(result.message);
+      process.exitCode = 0;
+    } else {
+      logger.error(result.message);
+      process.exitCode = 1;
+    }
+  });
+
+
+program
+  .command('rebuild-report')
+  .description('Rebuild the report from a prior run')
+  .argument('<outputDir>', 'Path to output from prior run')
+  .action(async (outputDir) => {
+    await regenerateHtmlReportFromRawData(outputDir);
   });
 
 program

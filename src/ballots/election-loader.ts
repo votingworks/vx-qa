@@ -74,7 +74,49 @@ export interface Election {
     paperSize: string;
     metadataEncoding: string;
   };
-  gridLayouts?: unknown[];
+  gridLayouts?: GridLayout[];
+}
+
+export interface GridLayout {
+  ballotStyleId: string;
+  optionBoundsFromTargetMark: Rect,
+  gridPositions: GridPosition[],
+}
+
+export type BallotSide = 'front' | 'back';
+
+export type GridPosition = {
+  type: "option";
+  sheetNumber: number;
+  side: BallotSide;
+  column: number;
+  row: number;
+  contestId: string;
+  optionId: string;
+} |
+{
+  type: "write-in",
+  sheetNumber: number;
+  side: BallotSide;
+  column: number;
+  row: number;
+  contestId: string;
+  writeInIndex: number;
+  writeInArea: Rect;
+};
+
+export interface Outset {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export interface ElectionDefinition {

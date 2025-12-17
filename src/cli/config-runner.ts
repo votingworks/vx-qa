@@ -31,6 +31,7 @@ import { createScreenshotManager } from '../automation/screenshot.js';
 import { State } from '../repo/state.js';
 import { writeFile } from 'node:fs/promises';
 import assert from 'node:assert';
+import { spawn } from 'node:child_process';
 
 export interface RunOptions {
   headless?: boolean;
@@ -308,7 +309,6 @@ export async function runQAWorkflow(
 
     // Open the report in the default browser
     if (reportPath) {
-      const { spawn } = await import('child_process');
       // Spawn detached process so it doesn't block
       spawn('open', [reportPath], {
         detached: true,

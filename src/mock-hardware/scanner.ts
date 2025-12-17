@@ -4,6 +4,8 @@
 
 import { createDevDockClient, type DevDockClient } from './client.js';
 import { logger } from '../utils/logger.js';
+import { readdir, stat } from 'node:fs/promises';
+import { join } from 'node:path';
 
 export type SheetStatus = 'noSheet' | 'sheetInserted' | 'sheetHeldInFront' | 'sheetHeldInBack';
 
@@ -128,22 +130,19 @@ export function createMockPrinterController(port = 3004): MockPrinterController 
 
     async getLastPrintPath(): Promise<string | null> {
       // The mock printer saves prints to /tmp/mock-printer/prints/
-      const { readdirSync, statSync } = await import('fs');
-      const { join } = await import('path');
-
       const printsDir = '/tmp/mock-printer/prints';
       try {
-        const files = readdirSync(printsDir);
+        const files = await readdir(printsDir);
         if (files.length === 0) {
           return null;
         }
 
         // Get the most recent file
-        const sortedFiles = files
-          .map((f) => ({
+        const sortedFiles = (await Promise.all(files
+          .map(async (f) => ({
             name: f,
-            time: statSync(join(printsDir, f)).mtime.getTime(),
-          }))
+            time: (await stat(join(printsDir, f))).mtime.getTime(),
+          }))))
           .sort((a, b) => b.time - a.time);
 
         return join(printsDir, sortedFiles[0].name);

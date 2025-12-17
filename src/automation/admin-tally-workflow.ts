@@ -15,7 +15,10 @@ import {
   toggleDevDock,
 } from './browser.js';
 import { ScreenshotManager } from './screenshot.js';
-import type { StepCollector } from '../report/artifacts.js';
+import { loadCollection, type ArtifactCollector, type StepCollector } from '../report/artifacts.js';
+import { ArtifactCollection } from '../config/types.js';
+import { readdir, readFile, stat } from 'node:fs/promises';
+import { join, relative } from 'node:path';
 
 export interface AdminTallyWorkflowResult {
   screenshots: string[];
@@ -32,8 +35,8 @@ export async function runAdminTallyWorkflow(
   outputDir: string,
   dataPath: string,
   backendPort = 3004,
-  stepCollector?: StepCollector,
-  artifactCollector?: any
+  stepCollector: StepCollector,
+  artifactCollector: ArtifactCollector
 ): Promise<AdminTallyWorkflowResult> {
   logger.step('Running VxAdmin tally workflow');
 
@@ -208,37 +211,31 @@ export async function runAdminTallyWorkflow(
   // Validate CSV against ballot data if we have both
   let validationResult: { isValid: boolean; message: string } | undefined;
   if (exportedCsvPath && artifactCollector) {
-    validationResult = await validateTallyResults(exportedCsvPath, artifactCollector);
+    validationResult = await validateTallyResults(exportedCsvPath, artifactCollector.getCollection());
     logger.info(`Tally validation: ${validationResult.message}`);
   }
 
-  if (exportedPdfPath && stepCollector) {
+  if (exportedPdfPath) {
     // The files will be copied to workspaces/ after the workflow completes
     // Construct the path where it will be: workspaces/usb-drive/mock-usb-data/...
-    const { relative, join } = await import('path');
     const relativePath = join('workspaces', 'usb-drive', 'mock-usb-data', relative(usbDataPath, exportedPdfPath));
 
     logger.debug(`Exported PDF path: ${exportedPdfPath}`);
     logger.debug(`Relative path: ${relativePath}`);
 
     stepCollector.addOutput({
-      type: 'pdf',
+      type: 'report',
       label: 'Tally Report PDF',
       description: 'Exported Full Election Tally Report',
       path: relativePath,
-      data: validationResult ? {
-        isExpected: validationResult.isValid,
-        validationMessage: validationResult.message
-      } : undefined,
     });
   }
 
-  if (exportedCsvPath && stepCollector) {
-    const { relative, join } = await import('path');
+  if (exportedCsvPath) {
     const relativePath = join('workspaces', 'usb-drive', 'mock-usb-data', relative(usbDataPath, exportedCsvPath));
 
     stepCollector.addOutput({
-      type: 'file',
+      type: 'report',
       label: 'Tally Report CSV',
       description: 'Exported Full Election Tally CSV',
       path: relativePath,
@@ -268,20 +265,17 @@ export async function runAdminTallyWorkflow(
  * Find the most recently exported tally report PDF on the USB drive
  */
 async function findExportedTallyReport(usbDataPath: string): Promise<string | undefined> {
-  const { readdirSync, statSync } = await import('fs');
-  const { join } = await import('path');
-
-  const findPdfFiles = (dir: string): string[] => {
+  const findPdfFiles = async (dir: string): Promise<string[]> => {
     const results: string[] = [];
 
     try {
-      const entries = readdirSync(dir, { withFileTypes: true });
+      const entries = await readdir(dir, { withFileTypes: true });
 
       for (const entry of entries) {
         const fullPath = join(dir, entry.name);
 
         if (entry.isDirectory()) {
-          results.push(...findPdfFiles(fullPath));
+          results.push(...(await findPdfFiles(fullPath)));
         } else if (entry.name.includes('tally-report') && entry.name.endsWith('.pdf')) {
           results.push(fullPath);
         }
@@ -293,15 +287,15 @@ async function findExportedTallyReport(usbDataPath: string): Promise<string | un
     return results;
   };
 
-  const pdfFiles = findPdfFiles(usbDataPath);
+  const pdfFiles = await findPdfFiles(usbDataPath);
 
   if (pdfFiles.length === 0) {
     return undefined;
   }
 
   // Return the most recently modified PDF file
-  const sorted = pdfFiles
-    .map((path) => ({ path, mtime: statSync(path).mtime }))
+  const sorted = (await Promise.all(pdfFiles
+    .map(async (path) => ({ path, mtime: (await stat(path)).mtime }))))
     .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
   return sorted[0].path;
@@ -311,20 +305,17 @@ async function findExportedTallyReport(usbDataPath: string): Promise<string | un
  * Find the most recently exported tally CSV on the USB drive
  */
 async function findExportedTallyCsv(usbDataPath: string): Promise<string | undefined> {
-  const { readdirSync, statSync } = await import('fs');
-  const { join } = await import('path');
-
-  const findCsvFiles = (dir: string): string[] => {
+  const findCsvFiles = async (dir: string): Promise<string[]> => {
     const results: string[] = [];
 
     try {
-      const entries = readdirSync(dir, { withFileTypes: true });
+      const entries = await readdir(dir, { withFileTypes: true });
 
       for (const entry of entries) {
         const fullPath = join(dir, entry.name);
 
         if (entry.isDirectory()) {
-          results.push(...findCsvFiles(fullPath));
+          results.push(...(await findCsvFiles(fullPath)));
         } else if (entry.name.includes('tally-report') && entry.name.endsWith('.csv')) {
           results.push(fullPath);
         }
@@ -336,15 +327,15 @@ async function findExportedTallyCsv(usbDataPath: string): Promise<string | undef
     return results;
   };
 
-  const csvFiles = findCsvFiles(usbDataPath);
+  const csvFiles = await findCsvFiles(usbDataPath);
 
   if (csvFiles.length === 0) {
     return undefined;
   }
 
   // Return the most recently modified CSV file
-  const sorted = csvFiles
-    .map((path) => ({ path, mtime: statSync(path).mtime }))
+  const sorted = (await Promise.all(csvFiles
+    .map(async (path) => ({ path, mtime: (await stat(path)).mtime }))))
     .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
   return sorted[0].path;
@@ -355,52 +346,37 @@ async function findExportedTallyCsv(usbDataPath: string): Promise<string | undef
  */
 async function validateTallyResults(
   csvPath: string,
-  artifactCollector: any
+  collection: ArtifactCollection
 ): Promise<{ isValid: boolean; message: string }> {
-  const { readFileSync } = await import('fs');
-
   try {
     // Read the CSV file
-    const csvContent = readFileSync(csvPath, 'utf-8');
+    const csvContent = await readFile(csvPath, 'utf-8');
     const lines = csvContent.trim().split('\n');
 
-    // Get scan results from the collector
-    const collection = artifactCollector.getCollection();
-
     // Get votes from accepted scan results stored in step outputs
-    const expectedVotes: Record<string, Record<string, number>> = {}; // contestId -> candidateId -> count
-    const seenBallots = new Set<string>(); // Track ballots we've already counted
+    const expectedVotes: Record<string, Record<string, number>> = {}; // contestId -> optionId -> count
     let totalOutputs = 0;
-    let skippedDuplicates = 0;
 
     for (const step of collection.steps) {
       for (const output of step.outputs) {
-        if (output.type === 'scan-result' && output.data?.accepted && output.data?.votes) {
+        if (output.type === 'scan-result' && output.accepted && output.votes) {
           totalOutputs++;
-          // Deduplicate: only count each ballot once (multi-sheet ballots create multiple outputs)
-          const ballotId = output.data.ballotId as string | undefined;
-          if (ballotId && seenBallots.has(ballotId)) {
-            skippedDuplicates++;
-            continue; // Already counted this ballot
-          }
-          if (ballotId) {
-            seenBallots.add(ballotId);
-          }
-          
-          const votes = output.data.votes as Record<string, string[]>;
-          for (const [contestId, candidateIds] of Object.entries(votes)) {
+
+          const votes = output.votes;
+          for (const [contestId, contestVotes] of Object.entries(votes)) {
             if (!expectedVotes[contestId]) {
               expectedVotes[contestId] = {};
             }
-            for (const candidateId of candidateIds) {
-              expectedVotes[contestId][candidateId] = (expectedVotes[contestId][candidateId] || 0) + 1;
+            for (const vote of contestVotes) {
+              const optionId = typeof vote === 'string' ? vote : vote.id;
+              expectedVotes[contestId][optionId] = (expectedVotes[contestId][optionId] || 0) + 1;
             }
           }
         }
       }
     }
-    
-    logger.debug(`Validation: processed ${totalOutputs} outputs, skipped ${skippedDuplicates} duplicates, counted ${seenBallots.size} unique ballots`);
+
+    logger.debug(`Validation: processed ${totalOutputs} scanned sheets`);
 
     // Parse CSV to get actual vote counts by selection ID
     // CSV format: Contest,Contest ID,Selection,Selection ID,Total Votes
@@ -408,7 +384,7 @@ async function validateTallyResults(
     let totalExpectedVotes = 0;
     let totalActualVotes = 0;
 
-    for (let i = 2; i < lines.length; i++) { // Skip header row at index 1
+    for (let i = 2; i < lines.length; i += 1) { // Skip header row at index 1
       const line = lines[i];
       if (!line.trim()) continue;
 
@@ -481,4 +457,15 @@ async function validateTallyResults(
       message: `Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
     };
   }
+}
+
+export async function revalidateTallyResults(outputDir: string): Promise<{ isValid: boolean; message: string }> {
+  const csvPath = await findExportedTallyCsv(outputDir)
+
+  if (!csvPath) {
+    throw new Error('Unable to locate exported tally CSV path');
+  }
+
+  const collection = await loadCollection(join(outputDir, 'collection.json'));
+  return validateTallyResults(csvPath, collection);
 }

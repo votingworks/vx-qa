@@ -16,6 +16,7 @@ import type {
   StepInput,
   StepOutput,
 } from '../config/types.js';
+import { readFile } from 'fs/promises';
 
 export interface StepCollector {
   /**
@@ -147,7 +148,7 @@ export function createArtifactCollector(
         stack: error.stack,
       };
       collection.errors.push(artifact);
-      logger.error(`Error in ${step}: ${error.message}`);
+      logger.error(`Error in ${step}: ${error.message} ${error.stack}`);
     },
 
     startStep(id: string, name: string, description: string): StepCollector {
@@ -221,6 +222,24 @@ export function createArtifactCollector(
 }
 
 /**
+ * Loads a serialized collection as a 
+ */
+export async function loadCollection(path: string): Promise<ArtifactCollection> {
+  return JSON.parse(await readFile(path, 'utf8'), (key, value) => {
+    switch (key) {
+      case 'startTime':
+      case 'endTime':
+      case 'timestamp':
+      case 'mtime':
+        return typeof value === 'string' ? new Date(value) : value;
+
+      default:
+        return value;
+    }
+  });
+}
+
+/**
  * Collect all files in a directory
  */
 export function collectFilesInDir(
@@ -261,28 +280,3 @@ export function readFileAsBase64(filePath: string): string {
   return buffer.toString('base64');
 }
 
-/**
- * Get file extension from path
- */
-export function getFileExtension(filePath: string): string {
-  return extname(filePath).toLowerCase().slice(1);
-}
-
-/**
- * Get MIME type for common file types
- */
-export function getMimeType(filePath: string): string {
-  const ext = getFileExtension(filePath);
-
-  const mimeTypes: Record<string, string> = {
-    png: 'image/png',
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    gif: 'image/gif',
-    pdf: 'application/pdf',
-    json: 'application/json',
-    html: 'text/html',
-  };
-
-  return mimeTypes[ext] || 'application/octet-stream';
-}

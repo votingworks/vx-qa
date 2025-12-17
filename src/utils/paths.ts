@@ -3,8 +3,9 @@
  */
 
 import { homedir } from 'os';
-import { join, resolve, dirname } from 'path';
+import { join, resolve, dirname, isAbsolute } from 'path';
 import { existsSync, mkdirSync } from 'fs';
+import assert from 'assert';
 
 /**
  * Expand ~ to home directory
@@ -71,3 +72,14 @@ export function getDefaultOutputDir(): string {
   return resolvePath('./qa-output');
 }
 
+/**
+ * Determines whether two paths are equal, using `baseDir` as the base if either
+ * path is relative. `baseDir` defaults to the working directory and must be
+ * absolute.
+ */
+export function pathsEqual(a: string, b: string, baseDir = process.cwd()): boolean {
+  assert(isAbsolute(baseDir), 'baseDir must be absolute');
+  const aNormalized = isAbsolute(a) ? a : join(baseDir, a);
+  const bNormalized = isAbsolute(b) ? b : join(baseDir, b);
+  return aNormalized === bNormalized;
+}
