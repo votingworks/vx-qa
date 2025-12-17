@@ -100,30 +100,3 @@ export function createScreenshotManager(
     },
   };
 }
-
-/**
- * Standard screenshot names for key steps
- */
-export const SCREENSHOT_STEPS = {
-  // VxAdmin steps
-  ADMIN_LOCKED: 'admin-locked',
-  ADMIN_PIN_ENTRY: 'admin-pin-entry',
-  ADMIN_UNCONFIGURED: 'admin-unconfigured',
-  ADMIN_USB_DETECTED: 'admin-usb-detected',
-  ADMIN_CONFIGURED: 'admin-configured',
-  ADMIN_ELECTION_LOADED: 'admin-election-loaded',
-  ADMIN_EXPORT_PACKAGE: 'admin-export-package',
-
-  // VxScan steps
-  SCAN_LOCKED: 'scan-locked',
-  SCAN_PIN_ENTRY: 'scan-pin-entry',
-  SCAN_UNCONFIGURED: 'scan-unconfigured',
-  SCAN_CONFIGURED: 'scan-configured',
-  SCAN_POLLS_CLOSED: 'scan-polls-closed',
-  SCAN_POLLS_OPEN: 'scan-polls-open',
-  SCAN_READY: 'scan-ready',
-  SCAN_SCANNING: 'scan-scanning',
-  SCAN_ACCEPTED: 'scan-accepted',
-  SCAN_REJECTED: 'scan-rejected',
-  SCAN_RESULTS: 'scan-results',
-} as const;

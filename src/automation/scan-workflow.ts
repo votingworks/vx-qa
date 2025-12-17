@@ -12,7 +12,7 @@ import {
   clickButtonWithDebug,
   waitForTextInApp,
 } from './browser.js';
-import { createScreenshotManager, SCREENSHOT_STEPS, ScreenshotManager } from './screenshot.js';
+import { createScreenshotManager, ScreenshotManager } from './screenshot.js';
 import type { ScanResult, BallotPattern } from '../config/types.js';
 import type { StepCollector, ArtifactCollector } from '../report/artifacts.js';
 import { basename, join } from 'path';
@@ -80,7 +80,7 @@ export async function runScanWorkflow(
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(3000); // Give the app time to initialize (apps use polling)
   await toggleDevDock(page);
-  const s1 = await screenshots.capture(SCREENSHOT_STEPS.SCAN_LOCKED, 'Initial locked screen');
+  const s1 = await screenshots.capture('scan-locked', 'Initial locked screen');
   openingPollsStep?.addScreenshot(s1);
 
   // Copy election package to USB
@@ -90,7 +90,7 @@ export async function runScanWorkflow(
 
   // Log in as election manager
   const electionManagerCard = await insertElectionManagerCardAndLogin(page, electionPath);
-  const s2 = await screenshots.capture(SCREENSHOT_STEPS.SCAN_UNCONFIGURED, 'Logged in');
+  const s2 = await screenshots.capture('scan-unconfigured', 'Logged in');
   openingPollsStep?.addScreenshot(s2);
 
   await debugPageState(page, 'After election manager login', outputDir);
@@ -99,7 +99,7 @@ export async function runScanWorkflow(
   await page.getByText("All Precincts", { exact: true }).click({ force: true });
   await page.getByText("Official Ballot Mode").click();
 
-  const s3 = await screenshots.capture(SCREENSHOT_STEPS.SCAN_CONFIGURED, 'Configured');
+  const s3 = await screenshots.capture('scan-configured', 'Configured');
   openingPollsStep?.addScreenshot(s3);
   await electionManagerCard.removeCard();
 
@@ -121,7 +121,7 @@ export async function runScanWorkflow(
   });
 
   await waitForTextInApp(page, 'Polls Opened');
-  const s4 = await screenshots.capture(SCREENSHOT_STEPS.SCAN_POLLS_OPEN, 'Polls opened');
+  const s4 = await screenshots.capture('scan-polls-open', 'Polls opened');
   openingPollsStep?.addScreenshot(s4);
   pollWorkerCardForOpeningPolls.removeCard();
 
@@ -132,7 +132,7 @@ export async function runScanWorkflow(
 
   // Ready to scan
   await waitForTextInApp(page, 'Insert Your Ballot');
-  const s5 = await screenshots.capture(SCREENSHOT_STEPS.SCAN_READY, 'Ready to scan');
+  const s5 = await screenshots.capture('scan-ready', 'Ready to scan');
   openingPollsStep?.addScreenshot(s5);
 
   // Mark opening polls step as complete
@@ -182,7 +182,7 @@ export async function runScanWorkflow(
   await usbController.remove();
 
   await waitForTextInApp(page, 'Voting is complete.');
-  const s6 = await screenshots.capture(SCREENSHOT_STEPS.SCAN_POLLS_CLOSED, 'Polls Closed');
+  const s6 = await screenshots.capture('scan-polls-closed', 'Polls Closed');
   closingPollsStep?.addScreenshot(s6);
 
   // Add thermal printer reports from closing polls

@@ -15,7 +15,7 @@ import {
   clickButtonWithDebug,
   toggleDevDock,
 } from './browser.js';
-import { SCREENSHOT_STEPS, ScreenshotManager } from './screenshot.js';
+import { ScreenshotManager } from './screenshot.js';
 import { basename, join } from 'node:path';
 import type { StepCollector } from '../report/artifacts.js';
 import { readdir, readFile, stat } from 'node:fs/promises';
@@ -48,12 +48,12 @@ export async function runAdminWorkflow(
   // Navigate to app
   await navigateToApp(page);
   await toggleDevDock(page);
-  const s1 = await screenshots.capture(SCREENSHOT_STEPS.ADMIN_LOCKED, 'Initial locked screen');
+  const s1 = await screenshots.capture('admin-locked', 'Initial locked screen');
   stepCollector?.addScreenshot(s1);
 
   // Log in as system administrator
   await dipSystemAdministratorCardAndLogin(page, electionPackagePath);
-  const s2 = await screenshots.capture(SCREENSHOT_STEPS.ADMIN_UNCONFIGURED, 'Logged in, unconfigured');
+  const s2 = await screenshots.capture('admin-unconfigured', 'Logged in, unconfigured');
   stepCollector?.addScreenshot(s2);
 
   // Need to load election from USB
@@ -74,7 +74,7 @@ export async function runAdminWorkflow(
   await usbController.insert();
   await page.waitForTimeout(2000); // Give more time for USB detection
 
-  const s3 = await screenshots.capture(SCREENSHOT_STEPS.ADMIN_USB_DETECTED, 'USB drive detected');
+  const s3 = await screenshots.capture('admin-usb-detected', 'USB drive detected');
   stepCollector?.addScreenshot(s3);
 
   // Debug: show what we're looking for
@@ -96,7 +96,7 @@ export async function runAdminWorkflow(
     label: 'Waiting for election to be configured',
   });
 
-  const s4 = await screenshots.capture(SCREENSHOT_STEPS.ADMIN_ELECTION_LOADED, 'Election loaded');
+  const s4 = await screenshots.capture('admin-election-loaded', 'Election loaded');
   stepCollector?.addScreenshot(s4);
 
   // Debug: dump page state after login/config
@@ -108,7 +108,7 @@ export async function runAdminWorkflow(
     outputDir,
     label: 'Looking for Election nav link',
   });
-  const s5 = await screenshots.capture(SCREENSHOT_STEPS.ADMIN_CONFIGURED, 'Election configured');
+  const s5 = await screenshots.capture('admin-configured', 'Election configured');
   stepCollector?.addScreenshot(s5);
 
   // Debug: dump page state after navigating to Election screen
@@ -132,7 +132,7 @@ export async function runAdminWorkflow(
     label: 'Clicking Save Election Package button',
   });
   await page.waitForTimeout(500);
-  const s6 = await screenshots.captureModal(SCREENSHOT_STEPS.ADMIN_EXPORT_PACKAGE, 'Export dialog');
+  const s6 = await screenshots.captureModal('admin-export-package', 'Export dialog');
   stepCollector?.addScreenshot(s6);
 
   // Confirm export - click the Save button in the modal
