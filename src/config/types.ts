@@ -11,8 +11,8 @@ export type BallotPattern = 'blank' | 'valid' | 'overvote';
 export interface VxSuiteConfig {
   /** Path where VxSuite repo should be cloned */
   repoPath: string;
-  /** Git tag or branch to checkout (e.g., "v4.0.4") */
-  tag: string;
+  /** Git tag/branch/rev to checkout (e.g., "v4.0.4") */
+  ref: string;
   /** Force a fresh clone even if repo exists */
   forceClone?: boolean;
 }
@@ -70,6 +70,11 @@ export interface StepInput {
   data?: Record<string, unknown>;
 }
 
+export interface ValidationResult {
+  isValid: boolean;
+  message: string;
+}
+
 /** Output from a workflow step */
 export type StepOutput =
   | {
@@ -77,12 +82,14 @@ export type StepOutput =
       label: string;
       description?: string;
       path: string;
+      validationResult?: ValidationResult;
     }
   | {
       type: 'election-package';
       label: string;
       description?: string;
       path: string;
+      validationResult?: ValidationResult;
     }
   | {
       type: 'scan-result';
@@ -94,18 +101,21 @@ export type StepOutput =
       ballotStyleId: string;
       markPattern: BallotPattern;
       votes: VotesDict;
+      validationResult?: ValidationResult;
     }
   | {
       type: 'print';
       label: string;
       description?: string;
       path: string;
+      validationResult?: ValidationResult;
     }
   | {
       type: 'report';
       label: string;
       description?: string;
       path: string;
+      validationResult?: ValidationResult;
     };
 
 /** Collected artifacts from a QA run */
@@ -147,7 +157,7 @@ export interface ErrorArtifact {
 export const DEFAULT_CONFIG: Partial<QARunConfig> = {
   vxsuite: {
     repoPath: '~/.vx-qa/vxsuite',
-    tag: 'v4.0.4',
+    ref: 'v4.0.4',
   },
   ballots: {
     patterns: ['blank', 'valid', 'overvote'],

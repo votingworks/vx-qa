@@ -5,11 +5,12 @@
 import Handlebars from 'handlebars';
 import { join, relative } from 'path';
 import { logger } from '../utils/logger.js';
-import type { ArtifactCollection, WorkflowStep } from '../config/types.js';
-import { collectFilesInDir, readFileAsBase64 } from './artifacts.js';
+import type { ArtifactCollection } from '../config/types.js';
+import { collectFilesInDir, loadCollection, readFileAsBase64 } from './artifacts.js';
 import { generatePdfThumbnail } from './pdf-thumbnail.js';
-import { readFile, writeFile } from 'fs/promises';
+import { writeFile } from 'fs/promises';
 import { pathsEqual } from '../utils/paths.js';
+import { validateTallyResults } from '../automation/admin-tally-workflow.js';
 
 /**
  * Generate an HTML report from the artifact collection
@@ -20,22 +21,18 @@ export async function generateHtmlReport(
 ): Promise<string> {
   logger.step('Generating HTML report');
 
-  const reportPath = join(outputDir, 'report.html');
   const collectionPath = join(outputDir, 'collection.json');
-  const reportDataPath = join(outputDir, 'report-data.json');
+  await writeFile(collectionPath, JSON.stringify(collection, null, 2), 'utf-8');
 
   // Prepare data for the template
   const data = await prepareReportData(collection, outputDir);
+  const reportDataPath = join(outputDir, 'report-data.json');
+  await writeFile(reportDataPath, JSON.stringify(data, null, 2), 'utf-8');
 
   // Generate HTML
   const html = renderTemplate(data);
-
-  // Write files
-  await Promise.all([
-    writeFile(reportPath, html, 'utf-8'),
-    writeFile(collectionPath, JSON.stringify(collection, null, 2), 'utf-8'),
-    writeFile(reportDataPath, JSON.stringify(data, null, 2), 'utf-8'),
-  ]);
+  const reportPath = join(outputDir, 'report.html');
+  await writeFile(reportPath, html, 'utf-8');
 
   logger.success(`Report saved: ${reportPath}`);
 
@@ -49,40 +46,8 @@ export async function regenerateHtmlReportFromRawData(outputDir: string): Promis
   const collectionPath = join(outputDir, 'collection.json');
   const reportDataPath = join(outputDir, 'report-data.json');
 
-  const collection: ArtifactCollection = JSON.parse(await readFile(collectionPath, 'utf8'));
-
-  for (const step of collection.steps) {
-    if (typeof step.startTime === 'string') {
-      step.startTime = new Date(step.startTime);
-    }
-
-    if (typeof step.endTime === 'string') {
-      step.endTime = new Date(step.endTime);
-    }
-
-    for (const output of step.outputs) {
-      if (typeof output.data?.mtime === 'string') {
-        output.data.mtime = new Date(output.data.mtime);
-      }
-    }
-
-    for (const screenshot of step.screenshots) {
-      if (typeof screenshot.timestamp === 'string') {
-        screenshot.timestamp = new Date(screenshot.timestamp);
-      }
-    }
-  }
-
-  if (typeof collection.startTime === 'string') {
-    collection.startTime = new Date(collection.startTime);
-  }
-
-  if (typeof collection.endTime === 'string') {
-    collection.endTime = new Date(collection.endTime);
-  }
-
   // Prepare data for the template
-  const data = await prepareReportData(collection, outputDir);
+  const data = await prepareReportData(await loadCollection(collectionPath), outputDir);
 
   // Generate HTML
   const html = renderTemplate(data);
@@ -96,15 +61,6 @@ export async function regenerateHtmlReportFromRawData(outputDir: string): Promis
   logger.success(`Report saved: ${reportPath}`);
 
   return reportPath;
-}
-
-/**
- * Organize artifacts into workflow steps
- */
-function organizeIntoSteps(collection: ArtifactCollection, _outputDir: string): WorkflowStep[] {
-  // Simply return the steps from the collection - they're already organized
-  // during workflow execution
-  return collection.steps;
 }
 
 /**
@@ -141,12 +97,29 @@ async function prepareReportData(
     })),
   );
 
-  // Organize artifacts into workflow steps
-  const workflowSteps = organizeIntoSteps(collection, outputDir);
+  const validationResult = await validateTallyResults(collection);
+  logger.info(`Tally validation: ${validationResult.message}`);
+
+  for (const step of collection.steps) {
+    for (const output of step.outputs) {
+      output.validationResult ??=
+        output.type === 'scan-result'
+          ? {
+            isValid: output.accepted === output.expected,
+            message:
+              output.accepted !== output.expected
+                ? output.expected
+                  ? `Ballot sheet was expected to be accepted but was rejected.`
+                  : `Ballot sheet was expected to be rejected but was accepted.`
+                : '',
+          }
+          : undefined;
+    }
+  }
 
   // Prepare steps for template with base64 screenshots and thumbnails
   const steps = await Promise.all(
-    workflowSteps.map(async (step) => ({
+    collection.steps.map(async (step) => ({
       id: step.id,
       name: step.name,
       description: step.description,
@@ -169,16 +142,16 @@ async function prepareReportData(
           type: output.type,
           label: output.label,
           description: output.description,
-          path: output.path,
-          data: output.data,
+          accepted: output.type === 'scan-result' ? output.accepted : undefined,
+          expected: output.type === 'scan-result' ? output.expected : undefined,
           statusClass:
-            output.data?.isExpected === true
-              ? 'success'
-              : output.data?.isExpected === false
-                ? 'error'
-                : 'neutral',
+            output.type !== 'scan-result'
+              ? 'neutral'
+              : output.accepted === output.expected
+                ? 'success'
+                : 'error',
           thumbnail:
-            (output.type === 'print' || output.type === 'pdf') && output.path
+            output.type === 'print' && output.path
               ? await generatePdfThumbnail(join(outputDir, output.path))
               : null,
         })),
@@ -188,10 +161,10 @@ async function prepareReportData(
           const file = screenshotFiles.find((f) => pathsEqual(f.path, screenshot.path));
           return file
             ? {
-                name: screenshot.name,
-                data: relative(outputDir, file.path),
-                caption: screenshot.step,
-              }
+              name: screenshot.name,
+              data: relative(outputDir, file.path),
+              caption: screenshot.step,
+            }
             : null;
         })
         .filter((s) => s !== null),
@@ -213,23 +186,14 @@ async function prepareReportData(
 
   // Check for validation failures
   const validationFailures: Array<{ step: string; message: string; stepId: string }> = [];
-  for (const step of workflowSteps) {
-    for (const output of step.outputs) {
-      if (output.data?.validationMessage && output.data?.isExpected === false) {
-        validationFailures.push({
-          step: step.name,
-          stepId: step.id,
-          message: output.data.validationMessage as string,
-        });
-      }
 
-      if (output.data?.accepted !== output.data?.expected) {
+  for (const step of collection.steps) {
+    for (const output of step.outputs) {
+      if (output.validationResult?.isValid === false) {
         validationFailures.push({
           step: step.name,
           stepId: step.id,
-          message: output.data?.expected
-            ? `Ballot sheet was expected to be accepted but was rejected.`
-            : `Ballot sheet was expected to be rejected but was accepted.`,
+          message: output.validationResult.message,
         });
       }
     }
@@ -252,7 +216,7 @@ async function prepareReportData(
     duration: duration ? formatDuration(duration) : 'N/A',
     pass,
     config: {
-      tag: collection.config.vxsuite.tag,
+      tag: collection.config.vxsuite.ref,
       election: collection.config.election.source,
       patterns: collection.config.ballots.patterns.join(', '),
     },

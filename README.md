@@ -5,7 +5,7 @@ Automates QA testing for VxSuite elections by orchestrating VxAdmin and VxScan a
 ## Features
 
 - Clones and sets up VxSuite repository automatically
-- Generates test ballots with various vote patterns (blank, fully-filled, partial, overvote)
+- Generates test ballots with various vote patterns (blank, overvote, valid votes)
 - Automates VxAdmin for election configuration
 - Automates VxScan for ballot scanning
 - Captures screenshots at key steps
@@ -24,21 +24,6 @@ npx playwright install chromium
 
 ## Usage
 
-### Interactive Mode (TUI)
-
-```bash
-pnpm start run
-```
-
-This launches an interactive wizard to configure:
-
-- VxSuite version/tag
-- Election source file
-- Ballot patterns to generate
-- Output directory
-
-### Config File Mode
-
 ```bash
 # Create a sample config
 pnpm start init -o my-config.json
@@ -54,10 +39,9 @@ pnpm start run [options]
 
 Options:
   -c, --config <path>      Path to configuration file
-  -i, --interactive        Run in interactive TUI mode
   -s, --save-config <path> Save interactive selections to config file
   -o, --output <dir>       Override output directory
-  -t, --tag <tag>          Override VxSuite tag/branch
+  -r, --ref <ref>          Override VxSuite tag/branch/rev
   -e, --election <path>    Override election source path
   --headless               Run browser in headless mode (default)
   --no-headless            Run browser in headed mode for debugging
@@ -71,7 +55,7 @@ Example `vx-qa-config.json`:
 {
   "vxsuite": {
     "repoPath": "~/.vx-qa/vxsuite",
-    "tag": "v4.0.4"
+    "ref": "v4.0.4"
   },
   "election": {
     "source": "./election.json"
@@ -118,9 +102,6 @@ qa-output/run-2024-01-15T10-30-00/
 ## Development
 
 ```bash
-# Run in development mode
-pnpm dev
-
 # Build
 pnpm build
 

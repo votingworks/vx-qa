@@ -10,7 +10,7 @@ export const BallotPatternSchema = z.enum(['blank', 'valid', 'overvote']);
 
 export const VxSuiteConfigSchema = z.object({
   repoPath: z.string().min(1, 'Repository path is required'),
-  tag: z.string().min(1, 'Tag or branch is required'),
+  ref: z.string().min(1, 'Tag/branch/rev is required'),
   forceClone: z.boolean().optional().default(false),
 });
 

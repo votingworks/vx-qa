@@ -28,7 +28,7 @@ export async function cloneOrUpdateRepo(config: VxSuiteConfig): Promise<string> 
     await updateRepo(repoPath);
   }
 
-  await checkoutTag(repoPath, config.tag);
+  await checkoutTag(repoPath, config.ref);
 
   return repoPath;
 }

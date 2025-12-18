@@ -366,7 +366,7 @@ async function scanBallot(
         screenshotPath: screenshot.path,
       };
 
-      stepCollector.addOutput({
+      await stepCollector.addOutput({
         type: 'scan-result',
         label: `Scan Result ${sheetIndex + 1} of ${sheetCount}`,
         description: 'Ballot rejected',
@@ -392,7 +392,7 @@ async function scanBallot(
         screenshotPath: screenshot.path,
       };
 
-      stepCollector.addOutput({
+      await stepCollector.addOutput({
         type: 'scan-result',
         label: `Scan Result ${sheetIndex + 1} of ${sheetCount}`,
         description: 'Ballot accepted',
@@ -431,7 +431,7 @@ async function addThermalPrinterReports(
         // The workspace is copied to output/workspaces/fujitsu-thermal-printer/
         const relativePath = join('workspaces', 'fujitsu-thermal-printer', 'prints', file);
 
-        stepCollector.addOutput({
+        await stepCollector.addOutput({
           type: 'print',
           label: 'Thermal Printer Report',
           description: file,

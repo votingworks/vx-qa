@@ -15,10 +15,10 @@ import {
   toggleDevDock,
 } from './browser.js';
 import { ScreenshotManager } from './screenshot.js';
-import { loadCollection, type ArtifactCollector, type StepCollector } from '../report/artifacts.js';
-import { ArtifactCollection } from '../config/types.js';
+import { loadCollection, type StepCollector } from '../report/artifacts.js';
+import { ArtifactCollection, StepOutput, ValidationResult } from '../config/types.js';
 import { readdir, readFile, stat } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 
 export interface AdminTallyWorkflowResult {
   screenshots: string[];
@@ -36,7 +36,6 @@ export async function runAdminTallyWorkflow(
   dataPath: string,
   backendPort = 3004,
   stepCollector: StepCollector,
-  artifactCollector: ArtifactCollector,
 ): Promise<AdminTallyWorkflowResult> {
   logger.step('Running VxAdmin tally workflow');
 
@@ -50,7 +49,7 @@ export async function runAdminTallyWorkflow(
   await navigateToApp(page);
   await toggleDevDock(page);
   const s1 = await screenshots.capture('admin-tally-locked', 'VxAdmin locked (before tally)');
-  stepCollector?.addScreenshot(s1);
+  stepCollector.addScreenshot(s1);
 
   // Ensure USB is inserted with CVRs
   logger.debug('Inserting USB drive with CVRs');
@@ -60,7 +59,7 @@ export async function runAdminTallyWorkflow(
   // Log in as election manager
   await dipElectionManagerCardAndLogin(page, electionPackagePath);
   const s2 = await screenshots.capture('admin-tally-logged-in', 'Logged in as Election Manager');
-  stepCollector?.addScreenshot(s2);
+  stepCollector.addScreenshot(s2);
 
   await debugPageState(page, 'After election manager login for tally', outputDir);
 
@@ -90,7 +89,7 @@ export async function runAdminTallyWorkflow(
 
   await page.waitForTimeout(1000);
   const s3 = await screenshots.capture('admin-tally-page', 'Tally page');
-  stepCollector?.addScreenshot(s3);
+  stepCollector.addScreenshot(s3);
 
   await debugPageState(page, 'On Tally page', outputDir);
 
@@ -106,7 +105,7 @@ export async function runAdminTallyWorkflow(
 
   await page.waitForTimeout(1000);
   const s4 = await screenshots.capture('admin-tally-load-cvr-dialog', 'Load CVR dialog');
-  stepCollector?.addScreenshot(s4);
+  stepCollector.addScreenshot(s4);
 
   await debugPageState(page, 'After clicking Load CVRs', outputDir);
 
@@ -133,7 +132,7 @@ export async function runAdminTallyWorkflow(
       'admin-tally-cvrs-loaded-success',
       'CVRs loaded successfully',
     );
-    stepCollector?.addScreenshot(s5);
+    stepCollector.addScreenshot(s5);
 
     // Close the modal
     await page.getByRole('button', { name: 'Close' }).click();
@@ -143,7 +142,7 @@ export async function runAdminTallyWorkflow(
 
   await page.waitForTimeout(1000);
   const s6 = await screenshots.capture('admin-tally-after-cvr-load', 'Tally page after CVR load');
-  stepCollector?.addScreenshot(s6);
+  stepCollector.addScreenshot(s6);
 
   await debugPageState(page, 'After loading CVRs', outputDir);
 
@@ -154,7 +153,7 @@ export async function runAdminTallyWorkflow(
 
   await page.waitForTimeout(1000);
   const s7 = await screenshots.capture('admin-reports-page', 'Reports page');
-  stepCollector?.addScreenshot(s7);
+  stepCollector.addScreenshot(s7);
 
   await debugPageState(page, 'On Reports page', outputDir);
 
@@ -165,7 +164,7 @@ export async function runAdminTallyWorkflow(
 
   await page.waitForTimeout(2000);
   const s8 = await screenshots.capture('admin-tally-report-preview', 'Tally report preview');
-  stepCollector?.addScreenshot(s8);
+  stepCollector.addScreenshot(s8);
 
   await debugPageState(page, 'After generating tally report', outputDir);
 
@@ -183,7 +182,7 @@ export async function runAdminTallyWorkflow(
   await page.waitForTimeout(3000);
 
   const s9 = await screenshots.capture('admin-tally-report-exported', 'Tally report exported');
-  stepCollector?.addScreenshot(s9);
+  stepCollector.addScreenshot(s9);
 
   // Close the "Tally Report Saved" modal
   await page.getByRole('button', { name: 'Close' }).click();
@@ -211,50 +210,21 @@ export async function runAdminTallyWorkflow(
   const exportedPdfPath = await findExportedTallyReport(usbDataPath);
   const exportedCsvPath = await findExportedTallyCsv(usbDataPath);
 
-  // Validate CSV against ballot data if we have both
-  let validationResult: { isValid: boolean; message: string } | undefined;
-  if (exportedCsvPath && artifactCollector) {
-    validationResult = await validateTallyResults(
-      exportedCsvPath,
-      artifactCollector.getCollection(),
-    );
-    logger.info(`Tally validation: ${validationResult.message}`);
-  }
-
   if (exportedPdfPath) {
-    // The files will be copied to workspaces/ after the workflow completes
-    // Construct the path where it will be: workspaces/usb-drive/mock-usb-data/...
-    const relativePath = join(
-      'workspaces',
-      'usb-drive',
-      'mock-usb-data',
-      relative(usbDataPath, exportedPdfPath),
-    );
-
-    logger.debug(`Exported PDF path: ${exportedPdfPath}`);
-    logger.debug(`Relative path: ${relativePath}`);
-
-    stepCollector.addOutput({
+    await stepCollector.addOutput({
       type: 'report',
       label: 'Tally Report PDF',
       description: 'Exported Full Election Tally Report',
-      path: relativePath,
+      path: exportedPdfPath,
     });
   }
 
   if (exportedCsvPath) {
-    const relativePath = join(
-      'workspaces',
-      'usb-drive',
-      'mock-usb-data',
-      relative(usbDataPath, exportedCsvPath),
-    );
-
-    stepCollector.addOutput({
+    await stepCollector.addOutput({
       type: 'report',
       label: 'Tally Report CSV',
       description: 'Exported Full Election Tally CSV',
-      path: relativePath,
+      path: exportedCsvPath,
     });
   }
 
@@ -266,7 +236,7 @@ export async function runAdminTallyWorkflow(
   await page.waitForTimeout(500);
 
   const s10 = await screenshots.capture('admin-tally-logged-out', 'Logged out after tally');
-  stepCollector?.addScreenshot(s10);
+  stepCollector.addScreenshot(s10);
 
   // Remove USB
   await usbController.remove();
@@ -360,14 +330,11 @@ async function findExportedTallyCsv(usbDataPath: string): Promise<string | undef
 /**
  * Validate tally results against scanned ballots
  */
-async function validateTallyResults(
-  csvPath: string,
+export async function validateTallyResults(
   collection: ArtifactCollection,
-): Promise<{ isValid: boolean; message: string }> {
+): Promise<ValidationResult> {
   try {
-    // Read the CSV file
-    const csvContent = await readFile(csvPath, 'utf-8');
-    const lines = csvContent.trim().split('\n');
+    let tallyCsvOutput: Extract<StepOutput, { type: 'report' }> | undefined;
 
     // Get votes from accepted scan results stored in step outputs
     const expectedVotes: Record<string, Record<string, number>> = {}; // contestId -> optionId -> count
@@ -389,13 +356,28 @@ async function validateTallyResults(
             }
           }
         }
+
+        if (
+          output.type === 'report' &&
+          output.path.includes('tally-report') &&
+          output.path.endsWith('.csv')
+        ) {
+          tallyCsvOutput = output;
+        }
       }
+    }
+
+    if (!tallyCsvOutput) {
+      throw new Error('No tally report CSV output found');
     }
 
     logger.debug(`Validation: processed ${totalOutputs} scanned sheets`);
 
     // Parse CSV to get actual vote counts by selection ID
     // CSV format: Contest,Contest ID,Selection,Selection ID,Total Votes
+    const csvContent = await readFile(tallyCsvOutput.path, 'utf-8');
+    const lines = csvContent.trim().split('\n');
+
     const actualVotes: Record<string, number> = {}; // selectionId -> count
     let totalExpectedVotes = 0;
     let totalActualVotes = 0;
@@ -460,34 +442,26 @@ async function validateTallyResults(
       `Validation - Expected votes: ${totalExpectedVotes}, Actual votes: ${totalActualVotes}`,
     );
 
-    if (mismatches.length > 0) {
-      return {
-        isValid: false,
-        message: `Tally mismatch: ${mismatches.join('; ')}`,
-      };
-    }
-
-    return {
-      isValid: true,
-      message: `Tally validated: ${totalExpectedVotes} vote(s) match CSV exactly`,
-    };
+    tallyCsvOutput.validationResult =
+      mismatches.length > 0
+        ? {
+          isValid: false,
+          message: `Tally mismatch: ${mismatches.join('; ')}`,
+        }
+        : {
+          isValid: true,
+          message: `Tally validated: ${totalExpectedVotes} vote(s) match CSV exactly`,
+        };
+    return tallyCsvOutput.validationResult;
   } catch (error) {
-    return {
-      isValid: false,
-      message: `Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-    };
+    throw new Error(
+      `Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    );
   }
 }
 
 export async function revalidateTallyResults(
   outputDir: string,
 ): Promise<{ isValid: boolean; message: string }> {
-  const csvPath = await findExportedTallyCsv(outputDir);
-
-  if (!csvPath) {
-    throw new Error('Unable to locate exported tally CSV path');
-  }
-
-  const collection = await loadCollection(join(outputDir, 'collection.json'));
-  return validateTallyResults(csvPath, collection);
+  return validateTallyResults(await loadCollection(join(outputDir, 'collection.json')));
 }

@@ -16,7 +16,7 @@ import type {
   StepInput,
   StepOutput,
 } from '../config/types.js';
-import { readFile } from 'fs/promises';
+import { copyFile, readFile } from 'fs/promises';
 
 export interface StepCollector {
   /**
@@ -27,7 +27,7 @@ export interface StepCollector {
   /**
    * Add an output to the current step
    */
-  addOutput(output: StepOutput): void;
+  addOutput(output: StepOutput): Promise<void>;
 
   /**
    * Add a screenshot to the current step
@@ -163,13 +163,21 @@ export function createArtifactCollector(outputDir: string, config: QARunConfig):
       collection.steps.push(step);
       logger.debug(`Started step: ${name}`);
 
+      const stepDir = join(outputDir, 'steps', id.replace(/[^a-z0-9]+/, '-'));
+      mkdirSync(stepDir, { recursive: true });
+
       return {
         addInput(input: StepInput): void {
           step.inputs.push(input);
         },
 
-        addOutput(output: StepOutput): void {
+        async addOutput(output: StepOutput): Promise<void> {
           step.outputs.push(output);
+          if (output.type !== 'scan-result') {
+            const stepCopyPath = join(stepDir, basename(output.path));
+            await copyFile(output.path, stepCopyPath);
+            output.path = stepCopyPath;
+          }
         },
 
         addScreenshot(artifact: ScreenshotArtifact): void {

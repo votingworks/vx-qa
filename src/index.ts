@@ -12,7 +12,6 @@ import { logger, printHeader } from './utils/logger.js';
 import { validateConfig, safeValidateConfig } from './config/schema.js';
 import { resolvePath, generateTimestampedDir, ensureDir } from './utils/paths.js';
 import { runQAWorkflow } from './cli/config-runner.js';
-import { runInteractiveTUI } from './cli/interactive-tui.js';
 import type { QARunConfig } from './config/types.js';
 import { dirname } from 'path';
 import { regenerateHtmlReportFromRawData } from './report/html-generator.js';
@@ -29,10 +28,8 @@ program
   .command('run')
   .description('Run QA automation workflow')
   .option('-c, --config <path>', 'Path to configuration file')
-  .option('-i, --interactive', 'Run in interactive TUI mode')
-  .option('-s, --save-config <path>', 'Save interactive selections to config file')
   .option('-o, --output <dir>', 'Override output directory')
-  .option('-t, --tag <tag>', 'Override VxSuite tag/branch')
+  .option('-r, --ref <ref>', 'Override VxSuite tag/branch/ref')
   .option('-e, --election <path>', 'Override election source path')
   .option('--headless', 'Run browser in headless mode (default)')
   .option('--no-headless', 'Run browser in headed mode for debugging')
@@ -43,40 +40,25 @@ program
     let config: QARunConfig;
 
     try {
-      if (options.config) {
-        // Load config from file
-        const configPath = resolvePath(options.config);
-        if (!existsSync(configPath)) {
-          logger.error(`Config file not found: ${configPath}`);
-          process.exit(1);
-        }
-
-        const configData = readFileSync(configPath, 'utf-8');
-        const parsedConfig = JSON.parse(configData);
-        config = validateConfig(parsedConfig, configPath);
-        config.basePath = dirname(configPath);
-        logger.info(`Loaded configuration from ${configPath}`);
-      } else if (options.interactive || !options.config) {
-        // Run interactive TUI
-        config = await runInteractiveTUI();
-
-        // Optionally save config
-        if (options.saveConfig) {
-          const savePath = resolvePath(options.saveConfig);
-          writeFileSync(savePath, JSON.stringify(config, null, 2));
-          logger.success(`Configuration saved to ${savePath}`);
-        }
-      } else {
-        logger.error('Either --config or --interactive is required');
+      // Load config from file
+      const configPath = resolvePath(options.config);
+      if (!existsSync(configPath)) {
+        logger.error(`Config file not found: ${configPath}`);
         process.exit(1);
       }
+
+      const configData = readFileSync(configPath, 'utf-8');
+      const parsedConfig = JSON.parse(configData);
+      config = validateConfig(parsedConfig, configPath);
+      config.basePath = dirname(configPath);
+      logger.info(`Loaded configuration from ${configPath}`);
 
       // Apply command-line overrides
       if (options.output) {
         config.output.directory = options.output;
       }
       if (options.tag) {
-        config.vxsuite.tag = options.tag;
+        config.vxsuite.ref = options.tag;
       }
       if (options.election) {
         config.election.source = options.election;
@@ -166,7 +148,7 @@ program
     const sampleConfig: QARunConfig = {
       vxsuite: {
         repoPath: '~/.vx-qa/vxsuite',
-        tag: 'v4.0.4',
+        ref: 'v4.0.4',
       },
       election: {
         source: './election.json',

@@ -11,7 +11,7 @@ import {
   DEFAULT_PIN,
   MockCardController,
 } from '../mock-hardware/cards.js';
-import { waitForText, waitForTextInApp } from './browser.js';
+import { clickTextInApp, waitForText, waitForTextInApp } from './browser.js';
 
 /**
  * Enter the PIN on the PIN pad screen
@@ -58,7 +58,8 @@ export async function dipSystemAdministratorCardAndLogin(
 }
 
 /**
- * Log in as an election manager
+ * Log in as an election manager by dipping and removing the Election Manager
+ * card.
  */
 export async function dipElectionManagerCardAndLogin(
   page: Page,
@@ -86,7 +87,8 @@ export async function dipElectionManagerCardAndLogin(
 }
 
 /**
- * Log in as an election manager
+ * Log in as an election manager by inserting and leaving the election manager
+ * card in place.
  */
 export async function insertElectionManagerCardAndLogin(
   page: Page,
@@ -112,7 +114,8 @@ export async function insertElectionManagerCardAndLogin(
 }
 
 /**
- * Log in as a poll worker
+ * Log in as a poll worker by inserting and leaving the poll worker card in
+ * place.
  */
 export async function insertPollWorkerCardAndLogin(
   _page: Page,
@@ -136,44 +139,13 @@ export async function insertPollWorkerCardAndLogin(
 }
 
 /**
- * Log out by clicking Lock Machine
+ * Log out by clicking Lock Machine (used with dipped login methods).
  */
 export async function logOut(page: Page): Promise<void> {
   logger.debug('Logging out');
 
-  await waitForTextInApp(page, 'Lock Machine', { timeout: 10000 });
+  await clickTextInApp(page, 'Lock Machine');
 
   // Wait for the locked state in the main app
   await waitForTextInApp(page, 'Locked', { timeout: 5000 });
-}
-
-/**
- * Force log out via API (bypassing UI)
- */
-export async function forceLogOut(page: Page): Promise<void> {
-  logger.debug('Force logging out via API');
-
-  await page.request.post('http://localhost:3000/api/logOut', {
-    data: '{}',
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-/**
- * Check if currently logged in
- */
-export async function isLoggedIn(page: Page): Promise<boolean> {
-  try {
-    await page.getByText('Lock Machine').waitFor({ timeout: 1000 });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Wait for the machine locked screen
- */
-export async function waitForLockedScreen(page: Page): Promise<void> {
-  await waitForTextInApp(page, 'Locked', { timeout: 10000 });
 }

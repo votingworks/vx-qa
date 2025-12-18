@@ -201,7 +201,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
       );
       exportedPackagePath = adminResult.exportedPackagePath;
 
-      adminStep.addOutput({
+      await adminStep.addOutput({
         type: 'election-package',
         label: 'Exported Election Package',
         description: 'Election package exported for VxScan',
@@ -281,7 +281,6 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
         dataPath,
         getBackendPort('admin'),
         tallyStep,
-        collector,
       );
 
       tallyStep.complete();
