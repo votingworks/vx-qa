@@ -8,7 +8,6 @@ import { createMockUsbController } from '../mock-hardware/usb.js';
 import { dipElectionManagerCardAndLogin } from './auth-helpers.js';
 import {
   navigateToApp,
-  debugPageState,
   waitForTextWithDebug,
   clickButtonWithDebug,
   clickTextInApp,
@@ -61,8 +60,6 @@ export async function runAdminTallyWorkflow(
   const s2 = await screenshots.capture('admin-tally-logged-in', 'Logged in as Election Manager');
   stepCollector.addScreenshot(s2);
 
-  await debugPageState(page, 'After election manager login for tally', outputDir);
-
   // Navigate to Tally section
   logger.debug('Navigating to Tally section');
 
@@ -91,8 +88,6 @@ export async function runAdminTallyWorkflow(
   const s3 = await screenshots.capture('admin-tally-page', 'Tally page');
   stepCollector.addScreenshot(s3);
 
-  await debugPageState(page, 'On Tally page', outputDir);
-
   // Look for CVR files on USB and import them
   logger.debug('Looking for CVR files to import');
 
@@ -106,8 +101,6 @@ export async function runAdminTallyWorkflow(
   await page.waitForTimeout(1000);
   const s4 = await screenshots.capture('admin-tally-load-cvr-dialog', 'Load CVR dialog');
   stepCollector.addScreenshot(s4);
-
-  await debugPageState(page, 'After clicking Load CVRs', outputDir);
 
   // Find and click the Load button in the modal table for the first CVR file
   // Each row in the table has a "Load" button (or "Loaded" if already imported)
@@ -144,8 +137,6 @@ export async function runAdminTallyWorkflow(
   const s6 = await screenshots.capture('admin-tally-after-cvr-load', 'Tally page after CVR load');
   stepCollector.addScreenshot(s6);
 
-  await debugPageState(page, 'After loading CVRs', outputDir);
-
   // Navigate to Reports section
   logger.debug('Navigating to Reports section');
 
@@ -155,8 +146,6 @@ export async function runAdminTallyWorkflow(
   const s7 = await screenshots.capture('admin-reports-page', 'Reports page');
   stepCollector.addScreenshot(s7);
 
-  await debugPageState(page, 'On Reports page', outputDir);
-
   // Generate tally report by clicking the link
   logger.debug('Generating tally report');
 
@@ -165,8 +154,6 @@ export async function runAdminTallyWorkflow(
   await page.waitForTimeout(2000);
   const s8 = await screenshots.capture('admin-tally-report-preview', 'Tally report preview');
   stepCollector.addScreenshot(s8);
-
-  await debugPageState(page, 'After generating tally report', outputDir);
 
   // Export the report as PDF
   logger.debug('Exporting tally report as PDF');

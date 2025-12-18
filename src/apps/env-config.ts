@@ -51,15 +51,6 @@ export const MACHINE_TYPES = {
 export type MachineType = keyof typeof MACHINE_TYPES;
 
 /**
- * Get machine-specific environment variables
- */
-export function getMachineEnv(machineType: MachineType): Record<string, string> {
-  return {
-    VX_MACHINE_TYPE: machineType,
-  };
-}
-
-/**
  * Default ports used by VxSuite apps
  */
 export const APP_PORTS = {

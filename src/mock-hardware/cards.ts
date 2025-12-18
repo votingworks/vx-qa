@@ -71,10 +71,3 @@ export function createMockCardController(): MockCardController {
  * Default PIN for test cards
  */
 export const DEFAULT_PIN = '000000';
-
-/**
- * Enter PIN digits as an array for UI automation
- */
-export function getPinDigits(): string[] {
-  return DEFAULT_PIN.split('');
-}

@@ -3,8 +3,7 @@
  */
 
 import { BallotToScan } from '../automation/scan-workflow.js';
-import { BallotMode, BallotType } from '../ballots/election-loader.js';
-import { VotesDict } from '../ballots/vote-generator.js';
+import { BallotMode, BallotType, VotesDict } from '../ballots/election-loader.js';
 
 export type BallotPattern = 'blank' | 'valid' | 'overvote';
 
@@ -152,17 +151,3 @@ export interface ErrorArtifact {
   timestamp: Date;
   stack?: string;
 }
-
-/** Default configuration values */
-export const DEFAULT_CONFIG: Partial<QARunConfig> = {
-  vxsuite: {
-    repoPath: '~/.vx-qa/vxsuite',
-    ref: 'v4.0.4',
-  },
-  ballots: {
-    patterns: ['blank', 'valid', 'overvote'],
-  },
-  output: {
-    directory: './qa-output',
-  },
-};

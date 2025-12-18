@@ -7,8 +7,7 @@
 
 import { join } from 'path';
 import { logger } from '../utils/logger.js';
-import { getContestsForBallotStyle, type Election } from './election-loader.js';
-import type { VotesDict } from './vote-generator.js';
+import { getContestsForBallotStyle, type Election, type VotesDict } from './election-loader.js';
 import type { BallotPattern } from '../config/types.js';
 
 export interface MarkedBallot {

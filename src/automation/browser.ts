@@ -67,29 +67,6 @@ export async function navigateToApp(page: Page): Promise<void> {
 }
 
 /**
- * Wait for the page to be fully loaded
- */
-export async function waitForPageLoad(page: Page, timeout = 10000): Promise<void> {
-  await page.waitForLoadState('networkidle', { timeout });
-}
-
-/**
- * Take a screenshot and save it
- */
-export async function takeScreenshot(
-  page: Page,
-  path: string,
-  options: { fullPage?: boolean } = {},
-): Promise<void> {
-  await page.screenshot({
-    path,
-    fullPage: options.fullPage ?? false,
-    animations: 'disabled',
-  });
-  logger.debug(`Screenshot saved: ${path}`);
-}
-
-/**
  * Wait for text to appear on the page
  * Uses first() to avoid strict mode violations when multiple elements match
  */
@@ -105,38 +82,6 @@ export async function waitForText(
   } else {
     await page.getByText(text).first().waitFor({ timeout });
   }
-}
-
-/**
- * Click a button by its name/label
- */
-export async function clickButton(
-  page: Page,
-  name: string,
-  options: { exact?: boolean } = {},
-): Promise<void> {
-  const { exact = false } = options;
-  await page.getByRole('button', { name, exact }).click();
-}
-
-/**
- * Check if text is visible on the page
- * Uses first() to avoid strict mode violations when multiple elements match
- */
-export async function isTextVisible(page: Page, text: string): Promise<boolean> {
-  try {
-    await page.getByText(text).first().waitFor({ timeout: 1000 });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Get the current URL
- */
-export function getCurrentUrl(page: Page): string {
-  return page.url();
 }
 
 /**
@@ -233,24 +178,6 @@ export async function clickButtonWithDebug(
     await page.getByRole('button', { name }).click({ timeout });
   } catch (error) {
     await debugPageState(page, label || `Failed to click button: "${name}"`, outputDir);
-    throw error;
-  }
-}
-
-/**
- * Click link with debug on failure
- */
-export async function clickLinkWithDebug(
-  page: Page,
-  name: string,
-  options: { timeout?: number; outputDir?: string; label?: string } = {},
-): Promise<void> {
-  const { timeout = 10000, outputDir, label } = options;
-
-  try {
-    await page.getByRole('link', { name }).click({ timeout });
-  } catch (error) {
-    await debugPageState(page, label || `Failed to click link: "${name}"`, outputDir);
     throw error;
   }
 }

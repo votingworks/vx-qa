@@ -105,21 +105,3 @@ export async function getCurrentCommit(repoPath: string): Promise<string> {
   const log = await git.log({ maxCount: 1 });
   return log.latest?.hash || 'unknown';
 }
-
-/**
- * List available tags
- */
-export async function listTags(repoPath: string): Promise<string[]> {
-  const git: SimpleGit = simpleGit(repoPath);
-  const tags = await git.tags();
-  return tags.all;
-}
-
-/**
- * List available branches
- */
-export async function listBranches(repoPath: string): Promise<string[]> {
-  const git: SimpleGit = simpleGit(repoPath);
-  const branches = await git.branch(['-r']);
-  return branches.all.map((b) => b.replace('origin/', ''));
-}

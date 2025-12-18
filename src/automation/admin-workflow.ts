@@ -10,7 +10,6 @@ import {
   navigateToApp,
   waitForTextInApp,
   clickTextInApp,
-  debugPageState,
   waitForTextWithDebug,
   clickButtonWithDebug,
   toggleDevDock,
@@ -77,10 +76,6 @@ export async function runAdminWorkflow(
   const s3 = await screenshots.capture('admin-usb-detected', 'USB drive detected');
   stepCollector?.addScreenshot(s3);
 
-  // Debug: show what we're looking for
-  logger.debug(`Looking for package filename in app: ${packageFilename}`);
-  await debugPageState(page, 'After USB insert, looking for package', outputDir);
-
   // Wait for package to appear and click it (in main app, not dev-dock)
   await waitForTextInApp(page, packageFilename, { timeout: 15000 });
   await clickTextInApp(page, packageFilename);
@@ -99,9 +94,6 @@ export async function runAdminWorkflow(
   const s4 = await screenshots.capture('admin-election-loaded', 'Election loaded');
   stepCollector?.addScreenshot(s4);
 
-  // Debug: dump page state after login/config
-  await debugPageState(page, 'After login/config', outputDir);
-
   // Verify election is configured - look for the Election nav link
   await waitForTextWithDebug(page, 'Election', {
     timeout: 10000,
@@ -110,9 +102,6 @@ export async function runAdminWorkflow(
   });
   const s5 = await screenshots.capture('admin-configured', 'Election configured');
   stepCollector?.addScreenshot(s5);
-
-  // Debug: dump page state after navigating to Election screen
-  await debugPageState(page, 'On Election screen', outputDir);
 
   // Export election package for VxScan
   logger.debug('Exporting election package');
@@ -210,27 +199,4 @@ async function getExportedPackagePath(usbDataPath: string): Promise<string> {
   ).sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
   return sorted[0].path;
-}
-
-/**
- * Unconfigure VxAdmin (remove election data)
- */
-export async function unconfigureAdmin(page: Page): Promise<void> {
-  logger.debug('Unconfiguring VxAdmin');
-
-  // Navigate to Election tab
-  await page.getByRole('button', { name: 'Election', exact: true }).click();
-
-  // Click Unconfigure Machine
-  const unconfigureBtn = page.getByRole('button', { name: 'Unconfigure Machine' });
-
-  if (await unconfigureBtn.isVisible()) {
-    await unconfigureBtn.click();
-
-    // Confirm
-    const modal = page.getByRole('alertdialog');
-    await modal.getByRole('button', { name: 'Delete All Election Data' }).click();
-
-    await waitForTextWithDebug(page, 'Insert a USB', { timeout: 10000 });
-  }
 }

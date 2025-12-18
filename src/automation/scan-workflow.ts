@@ -11,7 +11,6 @@ import {
 } from './auth-helpers.js';
 import {
   toggleDevDock,
-  debugPageState,
   clickButtonWithDebug,
   waitForTextInApp,
 } from './browser.js';
@@ -21,9 +20,8 @@ import type { StepCollector, ArtifactCollector } from '../report/artifacts.js';
 import { basename, join } from 'path';
 import { createMockScannerController } from '../mock-hardware/scanner.js';
 import { generateMarkedBallotForPattern } from '../ballots/ballot-marker.js';
-import { Election, ElectionPackage } from '../ballots/election-loader.js';
+import { Election, ElectionPackage, VotesDict } from '../ballots/election-loader.js';
 import { copyFile, readdir, readFile, writeFile } from 'node:fs/promises';
-import { VotesDict } from '../ballots/vote-generator.js';
 import { PDFDocument } from 'pdf-lib';
 
 export interface ScanWorkflowResult {
@@ -96,8 +94,6 @@ export async function runScanWorkflow(
   const s2 = await screenshots.capture('scan-unconfigured', 'Logged in');
   openingPollsStep.addScreenshot(s2);
 
-  await debugPageState(page, 'After election manager login', outputDir);
-
   await page.getByText('Select a precinct…').click({ force: true });
   await page.getByText('All Precincts', { exact: true }).click({ force: true });
   await page.getByText('Official Ballot Mode').click();
@@ -113,8 +109,6 @@ export async function runScanWorkflow(
   const pollWorkerCardForOpeningPolls = await insertPollWorkerCard(page, electionPath);
 
   await page.getByText('Do you want to open the polls?').isVisible();
-
-  await debugPageState(page, 'Prompting to open the polls', outputDir);
 
   // Confirm opening polls
   await clickButtonWithDebug(page, 'Open Polls', {
@@ -445,14 +439,4 @@ async function addThermalPrinterReports(
   } catch (error) {
     logger.warn(`Failed to add thermal printer reports: ${(error as Error).message}`);
   }
-}
-
-/**
- * Export CVRs from VxScan
- */
-export async function exportCVRs(_page: Page): Promise<void> {
-  logger.debug('Exporting CVRs');
-
-  // This would navigate to the CVR export section and save to USB
-  // Implementation depends on the specific VxScan UI
 }

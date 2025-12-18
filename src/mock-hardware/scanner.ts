@@ -4,8 +4,6 @@
 
 import { createDevDockClient, type DevDockClient } from './client.js';
 import { logger } from '../utils/logger.js';
-import { readdir, stat } from 'node:fs/promises';
-import { join } from 'node:path';
 
 export type SheetStatus = 'noSheet' | 'sheetInserted' | 'sheetHeldInFront' | 'sheetHeldInBack';
 
@@ -75,80 +73,6 @@ export function createMockScannerController(): MockScannerController {
       throw new Error(
         `Timeout waiting for sheet status ${expected.join(' or ')}, current: ${currentStatus}`,
       );
-    },
-  };
-}
-
-/**
- * Mock printer control via dev-dock API
- */
-export interface MockPrinterController {
-  /**
-   * Get the printer status
-   */
-  getStatus(): Promise<{ connected: boolean }>;
-
-  /**
-   * Connect the mock printer
-   */
-  connect(): Promise<void>;
-
-  /**
-   * Disconnect the mock printer
-   */
-  disconnect(): Promise<void>;
-
-  /**
-   * Get the path to the last printed file
-   */
-  getLastPrintPath(): Promise<string | null>;
-}
-
-/**
- * Create a mock printer controller
- */
-export function createMockPrinterController(port = 3004): MockPrinterController {
-  const client: DevDockClient = createDevDockClient(port);
-
-  return {
-    async getStatus(): Promise<{ connected: boolean }> {
-      const status = await client.call<{ connected: boolean }>('getPrinterStatus', {});
-      return status;
-    },
-
-    async connect(): Promise<void> {
-      logger.debug('Connecting printer');
-      await client.call('connectPrinter', {});
-    },
-
-    async disconnect(): Promise<void> {
-      logger.debug('Disconnecting printer');
-      await client.call('disconnectPrinter', {});
-    },
-
-    async getLastPrintPath(): Promise<string | null> {
-      // The mock printer saves prints to /tmp/mock-printer/prints/
-      const printsDir = '/tmp/mock-printer/prints';
-      try {
-        const files = await readdir(printsDir);
-        if (files.length === 0) {
-          return null;
-        }
-
-        // Get the most recent file
-        const sortedFiles = (
-          await Promise.all(
-            files.map(async (f) => ({
-              name: f,
-              time: (await stat(join(printsDir, f))).mtime.getTime(),
-            })),
-          )
-        ).sort((a, b) => b.time - a.time);
-
-        return join(printsDir, sortedFiles[0].name);
-      } catch {
-        return null;
-      }
     },
   };
 }

@@ -105,14 +105,14 @@ async function prepareReportData(
       output.validationResult ??=
         output.type === 'scan-result'
           ? {
-            isValid: output.accepted === output.expected,
-            message:
-              output.accepted !== output.expected
-                ? output.expected
-                  ? `Ballot sheet was expected to be accepted but was rejected.`
-                  : `Ballot sheet was expected to be rejected but was accepted.`
-                : '',
-          }
+              isValid: output.accepted === output.expected,
+              message:
+                output.accepted !== output.expected
+                  ? output.expected
+                    ? `Ballot sheet was expected to be accepted but was rejected.`
+                    : `Ballot sheet was expected to be rejected but was accepted.`
+                  : '',
+            }
           : undefined;
     }
   }
@@ -161,10 +161,10 @@ async function prepareReportData(
           const file = screenshotFiles.find((f) => pathsEqual(f.path, screenshot.path));
           return file
             ? {
-              name: screenshot.name,
-              data: relative(outputDir, file.path),
-              caption: screenshot.step,
-            }
+                name: screenshot.name,
+                data: relative(outputDir, file.path),
+                caption: screenshot.step,
+              }
             : null;
         })
         .filter((s) => s !== null),

@@ -33,7 +33,6 @@ export const QARunConfigSchema = z.object({
   output: OutputConfigSchema,
 });
 
-export type QARunConfigInput = z.input<typeof QARunConfigSchema>;
 export type QARunConfigOutput = z.output<typeof QARunConfigSchema>;
 
 /**

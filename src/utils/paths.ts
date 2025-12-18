@@ -3,7 +3,7 @@
  */
 
 import { homedir } from 'os';
-import { join, resolve, dirname, isAbsolute } from 'path';
+import { join, resolve, isAbsolute } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import assert from 'assert';
 
@@ -43,33 +43,11 @@ export function ensureDir(path: string): string {
 }
 
 /**
- * Ensure the parent directory of a file exists
- */
-export function ensureParentDir(filePath: string): string {
-  const parentDir = dirname(resolvePath(filePath));
-  return ensureDir(parentDir);
-}
-
-/**
  * Generate a timestamped output directory name
  */
 export function generateTimestampedDir(baseDir: string, prefix = 'run'): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   return join(resolvePath(baseDir), `${prefix}-${timestamp}`);
-}
-
-/**
- * Get the default VxSuite repository path
- */
-export function getDefaultRepoPath(): string {
-  return resolvePath('~/.vx-qa/vxsuite');
-}
-
-/**
- * Get the default output directory
- */
-export function getDefaultOutputDir(): string {
-  return resolvePath('./qa-output');
 }
 
 /**

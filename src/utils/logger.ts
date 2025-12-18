@@ -53,22 +53,6 @@ export const logger: Logger = {
 };
 
 /**
- * Create a child logger with a prefix
- */
-export function createPrefixedLogger(prefix: string): Logger {
-  const prefixStr = chalk.dim(`[${prefix}]`);
-  return {
-    info: (msg) => logger.info(`${prefixStr} ${msg}`),
-    success: (msg) => logger.success(`${prefixStr} ${msg}`),
-    warn: (msg) => logger.warn(`${prefixStr} ${msg}`),
-    error: (msg) => logger.error(`${prefixStr} ${msg}`),
-    debug: (msg) => logger.debug(`${prefixStr} ${msg}`),
-    step: (msg) => logger.step(`${prefixStr} ${msg}`),
-    spinner: (msg) => logger.spinner(`${prefixStr} ${msg}`),
-  };
-}
-
-/**
  * Format a duration in milliseconds to a human-readable string
  */
 export function formatDuration(ms: number): string {

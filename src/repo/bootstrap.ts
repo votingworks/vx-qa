@@ -59,44 +59,6 @@ export async function bootstrapRepo(repoPath: string): Promise<void> {
 }
 
 /**
- * Build a specific app in the repository
- */
-export async function buildApp(repoPath: string, app: 'admin' | 'scan'): Promise<void> {
-  const spinner = logger.spinner(`Building ${app} app...`);
-
-  try {
-    const appPath = join(repoPath, 'apps', app);
-
-    // Build frontend
-    const frontendPath = join(appPath, 'frontend');
-    const frontendResult = await execCommand('pnpm', ['build'], {
-      cwd: frontendPath,
-      env: { ...process.env },
-    });
-
-    if (frontendResult.code !== 0) {
-      throw new Error(`Frontend build failed: ${frontendResult.stderr}`);
-    }
-
-    // Build backend
-    const backendPath = join(appPath, 'backend');
-    const backendResult = await execCommand('pnpm', ['build'], {
-      cwd: backendPath,
-      env: { ...process.env },
-    });
-
-    if (backendResult.code !== 0) {
-      throw new Error(`Backend build failed: ${backendResult.stderr}`);
-    }
-
-    spinner.succeed(`${app} app built successfully`);
-  } catch (error) {
-    spinner.fail(`Failed to build ${app} app`);
-    throw error;
-  }
-}
-
-/**
  * Check if pnpm is available
  */
 export async function checkPnpmAvailable(): Promise<boolean> {
