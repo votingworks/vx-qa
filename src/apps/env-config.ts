@@ -2,6 +2,8 @@
  * Environment configuration for mock hardware
  */
 
+import assert from "node:assert";
+
 /**
  * Environment variables to enable mock hardware
  */
@@ -55,25 +57,18 @@ export type MachineType = keyof typeof MACHINE_TYPES;
  */
 export const APP_PORTS = {
   frontend: 3000,
-  backend: 3004, // Default for VxAdmin
+  mark: 3001,
+  scan: 3002,
+  'mark-scan': 3003,
+  admin: 3004,
+  'central-scan': 3005,
 } as const;
 
 /**
  * Get backend port for a specific machine type
  */
 export function getBackendPort(machineType: MachineType): number {
-  switch (machineType) {
-    case 'admin':
-      return 3004;
-    case 'scan':
-      return 3002;
-    case 'mark':
-      return 3001;
-    case 'mark-scan':
-      return 3003;
-    case 'central-scan':
-      return 3005;
-    default:
-      return 3004;
-  }
+  const port = APP_PORTS[machineType];
+  assert(port !== undefined, `No port for machine type '${machineType}'`);
+  return port;
 }

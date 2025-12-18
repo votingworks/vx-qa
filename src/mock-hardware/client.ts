@@ -1,7 +1,7 @@
 /**
  * HTTP client for communicating with the dev-dock API
  *
- * The dev-dock API runs at http://localhost:3004/dock when an app is started
+ * The dev-dock API runs at e.g. http://localhost:3004/dock when an app is started
  * with mock hardware enabled.
  */
 
@@ -55,7 +55,7 @@ export function createDevDockClient(port = 3000): DevDockClient {
 /**
  * Wait for dev-dock to become available
  */
-export async function waitForDevDock(port = 3004, timeout = 30000): Promise<boolean> {
+export async function waitForDevDock(port: number, timeout = 30000): Promise<boolean> {
   const startTime = Date.now();
   const url = `http://localhost:${port}/dock/getMockSpec`;
 

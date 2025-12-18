@@ -33,8 +33,7 @@ export async function runAdminWorkflow(
   electionPackagePath: string,
   outputDir: string,
   dataPath: string,
-  backendPort = 3004,
-  stepCollector?: StepCollector,
+  stepCollector: StepCollector,
 ): Promise<AdminWorkflowResult> {
   logger.step('Running VxAdmin workflow');
 
@@ -42,18 +41,18 @@ export async function runAdminWorkflow(
     width: 1920,
     height: 1200,
   });
-  const usbController = createMockUsbController({ dataPath, port: backendPort });
+  const usbController = createMockUsbController({ dataPath });
 
   // Navigate to app
   await navigateToApp(page);
   await toggleDevDock(page);
   const s1 = await screenshots.capture('admin-locked', 'Initial locked screen');
-  stepCollector?.addScreenshot(s1);
+  stepCollector.addScreenshot(s1);
 
   // Log in as system administrator
   await dipSystemAdministratorCardAndLogin(page, electionPackagePath);
   const s2 = await screenshots.capture('admin-unconfigured', 'Logged in, unconfigured');
-  stepCollector?.addScreenshot(s2);
+  stepCollector.addScreenshot(s2);
 
   // Need to load election from USB
   logger.debug('Loading election from USB');
@@ -74,7 +73,7 @@ export async function runAdminWorkflow(
   await page.waitForTimeout(2000); // Give more time for USB detection
 
   const s3 = await screenshots.capture('admin-usb-detected', 'USB drive detected');
-  stepCollector?.addScreenshot(s3);
+  stepCollector.addScreenshot(s3);
 
   // Wait for package to appear and click it (in main app, not dev-dock)
   await waitForTextInApp(page, packageFilename, { timeout: 15000 });
@@ -92,7 +91,7 @@ export async function runAdminWorkflow(
   });
 
   const s4 = await screenshots.capture('admin-election-loaded', 'Election loaded');
-  stepCollector?.addScreenshot(s4);
+  stepCollector.addScreenshot(s4);
 
   // Verify election is configured - look for the Election nav link
   await waitForTextWithDebug(page, 'Election', {
@@ -101,7 +100,7 @@ export async function runAdminWorkflow(
     label: 'Looking for Election nav link',
   });
   const s5 = await screenshots.capture('admin-configured', 'Election configured');
-  stepCollector?.addScreenshot(s5);
+  stepCollector.addScreenshot(s5);
 
   // Export election package for VxScan
   logger.debug('Exporting election package');
@@ -121,8 +120,6 @@ export async function runAdminWorkflow(
     label: 'Clicking Save Election Package button',
   });
   await page.waitForTimeout(500);
-  const s6 = await screenshots.captureModal('admin-export-package', 'Export dialog');
-  stepCollector?.addScreenshot(s6);
 
   // Confirm export - click the Save button in the modal
   await clickButtonWithDebug(page, 'Save', {
@@ -138,7 +135,7 @@ export async function runAdminWorkflow(
     label: 'Waiting for Election Package Saved message',
   });
   const s7 = await screenshots.capture('admin-package-saved', 'Election package saved');
-  stepCollector?.addScreenshot(s7);
+  stepCollector.addScreenshot(s7);
 
   // Close the modal
   await page.getByRole('button', { name: 'Close' }).click();
@@ -149,7 +146,7 @@ export async function runAdminWorkflow(
   // Log out
   await logOut(page);
   const s8 = await screenshots.capture('admin-logged-out', 'Logged out');
-  stepCollector?.addScreenshot(s8);
+  stepCollector.addScreenshot(s8);
 
   // Remove USB
   await usbController.remove();

@@ -33,7 +33,6 @@ export async function runAdminTallyWorkflow(
   electionPackagePath: string,
   outputDir: string,
   dataPath: string,
-  backendPort = 3004,
   stepCollector: StepCollector,
 ): Promise<AdminTallyWorkflowResult> {
   logger.step('Running VxAdmin tally workflow');
@@ -42,7 +41,7 @@ export async function runAdminTallyWorkflow(
     width: 1920,
     height: 1200,
   });
-  const usbController = createMockUsbController({ dataPath, port: backendPort });
+  const usbController = createMockUsbController({ dataPath });
 
   // Navigate to app
   await navigateToApp(page);

@@ -210,16 +210,7 @@ export async function ensureNoAppsRunning(): Promise<void> {
 
   try {
     // Find any processes using our ports
-    const ports = [
-      APP_PORTS.frontend,
-      3001, // mark
-      3002, // scan
-      3003, // mark-scan
-      3004, // admin
-      3005, // central-scan
-    ];
-
-    for (const port of ports) {
+    for (const port of Object.values(APP_PORTS)) {
       try {
         const { stdout } = await execFileAsync('lsof', [`-ti:${port}`]);
         const pids = stdout.trim().split('\n').filter(Boolean);

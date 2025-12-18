@@ -63,7 +63,6 @@ export interface MockUsbController {
 export function createMockUsbController({
   dataPath,
 }: {
-  port?: number;
   dataPath: string;
 }): MockUsbController {
   const client: DevDockClient = createDevDockClient();

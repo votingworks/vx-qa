@@ -15,7 +15,6 @@ import { loadElectionPackage } from '../ballots/election-loader.js';
 
 // App orchestration
 import { createAppOrchestrator, ensureNoAppsRunning } from '../apps/orchestrator.js';
-import { getBackendPort } from '../apps/env-config.js';
 
 // Browser automation
 import { createBrowserSession } from '../automation/browser.js';
@@ -196,7 +195,6 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
         electionPackagePath, // Use the extracted election package ZIP
         config.output.directory,
         dataPath,
-        getBackendPort('admin'),
         adminStep,
       );
       exportedPackagePath = adminResult.exportedPackagePath;
@@ -279,7 +277,6 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
         exportedPackagePath,
         config.output.directory,
         dataPath,
-        getBackendPort('admin'),
         tallyStep,
       );
 
