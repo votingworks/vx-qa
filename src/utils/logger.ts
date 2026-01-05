@@ -15,7 +15,7 @@ export interface Logger {
   spinner(message: string): Ora;
 }
 
-const isDebug = process.env.DEBUG !== 'false' && process.env.DEBUG !== '0';
+const isDebug = process.env.DEBUG && process.env.DEBUG !== 'false' && process.env.DEBUG !== '0';
 
 export const logger: Logger = {
   info(message: string): void {
