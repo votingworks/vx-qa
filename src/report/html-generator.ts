@@ -5,11 +5,11 @@
 import Handlebars from 'handlebars';
 import { join, relative } from 'path';
 import { logger } from '../utils/logger.js';
-import type { ArtifactCollection } from '../config/types.js';
+import type { ArtifactCollection, ScreenshotArtifact } from '../config/types.js';
 import { collectFilesInDir, loadCollection, readFileAsBase64 } from './artifacts.js';
 import { generatePdfThumbnail } from './pdf-thumbnail.js';
 import { writeFile } from 'fs/promises';
-import { pathsEqual } from '../utils/paths.js';
+import { resolvePath } from '../utils/paths.js';
 import { validateTallyResults } from '../automation/admin-tally-workflow.js';
 
 /**
@@ -70,9 +70,6 @@ async function prepareReportData(
   collection: ArtifactCollection,
   outputDir: string,
 ): Promise<ReportData> {
-  const screenshotsDir = join(outputDir, 'screenshots');
-  const screenshotFiles = collectFilesInDir(screenshotsDir, ['.png', '.jpg', '.jpeg']);
-
   // Collect ballot images
   const ballotsDir = join(outputDir, 'ballots');
   const ballotFiles = collectFilesInDir(ballotsDir, ['.png', '.pdf']);
@@ -86,17 +83,6 @@ async function prepareReportData(
     })),
   );
 
-  // Collect Fujitsu thermal printer PDFs
-  const printsDir = join(outputDir, 'workspaces', 'fujitsu-thermal-printer', 'prints');
-  const printFiles = collectFilesInDir(printsDir, ['.pdf']);
-  const prints = await Promise.all(
-    printFiles.map(async (file) => ({
-      name: file.name,
-      path: file.path,
-      thumbnail: await generatePdfThumbnail(file.path),
-    })),
-  );
-
   const validationResult = await validateTallyResults(collection);
   logger.info(`Tally validation: ${validationResult.message}`);
 
@@ -105,14 +91,14 @@ async function prepareReportData(
       output.validationResult ??=
         output.type === 'scan-result'
           ? {
-              isValid: output.accepted === output.expected,
-              message:
-                output.accepted !== output.expected
-                  ? output.expected
-                    ? `Ballot sheet was expected to be accepted but was rejected.`
-                    : `Ballot sheet was expected to be rejected but was accepted.`
-                  : '',
-            }
+            isValid: output.accepted === output.expected,
+            message:
+              output.accepted !== output.expected
+                ? output.expected
+                  ? `Ballot sheet was expected to be accepted but was rejected.`
+                  : `Ballot sheet was expected to be rejected but was accepted.`
+                : '',
+          }
           : undefined;
     }
   }
@@ -142,6 +128,7 @@ async function prepareReportData(
           type: output.type,
           label: output.label,
           description: output.description,
+          path: output.type !== 'scan-result' ? relative(outputDir, resolvePath(output.path, outputDir)) : undefined,
           accepted: output.type === 'scan-result' ? output.accepted : undefined,
           expected: output.type === 'scan-result' ? output.expected : undefined,
           statusClass:
@@ -152,36 +139,29 @@ async function prepareReportData(
                 : 'error',
           thumbnail:
             output.type === 'print' && output.path
-              ? await generatePdfThumbnail(join(outputDir, output.path))
+              ? await generatePdfThumbnail(resolvePath(output.path, outputDir))
               : null,
         })),
       ),
-      screenshots: step.screenshots
-        .map((screenshot) => {
-          const file = screenshotFiles.find((f) => pathsEqual(f.path, screenshot.path));
-          return file
-            ? {
-                name: screenshot.name,
-                data: relative(outputDir, file.path),
-                caption: screenshot.step,
-              }
-            : null;
-        })
-        .filter((s) => s !== null),
+      screenshots: step.screenshots.map((screenshot) => ({
+        ...screenshot,
+        path: relative(outputDir, resolvePath(screenshot.path, outputDir)),
+      })),
       hasErrors: step.errors.length > 0,
       errors: step.errors,
     })),
   );
 
   // Calculate statistics
-  const totalScanned = collection.scanResults.length;
-  const accepted = collection.scanResults.filter((r) => r.accepted).length;
-  const rejected = collection.scanResults.filter((r) => !r.accepted).length;
-  const handledAsExpected = collection.scanResults.filter(
-    (r) => r.input.expectedAccepted === r.accepted,
+  const scanResults = collection.steps.flatMap((step) => step.outputs.filter((output) => output.type === 'scan-result'));
+  const totalScanned = scanResults.length;
+  const accepted = scanResults.filter((r) => r.accepted).length;
+  const rejected = scanResults.filter((r) => !r.accepted).length;
+  const handledAsExpected = scanResults.filter(
+    (r) => r.expected === r.accepted,
   ).length;
-  const handledUnexpectedly = collection.scanResults.filter(
-    (r) => r.input.expectedAccepted !== r.accepted,
+  const handledUnexpectedly = scanResults.filter(
+    (r) => r.expected !== r.accepted,
   ).length;
 
   // Check for validation failures
@@ -230,19 +210,18 @@ async function prepareReportData(
       handledUnexpectedly,
     },
     steps,
-    prints,
     ballots,
-    scanResults: collection.scanResults.map((r) => {
-      const expected = r.input.expectedAccepted;
+    scanResults: scanResults.map((r) => {
+      const expected = r.expected;
       const actual = r.accepted;
       const isExpected = expected === actual;
 
       return {
-        ballotStyleId: r.input.ballotStyleId,
-        ballotMode: r.input.ballotMode,
-        pattern: r.input.pattern,
+        ballotStyleId: r.ballotStyleId,
+        ballotMode: r.ballotMode,
+        pattern: r.markPattern,
         status: r.accepted ? 'Accepted' : 'Rejected',
-        reason: r.reason || '-',
+        reason: r.rejectedReason || '-',
         statusClass: isExpected ? 'success' : 'error',
         isExpected,
         expectedStatus: expected ? 'Accepted' : 'Rejected',
@@ -302,11 +281,10 @@ interface ReportData {
       statusClass?: string;
       thumbnail?: string | null;
     }[];
-    screenshots: { name: string; data: string; caption: string }[];
+    screenshots: ScreenshotArtifact[];
     hasErrors: boolean;
     errors: { step: string; message: string; timestamp: Date }[];
   }[];
-  prints: { name: string; path: string; thumbnail: string | null }[];
   ballots: { name: string; path: string; thumbnail: string | null }[];
   scanResults: {
     ballotStyleId: string;
@@ -639,8 +617,8 @@ function renderTemplate(data: ReportData): string {
           <div class="gallery">
             {{#each screenshots}}
             <div class="gallery-item">
-              <a href="{{data}}" target="_blank">
-                <img src="{{data}}" alt="{{name}}" loading="lazy">
+              <a href="{{path}}" target="_blank">
+                <img src="{{path}}" alt="{{name}}" loading="lazy">
               </a>
               <div class="caption">{{caption}}</div>
             </div>

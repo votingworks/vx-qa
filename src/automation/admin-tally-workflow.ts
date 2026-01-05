@@ -13,28 +13,21 @@ import {
   clickTextInApp,
   toggleDevDock,
 } from './browser.js';
-import { ScreenshotManager } from './screenshot.js';
 import { loadCollection, type StepCollector } from '../report/artifacts.js';
 import { ArtifactCollection, StepOutput, ValidationResult } from '../config/types.js';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-
-export interface AdminTallyWorkflowResult {
-  screenshots: string[];
-  tallyReportPath?: string;
-}
 
 /**
  * Run the VxAdmin tally workflow - import CVRs and generate reports
  */
 export async function runAdminTallyWorkflow(
   page: Page,
-  screenshots: ScreenshotManager,
   electionPackagePath: string,
   outputDir: string,
   dataPath: string,
   stepCollector: StepCollector,
-): Promise<AdminTallyWorkflowResult> {
+): Promise<void> {
   logger.step('Running VxAdmin tally workflow');
 
   await page.setViewportSize({
@@ -46,8 +39,7 @@ export async function runAdminTallyWorkflow(
   // Navigate to app
   await navigateToApp(page);
   await toggleDevDock(page);
-  const s1 = await screenshots.capture('admin-tally-locked', 'VxAdmin locked (before tally)');
-  stepCollector.addScreenshot(s1);
+  await stepCollector.captureScreenshot('admin-tally-locked', 'VxAdmin locked (before tally)');
 
   // Ensure USB is inserted with CVRs
   logger.debug('Inserting USB drive with CVRs');
@@ -56,8 +48,7 @@ export async function runAdminTallyWorkflow(
 
   // Log in as election manager
   await dipElectionManagerCardAndLogin(page, electionPackagePath);
-  const s2 = await screenshots.capture('admin-tally-logged-in', 'Logged in as Election Manager');
-  stepCollector.addScreenshot(s2);
+  await stepCollector.captureScreenshot('admin-tally-logged-in', 'Logged in as Election Manager');
 
   // Navigate to Tally section
   logger.debug('Navigating to Tally section');
@@ -84,8 +75,7 @@ export async function runAdminTallyWorkflow(
   }
 
   await page.waitForTimeout(1000);
-  const s3 = await screenshots.capture('admin-tally-page', 'Tally page');
-  stepCollector.addScreenshot(s3);
+  await stepCollector.captureScreenshot('admin-tally-page', 'Tally page');
 
   // Look for CVR files on USB and import them
   logger.debug('Looking for CVR files to import');
@@ -98,8 +88,7 @@ export async function runAdminTallyWorkflow(
   });
 
   await page.waitForTimeout(1000);
-  const s4 = await screenshots.capture('admin-tally-load-cvr-dialog', 'Load CVR dialog');
-  stepCollector.addScreenshot(s4);
+  await stepCollector.captureScreenshot('admin-tally-load-cvr-dialog', 'Load CVR dialog');
 
   // Find and click the Load button in the modal table for the first CVR file
   // Each row in the table has a "Load" button (or "Loaded" if already imported)
@@ -120,11 +109,10 @@ export async function runAdminTallyWorkflow(
       label: 'Waiting for CVRs to be loaded',
     });
 
-    const s5 = await screenshots.capture(
+    await stepCollector.captureScreenshot(
       'admin-tally-cvrs-loaded-success',
       'CVRs loaded successfully',
     );
-    stepCollector.addScreenshot(s5);
 
     // Close the modal
     await page.getByRole('button', { name: 'Close' }).click();
@@ -133,8 +121,7 @@ export async function runAdminTallyWorkflow(
   }
 
   await page.waitForTimeout(1000);
-  const s6 = await screenshots.capture('admin-tally-after-cvr-load', 'Tally page after CVR load');
-  stepCollector.addScreenshot(s6);
+  await stepCollector.captureScreenshot('admin-tally-after-cvr-load', 'Tally page after CVR load');
 
   // Navigate to Reports section
   logger.debug('Navigating to Reports section');
@@ -142,8 +129,7 @@ export async function runAdminTallyWorkflow(
   await clickTextInApp(page, 'Reports');
 
   await page.waitForTimeout(1000);
-  const s7 = await screenshots.capture('admin-reports-page', 'Reports page');
-  stepCollector.addScreenshot(s7);
+  await stepCollector.captureScreenshot('admin-reports-page', 'Reports page');
 
   // Generate tally report by clicking the link
   logger.debug('Generating tally report');
@@ -151,8 +137,7 @@ export async function runAdminTallyWorkflow(
   await clickTextInApp(page, 'Full Election Tally Report');
 
   await page.waitForTimeout(2000);
-  const s8 = await screenshots.capture('admin-tally-report-preview', 'Tally report preview');
-  stepCollector.addScreenshot(s8);
+  await stepCollector.captureScreenshot('admin-tally-report-preview', 'Tally report preview');
 
   // Export the report as PDF
   logger.debug('Exporting tally report as PDF');
@@ -167,8 +152,7 @@ export async function runAdminTallyWorkflow(
   // Wait for the PDF to be exported to USB
   await page.waitForTimeout(3000);
 
-  const s9 = await screenshots.capture('admin-tally-report-exported', 'Tally report exported');
-  stepCollector.addScreenshot(s9);
+  await stepCollector.captureScreenshot('admin-tally-report-exported', 'Tally report exported');
 
   // Close the "Tally Report Saved" modal
   await page.getByRole('button', { name: 'Close' }).click();
@@ -221,16 +205,10 @@ export async function runAdminTallyWorkflow(
 
   await page.waitForTimeout(500);
 
-  const s10 = await screenshots.capture('admin-tally-logged-out', 'Logged out after tally');
-  stepCollector.addScreenshot(s10);
+  await stepCollector.captureScreenshot('admin-tally-logged-out', 'Logged out after tally');
 
   // Remove USB
   await usbController.remove();
-
-  return {
-    screenshots: screenshots.getAll().map((s) => s.path),
-    tallyReportPath: exportedPdfPath,
-  };
 }
 
 /**

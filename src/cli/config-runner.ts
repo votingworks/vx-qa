@@ -18,7 +18,7 @@ import { createAppOrchestrator, ensureNoAppsRunning } from '../apps/orchestrator
 
 // Browser automation
 import { createBrowserSession } from '../automation/browser.js';
-import { runAdminWorkflow } from '../automation/admin-workflow.js';
+import { runAdminConfigureWorkflow } from '../automation/admin-workflow.js';
 import { runScanWorkflow, type BallotToScan } from '../automation/scan-workflow.js';
 import { runAdminTallyWorkflow } from '../automation/admin-tally-workflow.js';
 
@@ -26,7 +26,6 @@ import { runAdminTallyWorkflow } from '../automation/admin-tally-workflow.js';
 import { createArtifactCollector } from '../report/artifacts.js';
 import { generateHtmlReport } from '../report/html-generator.js';
 import { join } from 'node:path';
-import { createScreenshotManager } from '../automation/screenshot.js';
 import { State } from '../repo/state.js';
 import { writeFile } from 'node:fs/promises';
 import assert from 'node:assert';
@@ -161,7 +160,11 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     printDivider();
     logger.step('Phase 5: VxAdmin Configuration');
 
+    const { browser, page } = await createBrowserSession({
+      headless: options.headless ?? true,
+    });
     const adminStep = collector.startStep(
+      page,
       'programming-vxadmin',
       'Programming VxAdmin',
       'Configure VxAdmin with the election package and export election package for VxScan',
@@ -177,34 +180,19 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     const orchestrator = createAppOrchestrator(repoPath);
     await orchestrator.startApp('admin');
 
-    const { browser, page } = await createBrowserSession({
-      headless: options.headless ?? true,
-    });
-    const screenshots = createScreenshotManager(page, config.output.directory);
-
     // FIXME: It'd be nice to not need to hardcode this as the mock USB drive data location.
     // Perhaps the dev dock API could offer a way to add files, or we'd use a mocking approach
     // that happens more at the Linux system level.
     const dataPath = join(config.vxsuite.repoPath, 'libs/usb-drive/dev-workspace/mock-usb-data');
-    let exportedPackagePath: string;
 
     try {
-      const adminResult = await runAdminWorkflow(
+      await runAdminConfigureWorkflow(
         page,
-        screenshots,
         electionPackagePath, // Use the extracted election package ZIP
         config.output.directory,
         dataPath,
         adminStep,
       );
-      exportedPackagePath = adminResult.exportedPackagePath;
-
-      await adminStep.addOutput({
-        type: 'election-package',
-        label: 'Exported Election Package',
-        description: 'Election package exported for VxScan',
-        path: exportedPackagePath,
-      });
       adminStep.complete();
     } finally {
       await orchestrator.stopApp();
@@ -219,24 +207,30 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     try {
       // Create step for opening polls
       const openingPollsStep = collector.startStep(
+        page,
         'opening-polls',
         'Opening Polls',
         'Configure VxScan and open the polls for voting',
       );
 
+      const adminExportedPackage = adminStep.getOutputs().find((output) => output.type === 'election-package');
+
+      if (!adminExportedPackage) {
+        throw new Error('VxAdmin did not export an election package');
+      }
+
       openingPollsStep.addInput({
         type: 'election-package',
         label: 'Election Package',
         description: `${election.title}`,
-        path: exportedPackagePath,
+        path: adminExportedPackage.path,
       });
 
-      const scanResult = await runScanWorkflow(
+      await runScanWorkflow(
         repoPath,
         page,
-        screenshots,
         electionPackage,
-        exportedPackagePath,
+        adminExportedPackage.path,
         electionPackagePath, // Use the extracted election package ZIP
         ballotsToScan,
         config.output.directory,
@@ -244,8 +238,6 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
         openingPollsStep,
         collector, // Pass the collector so steps can be created on-demand
       );
-
-      collector.addScanResults(scanResult.scanResults);
     } finally {
       await orchestrator.stopApp();
     }
@@ -259,22 +251,15 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     try {
       // Create step for tallying CVRs
       const tallyStep = collector.startStep(
+        page,
         'tallying-cvrs',
         'Tallying CVRs in VxAdmin',
         'Import CVRs from VxScan and generate tally reports',
       );
 
-      tallyStep.addInput({
-        type: 'election-package',
-        label: 'Election Package',
-        description: `${election.title}`,
-        path: exportedPackagePath,
-      });
-
       await runAdminTallyWorkflow(
         page,
-        screenshots,
-        exportedPackagePath,
+        electionPackagePath,
         config.output.directory,
         dataPath,
         tallyStep,
@@ -306,7 +291,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     logger.info(`Output: ${config.output.directory}`);
 
     // Print scan summary
-    const results = collector.getCollection().scanResults;
+    const results = collector.getCollection().steps.flatMap((step) => step.outputs.filter((output) => output.type === 'scan-result'));
     const accepted = results.filter((r) => r.accepted).length;
     const rejected = results.filter((r) => !r.accepted).length;
     logger.info(`Scan results: ${accepted} accepted, ${rejected} rejected`);

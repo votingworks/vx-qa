@@ -14,27 +14,20 @@ import {
   clickButtonWithDebug,
   toggleDevDock,
 } from './browser.js';
-import { ScreenshotManager } from './screenshot.js';
 import { basename, join } from 'node:path';
 import type { StepCollector } from '../report/artifacts.js';
 import { readdir, readFile, stat } from 'node:fs/promises';
 
-export interface AdminWorkflowResult {
-  exportedPackagePath: string;
-  screenshots: string[];
-}
-
 /**
  * Run the VxAdmin configuration workflow
  */
-export async function runAdminWorkflow(
+export async function runAdminConfigureWorkflow(
   page: Page,
-  screenshots: ScreenshotManager,
   electionPackagePath: string,
   outputDir: string,
   dataPath: string,
   stepCollector: StepCollector,
-): Promise<AdminWorkflowResult> {
+): Promise<void> {
   logger.step('Running VxAdmin workflow');
 
   await page.setViewportSize({
@@ -46,13 +39,11 @@ export async function runAdminWorkflow(
   // Navigate to app
   await navigateToApp(page);
   await toggleDevDock(page);
-  const s1 = await screenshots.capture('admin-locked', 'Initial locked screen');
-  stepCollector.addScreenshot(s1);
+  await stepCollector.captureScreenshot('admin-locked', 'Initial locked screen');
 
   // Log in as system administrator
   await dipSystemAdministratorCardAndLogin(page, electionPackagePath);
-  const s2 = await screenshots.capture('admin-unconfigured', 'Logged in, unconfigured');
-  stepCollector.addScreenshot(s2);
+  await stepCollector.captureScreenshot('admin-unconfigured', 'Logged in, unconfigured');
 
   // Need to load election from USB
   logger.debug('Loading election from USB');
@@ -72,8 +63,7 @@ export async function runAdminWorkflow(
   await usbController.insert();
   await page.waitForTimeout(2000); // Give more time for USB detection
 
-  const s3 = await screenshots.capture('admin-usb-detected', 'USB drive detected');
-  stepCollector.addScreenshot(s3);
+  await stepCollector.captureScreenshot('admin-usb-detected', 'USB drive detected');
 
   // Wait for package to appear and click it (in main app, not dev-dock)
   await waitForTextInApp(page, packageFilename, { timeout: 15000 });
@@ -90,8 +80,7 @@ export async function runAdminWorkflow(
     label: 'Waiting for election to be configured',
   });
 
-  const s4 = await screenshots.capture('admin-election-loaded', 'Election loaded');
-  stepCollector.addScreenshot(s4);
+  await stepCollector.captureScreenshot('admin-election-loaded', 'Election loaded');
 
   // Verify election is configured - look for the Election nav link
   await waitForTextWithDebug(page, 'Election', {
@@ -99,8 +88,7 @@ export async function runAdminWorkflow(
     outputDir,
     label: 'Looking for Election nav link',
   });
-  const s5 = await screenshots.capture('admin-configured', 'Election configured');
-  stepCollector.addScreenshot(s5);
+  await stepCollector.captureScreenshot('admin-configured', 'Election configured');
 
   // Export election package for VxScan
   logger.debug('Exporting election package');
@@ -134,8 +122,7 @@ export async function runAdminWorkflow(
     outputDir,
     label: 'Waiting for Election Package Saved message',
   });
-  const s7 = await screenshots.capture('admin-package-saved', 'Election package saved');
-  stepCollector.addScreenshot(s7);
+  await stepCollector.captureScreenshot('admin-package-saved', 'Election package saved');
 
   // Close the modal
   await page.getByRole('button', { name: 'Close' }).click();
@@ -143,18 +130,19 @@ export async function runAdminWorkflow(
   // Get the exported package path
   const exportedPackagePath = await getExportedPackagePath(usbController.getDataPath());
 
+  await stepCollector.addOutput({
+    type: 'election-package',
+    label: 'Exported Election Package',
+    description: 'Election package exported for VxScan',
+    path: exportedPackagePath,
+  });
+
   // Log out
   await logOut(page);
-  const s8 = await screenshots.capture('admin-logged-out', 'Logged out');
-  stepCollector.addScreenshot(s8);
+  await stepCollector.captureScreenshot('admin-logged-out', 'Logged out');
 
   // Remove USB
   await usbController.remove();
-
-  return {
-    exportedPackagePath,
-    screenshots: screenshots.getAll().map((s) => s.path),
-  };
 }
 
 /**

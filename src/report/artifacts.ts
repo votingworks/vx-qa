@@ -3,20 +3,22 @@
  */
 
 import { existsSync, mkdirSync, readdirSync, statSync, readFileSync } from 'fs';
-import { join, basename, extname } from 'path';
+import { join, basename, extname, isAbsolute } from 'path';
 import { logger } from '../utils/logger.js';
 import type {
   ArtifactCollection,
   BallotArtifact,
-  ScreenshotArtifact,
-  ScanResult,
   ErrorArtifact,
   QARunConfig,
   WorkflowStep,
   StepInput,
   StepOutput,
+  ScreenshotArtifact,
 } from '../config/types.js';
 import { copyFile, readFile } from 'fs/promises';
+import assert from 'assert';
+import { Page } from '@playwright/test';
+import { createScreenshotManager } from '../automation/screenshot.js';
 
 export interface StepCollector {
   /**
@@ -30,9 +32,14 @@ export interface StepCollector {
   addOutput(output: StepOutput): Promise<void>;
 
   /**
-   * Add a screenshot to the current step
+   * Gets all added outputs
    */
-  addScreenshot(artifact: ScreenshotArtifact): void;
+  getOutputs(): StepOutput[];
+
+  /**
+   * Capture a screenshot for the current step
+   */
+  captureScreenshot(name: string, label: string): Promise<ScreenshotArtifact>;
 
   /**
    * Log an error in the current step
@@ -52,16 +59,6 @@ export interface ArtifactCollector {
   addBallot(artifact: BallotArtifact): void;
 
   /**
-   * Add a screenshot artifact
-   */
-  addScreenshot(artifact: ScreenshotArtifact): void;
-
-  /**
-   * Add scan results
-   */
-  addScanResults(results: ScanResult[]): void;
-
-  /**
    * Log an error
    */
   logError(error: Error, step: string): void;
@@ -69,7 +66,7 @@ export interface ArtifactCollector {
   /**
    * Start a new workflow step
    */
-  startStep(id: string, name: string, description: string): StepCollector;
+  startStep(page: Page, id: string, name: string, description: string): StepCollector;
 
   /**
    * Mark the run as complete
@@ -97,6 +94,7 @@ export interface ArtifactCollector {
  * Create an artifact collector
  */
 export function createArtifactCollector(outputDir: string, config: QARunConfig): ArtifactCollector {
+  assert(isAbsolute(outputDir), 'outputDir must be absolute');
   const runId = basename(outputDir);
   const startTime = new Date();
 
@@ -106,7 +104,6 @@ export function createArtifactCollector(outputDir: string, config: QARunConfig):
     config,
     ballots: [],
     screenshots: [],
-    scanResults: [],
     errors: [],
     steps: [],
   };
@@ -129,14 +126,6 @@ export function createArtifactCollector(outputDir: string, config: QARunConfig):
       logger.debug(`Added ballot artifact: ${artifact.ballotStyleId}`);
     },
 
-    addScreenshot(artifact: ScreenshotArtifact): void {
-      collection.screenshots.push(artifact);
-    },
-
-    addScanResults(results: ScanResult[]): void {
-      collection.scanResults.push(...results);
-    },
-
     logError(error: Error, step: string): void {
       const artifact: ErrorArtifact = {
         message: error.message,
@@ -148,7 +137,7 @@ export function createArtifactCollector(outputDir: string, config: QARunConfig):
       logger.error(`Error in ${step}: ${error.message} ${error.stack}`);
     },
 
-    startStep(id: string, name: string, description: string): StepCollector {
+    startStep(page: Page, id: string, name: string, description: string): StepCollector {
       const step: WorkflowStep = {
         id,
         name,
@@ -163,8 +152,12 @@ export function createArtifactCollector(outputDir: string, config: QARunConfig):
       collection.steps.push(step);
       logger.debug(`Started step: ${name}`);
 
-      const stepDir = join(outputDir, 'steps', id.replace(/[^a-z0-9]+/, '-'));
+      const stepIndex = collection.steps.length - 1;
+      const stepIndexStr = stepIndex.toString().padStart(2, '0');
+      const stepDir = join(outputDir, 'steps', `${stepIndexStr}-${id.replace(/[^a-z0-9]+/g, '-')}`);
       mkdirSync(stepDir, { recursive: true });
+
+      const screenshots = createScreenshotManager(page, stepDir);
 
       return {
         addInput(input: StepInput): void {
@@ -172,17 +165,24 @@ export function createArtifactCollector(outputDir: string, config: QARunConfig):
         },
 
         async addOutput(output: StepOutput): Promise<void> {
-          step.outputs.push(output);
-          if (output.type !== 'scan-result') {
-            const stepCopyPath = join(stepDir, basename(output.path));
+          if (output.type !== 'scan-result' && output.path) {
+            const fileName = basename(output.path);
+            const stepCopyPath = join(stepDir, fileName);
             await copyFile(output.path, stepCopyPath);
             output.path = stepCopyPath;
           }
+
+          step.outputs.push(output);
         },
 
-        addScreenshot(artifact: ScreenshotArtifact): void {
-          step.screenshots.push(artifact);
-          collection.screenshots.push(artifact);
+        getOutputs() {
+          return step.outputs;
+        },
+
+        async captureScreenshot(name, label): Promise<ScreenshotArtifact> {
+          const screenshot = await screenshots.capture(name, label);
+          step.screenshots.push(screenshot);
+          return screenshot;
         },
 
         logError(error: Error): void {

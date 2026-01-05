@@ -12,12 +12,7 @@ export interface ScreenshotManager {
   /**
    * Take a screenshot at a named step
    */
-  capture(name: string, step: string): Promise<ScreenshotArtifact>;
-
-  /**
-   * Take a screenshot of a modal/dialog
-   */
-  captureModal(name: string, step: string): Promise<ScreenshotArtifact>;
+  capture(name: string, label: string): Promise<ScreenshotArtifact>;
 
   /**
    * Get all captured screenshots
@@ -38,7 +33,7 @@ export function createScreenshotManager(page: Page, outputDir: string): Screensh
   }
 
   return {
-    async capture(name: string, step: string): Promise<ScreenshotArtifact> {
+    async capture(name: string, label: string): Promise<ScreenshotArtifact> {
       const filename = `${screenshots.length.toString().padStart(3, '0')}-${name}.png`;
       const path = join(screenshotsDir, filename);
 
@@ -49,45 +44,13 @@ export function createScreenshotManager(page: Page, outputDir: string): Screensh
 
       const artifact: ScreenshotArtifact = {
         name,
-        step,
+        label,
         path,
         timestamp: new Date(),
       };
 
       screenshots.push(artifact);
       logger.info(`Screenshot: ${name}`);
-
-      return artifact;
-    },
-
-    async captureModal(name: string, step: string): Promise<ScreenshotArtifact> {
-      const filename = `${screenshots.length.toString().padStart(3, '0')}-${name}.png`;
-      const path = join(screenshotsDir, filename);
-
-      // Try to screenshot just the modal dialog
-      try {
-        const dialog = page.getByRole('alertdialog');
-        await dialog.screenshot({
-          path,
-          animations: 'disabled',
-        });
-      } catch {
-        // Fall back to full page screenshot
-        await page.screenshot({
-          path,
-          animations: 'disabled',
-        });
-      }
-
-      const artifact: ScreenshotArtifact = {
-        name,
-        step,
-        path,
-        timestamp: new Date(),
-      };
-
-      screenshots.push(artifact);
-      logger.debug(`Screenshot (modal): ${name}`);
 
       return artifact;
     },
