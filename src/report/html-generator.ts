@@ -91,14 +91,14 @@ async function prepareReportData(
       output.validationResult ??=
         output.type === 'scan-result'
           ? {
-            isValid: output.accepted === output.expected,
-            message:
-              output.accepted !== output.expected
-                ? output.expected
-                  ? `Ballot sheet was expected to be accepted but was rejected.`
-                  : `Ballot sheet was expected to be rejected but was accepted.`
-                : '',
-          }
+              isValid: output.accepted === output.expected,
+              message:
+                output.accepted !== output.expected
+                  ? output.expected
+                    ? `Ballot sheet was expected to be accepted but was rejected.`
+                    : `Ballot sheet was expected to be rejected but was accepted.`
+                  : '',
+            }
           : undefined;
     }
   }
@@ -128,7 +128,10 @@ async function prepareReportData(
           type: output.type,
           label: output.label,
           description: output.description,
-          path: output.type !== 'scan-result' ? relative(outputDir, resolvePath(output.path, outputDir)) : undefined,
+          path:
+            output.type !== 'scan-result'
+              ? relative(outputDir, resolvePath(output.path, outputDir))
+              : undefined,
           accepted: output.type === 'scan-result' ? output.accepted : undefined,
           expected: output.type === 'scan-result' ? output.expected : undefined,
           statusClass:
@@ -153,16 +156,14 @@ async function prepareReportData(
   );
 
   // Calculate statistics
-  const scanResults = collection.steps.flatMap((step) => step.outputs.filter((output) => output.type === 'scan-result'));
+  const scanResults = collection.steps.flatMap((step) =>
+    step.outputs.filter((output) => output.type === 'scan-result'),
+  );
   const totalScanned = scanResults.length;
   const accepted = scanResults.filter((r) => r.accepted).length;
   const rejected = scanResults.filter((r) => !r.accepted).length;
-  const handledAsExpected = scanResults.filter(
-    (r) => r.expected === r.accepted,
-  ).length;
-  const handledUnexpectedly = scanResults.filter(
-    (r) => r.expected !== r.accepted,
-  ).length;
+  const handledAsExpected = scanResults.filter((r) => r.expected === r.accepted).length;
+  const handledUnexpectedly = scanResults.filter((r) => r.expected !== r.accepted).length;
 
   // Check for validation failures
   const validationFailures: Array<{ step: string; message: string; stepId: string }> = [];

@@ -2,7 +2,7 @@
  * Environment configuration for mock hardware
  */
 
-import assert from "node:assert";
+import assert from 'node:assert';
 
 /**
  * Environment variables to enable mock hardware

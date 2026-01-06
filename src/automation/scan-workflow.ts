@@ -9,11 +9,7 @@ import {
   insertElectionManagerCardAndLogin,
   insertPollWorkerCardAndLogin as insertPollWorkerCard,
 } from './auth-helpers.js';
-import {
-  toggleDevDock,
-  clickButtonWithDebug,
-  waitForTextInApp,
-} from './browser.js';
+import { toggleDevDock, clickButtonWithDebug, waitForTextInApp } from './browser.js';
 import type { BallotPattern } from '../config/types.js';
 import type { StepCollector, ArtifactCollector } from '../report/artifacts.js';
 import { basename, join } from 'path';
@@ -21,6 +17,7 @@ import { createMockScannerController } from '../mock-hardware/scanner.js';
 import { generateMarkedBallotForPattern } from '../ballots/ballot-marker.js';
 import { BallotMode, Election, ElectionPackage, VotesDict } from '../ballots/election-loader.js';
 import { copyFile, readdir, readFile, writeFile } from 'node:fs/promises';
+import assert from 'node:assert';
 import { PDFDocument } from 'pdf-lib';
 
 export interface BallotToScan {
@@ -84,8 +81,30 @@ export async function runScanWorkflow(
   const electionManagerCard = await insertElectionManagerCardAndLogin(page, electionPath);
   await openingPollsStep.captureScreenshot('scan-unconfigured', 'Logged in');
 
+  const precinctsForAllBallots = new Set(election.precincts.map((p) => p.id));
+
+  for (const ballotToScan of ballotsToScan) {
+    const ballotStylePrecincts = election.ballotStyles.find(
+      ({ id }) => id === ballotToScan.ballotStyleId,
+    )?.precincts;
+    assert(ballotStylePrecincts, `Invalid ballot style ID: ${ballotToScan.ballotStyleId}`);
+
+    for (const precinct of election.precincts) {
+      if (!ballotStylePrecincts.includes(precinct.id)) {
+        precinctsForAllBallots.delete(precinct.id);
+      }
+    }
+  }
+
+  const precinctIdToSelect = precinctsForAllBallots.values().next().value;
+  const precinctToSelect = precinctIdToSelect
+    ? election.precincts.find(({ id }) => id === precinctIdToSelect)
+    : undefined;
+
   await page.getByText('Select a precinct…').click({ force: true });
-  await page.getByText('All Precincts', { exact: true }).click({ force: true });
+  await page
+    .getByText(precinctToSelect?.name ?? 'All Precincts', { exact: true })
+    .click({ force: true });
   await page.getByText('Official Ballot Mode').click();
 
   await openingPollsStep.captureScreenshot('scan-configured', 'Configured');
@@ -132,14 +151,7 @@ export async function runScanWorkflow(
       `Scan ${ballot.pattern} ballot for ballot style ${ballot.ballotStyleId} in ${ballot.ballotMode} mode`,
     );
 
-    await scanBallot(
-      repoPath,
-      election,
-      page,
-      scannerController,
-      ballot,
-      ballotStep,
-    );
+    await scanBallot(repoPath, election, page, scannerController, ballot, ballotStep);
 
     // Mark ballot step as complete
     ballotStep.complete();
@@ -179,6 +191,34 @@ export async function runScanWorkflow(
 
   // Mark closing polls step as complete
   closingPollsStep.complete();
+
+  const unconfiguringStep = collector.startStep(
+    page,
+    'unconfiguring',
+    'Unconfiguring',
+    'Unconfigure scanner to prepare for the next precinct',
+  );
+
+  // Unconfigure
+  const unconfiguringElectionManagerCard = await insertElectionManagerCardAndLogin(
+    page,
+    electionPackagePath,
+  );
+
+  await page.getByText('Unconfigure Machine').click();
+
+  const confirmUnconfigureButton = page.getByText('Delete All Election Data');
+  await confirmUnconfigureButton.waitFor({ state: 'visible' });
+
+  await unconfiguringStep.captureScreenshot('confirm-unconfigure', 'Confirming unconfigure');
+  await confirmUnconfigureButton.click();
+
+  await waitForTextInApp(page, 'Insert a USB drive containing an election package');
+  await unconfiguringElectionManagerCard.removeCard();
+  await waitForTextInApp(page, 'Insert an election manager card to configure VxScan');
+  await unconfiguringStep.captureScreenshot('unconfigured', 'VxScan unconfigured');
+
+  unconfiguringStep.complete();
 }
 
 function votesWithOnlyIds(votes: VotesDict): Record<string, string[]> {

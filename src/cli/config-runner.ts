@@ -11,7 +11,7 @@ import { cloneOrUpdateRepo, getCurrentCommit } from '../repo/clone.js';
 import { bootstrapRepo, checkPnpmAvailable, checkNodeVersion } from '../repo/bootstrap.js';
 
 // Election package loading
-import { loadElectionPackage } from '../ballots/election-loader.js';
+import { getBallotStylesForPrecinct, loadElectionPackage } from '../ballots/election-loader.js';
 
 // App orchestration
 import { createAppOrchestrator, ensureNoAppsRunning } from '../apps/orchestrator.js';
@@ -204,40 +204,51 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
 
     await orchestrator.startApp('scan');
 
+    const ballotsToScanByPrecinct = new Map(
+      election.precincts.map((p) => {
+        const ballotStyleIds = getBallotStylesForPrecinct(election, p.id).map((bs) => bs.id);
+        return [p, ballotsToScan.filter((b) => ballotStyleIds.includes(b.ballotStyleId))] as const;
+      }),
+    );
+
     try {
-      // Create step for opening polls
-      const openingPollsStep = collector.startStep(
-        page,
-        'opening-polls',
-        'Opening Polls',
-        'Configure VxScan and open the polls for voting',
-      );
+      for (const [precinct, precinctBallotsToScan] of ballotsToScanByPrecinct) {
+        // Create step for opening polls
+        const openingPollsStep = collector.startStep(
+          page,
+          'opening-polls',
+          'Opening Polls',
+          `Configure VxScan and open the polls for voting in precinct "${precinct.name}"`,
+        );
 
-      const adminExportedPackage = adminStep.getOutputs().find((output) => output.type === 'election-package');
+        const adminExportedPackage = adminStep
+          .getOutputs()
+          .find((output) => output.type === 'election-package');
 
-      if (!adminExportedPackage) {
-        throw new Error('VxAdmin did not export an election package');
+        if (!adminExportedPackage) {
+          throw new Error('VxAdmin did not export an election package');
+        }
+
+        openingPollsStep.addInput({
+          type: 'election-package',
+          label: 'Election Package',
+          description: `${election.title}`,
+          path: adminExportedPackage.path,
+        });
+
+        await runScanWorkflow(
+          repoPath,
+          page,
+          electionPackage,
+          adminExportedPackage.path,
+          electionPackagePath, // Use the extracted election package ZIP
+          precinctBallotsToScan,
+          config.output.directory,
+          dataPath,
+          openingPollsStep,
+          collector, // Pass the collector so steps can be created on-demand
+        );
       }
-
-      openingPollsStep.addInput({
-        type: 'election-package',
-        label: 'Election Package',
-        description: `${election.title}`,
-        path: adminExportedPackage.path,
-      });
-
-      await runScanWorkflow(
-        repoPath,
-        page,
-        electionPackage,
-        adminExportedPackage.path,
-        electionPackagePath, // Use the extracted election package ZIP
-        ballotsToScan,
-        config.output.directory,
-        dataPath,
-        openingPollsStep,
-        collector, // Pass the collector so steps can be created on-demand
-      );
     } finally {
       await orchestrator.stopApp();
     }
@@ -259,6 +270,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
 
       await runAdminTallyWorkflow(
         page,
+        election,
         electionPackagePath,
         config.output.directory,
         dataPath,
@@ -291,7 +303,9 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     logger.info(`Output: ${config.output.directory}`);
 
     // Print scan summary
-    const results = collector.getCollection().steps.flatMap((step) => step.outputs.filter((output) => output.type === 'scan-result'));
+    const results = collector
+      .getCollection()
+      .steps.flatMap((step) => step.outputs.filter((output) => output.type === 'scan-result'));
     const accepted = results.filter((r) => r.accepted).length;
     const rejected = results.filter((r) => !r.accepted).length;
     logger.info(`Scan results: ${accepted} accepted, ${rejected} rejected`);

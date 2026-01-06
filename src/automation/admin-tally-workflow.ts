@@ -17,12 +17,14 @@ import { loadCollection, type StepCollector } from '../report/artifacts.js';
 import { ArtifactCollection, StepOutput, ValidationResult } from '../config/types.js';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { Election } from '../ballots/election-loader.js';
 
 /**
  * Run the VxAdmin tally workflow - import CVRs and generate reports
  */
 export async function runAdminTallyWorkflow(
   page: Page,
+  election: Election,
   electionPackagePath: string,
   outputDir: string,
   dataPath: string,
@@ -80,26 +82,32 @@ export async function runAdminTallyWorkflow(
   // Look for CVR files on USB and import them
   logger.debug('Looking for CVR files to import');
 
-  // Click the "Load CVRs" button
-  await clickButtonWithDebug(page, 'Load CVRs', {
-    timeout: 10000,
-    outputDir,
-    label: 'Clicking Load CVRs button',
-  });
+  for (let i = 0; i <= election.precincts.length + 1; i += 1) {
+    if (i === election.precincts.length + 1) {
+      throw new Error('Expected 1 VxScan per precinct, but found more than that');
+    }
 
-  await page.waitForTimeout(1000);
-  await stepCollector.captureScreenshot('admin-tally-load-cvr-dialog', 'Load CVR dialog');
+    await stepCollector.captureScreenshot('admin-tally-before-load-cvrs', 'Before click Load CVRs');
 
-  // Find and click the Load button in the modal table for the first CVR file
-  // Each row in the table has a "Load" button (or "Loaded" if already imported)
-  const modal = page.locator('[role="alertdialog"]');
-  const loadButtons = modal.getByRole('button', { name: 'Load', exact: true });
+    // Click the "Load CVRs" button
+    await page.getByText('Load CVRs').click();
+    await page.waitForTimeout(1000);
+    await stepCollector.captureScreenshot('admin-tally-load-cvr-dialog', 'Load CVR dialog');
 
-  const loadButtonCount = await loadButtons.count();
-  logger.debug(`Found ${loadButtonCount} Load buttons in CVR modal`);
+    // Find and click the Load button in the modal table for the first CVR file
+    // Each row in the table has a "Load" button (or "Loaded" if already imported)
+    const modal = page.locator('[role="alertdialog"]');
+    const loadButtons = modal.getByRole('button', { name: 'Load', exact: true });
 
-  if (loadButtonCount > 0) {
-    // Click the first Load button
+    const loadButtonCount = await loadButtons.count();
+    logger.debug(`Found ${loadButtonCount} Load buttons in CVR modal`);
+
+    if (loadButtonCount === 0) {
+      // No more to load, close the modal
+      await modal.getByText('Cancel').click();
+      break;
+    }
+
     await loadButtons.first().click();
 
     // Wait for success message "X New CVR Loaded" or "X New CVRs Loaded"
@@ -114,10 +122,8 @@ export async function runAdminTallyWorkflow(
       'CVRs loaded successfully',
     );
 
-    // Close the modal
+    // Close the success dialog
     await page.getByRole('button', { name: 'Close' }).click();
-  } else {
-    logger.warn('No Load buttons found in CVR modal - CVRs may already be loaded');
   }
 
   await page.waitForTimeout(1000);
@@ -409,13 +415,13 @@ export async function validateTallyResults(
     tallyCsvOutput.validationResult =
       mismatches.length > 0
         ? {
-          isValid: false,
-          message: `Tally mismatch: ${mismatches.join('; ')}`,
-        }
+            isValid: false,
+            message: `Tally mismatch: ${mismatches.join('; ')}`,
+          }
         : {
-          isValid: true,
-          message: `Tally validated: ${totalExpectedVotes} vote(s) match CSV exactly`,
-        };
+            isValid: true,
+            message: `Tally validated: ${totalExpectedVotes} vote(s) match CSV exactly`,
+          };
     return tallyCsvOutput.validationResult;
   } catch (error) {
     throw new Error(
