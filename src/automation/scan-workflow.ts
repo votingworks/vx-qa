@@ -10,12 +10,12 @@ import {
   insertPollWorkerCardAndLogin as insertPollWorkerCard,
 } from './auth-helpers.js';
 import { toggleDevDock, clickButtonWithDebug, waitForTextInApp } from './browser.js';
-import type { BallotPattern } from '../config/types.js';
+import type { BallotPattern, PrecinctSelection } from '../config/types.js';
 import type { StepCollector, ArtifactCollector } from '../report/artifacts.js';
 import { basename, join } from 'path';
 import { createMockScannerController } from '../mock-hardware/scanner.js';
 import { generateMarkedBallotForPattern } from '../ballots/ballot-marker.js';
-import { BallotMode, Election, ElectionPackage, VotesDict } from '../ballots/election-loader.js';
+import { BallotMode, BallotType, Election, ElectionPackage, VotesDict } from '../ballots/election-loader.js';
 import { copyFile, readdir, readFile, writeFile } from 'node:fs/promises';
 import assert from 'node:assert';
 import { PDFDocument } from 'pdf-lib';
@@ -23,6 +23,7 @@ import { PDFDocument } from 'pdf-lib';
 export interface BallotToScan {
   ballotStyleId: string;
   ballotMode: BallotMode;
+  ballotType: BallotType;
   pattern: BallotPattern;
   pdfPath: string;
   expectedAccepted: boolean;
@@ -37,6 +38,7 @@ export async function runScanWorkflow(
   electionPackage: ElectionPackage,
   electionPackagePath: string,
   electionPath: string,
+  precinctSelection: PrecinctSelection,
   ballotsToScan: BallotToScan[],
   outputDir: string,
   dataPath: string,
@@ -96,14 +98,13 @@ export async function runScanWorkflow(
     }
   }
 
-  const precinctIdToSelect = precinctsForAllBallots.values().next().value;
-  const precinctToSelect = precinctIdToSelect
-    ? election.precincts.find(({ id }) => id === precinctIdToSelect)
-    : undefined;
+  const precinctToSelect = precinctSelection.kind === 'AllPrecincts' ? 'All Precincts' :
+    election.precincts.find(({ id }) => id === precinctSelection.precinctId)?.name;
+  assert(precinctToSelect, 'Invalid precinct selection');
 
   await page.getByText('Select a precinct…').click({ force: true });
   await page
-    .getByText(precinctToSelect?.name ?? 'All Precincts', { exact: true })
+    .getByText(precinctToSelect, { exact: true })
     .click({ force: true });
   await page.getByText('Official Ballot Mode').click();
 
@@ -147,7 +148,7 @@ export async function runScanWorkflow(
     const ballotStep = collector.startStep(
       page,
       `scan-ballot-${index + 1}`,
-      `Scan Ballot ${index + 1}: ${ballot.ballotStyleId} - ${ballot.pattern} (${ballot.ballotMode})`,
+      `Scan Ballot ${index + 1}: ${ballot.ballotStyleId} - ${ballot.pattern} (${ballot.ballotMode} ${ballot.ballotType})`,
       `Scan ${ballot.pattern} ballot for ballot style ${ballot.ballotStyleId} in ${ballot.ballotMode} mode`,
     );
 
@@ -350,7 +351,7 @@ async function scanBallot(
     // If rejected, handle immediately and stop scanning more sheets
     if (
       messageText !== 'Your ballot was counted!' &&
-      messageText.toLowerCase().includes('ballot')
+      /ballot|wrong/i.test(messageText)
     ) {
       logger.info(`Ballot rejected after sheet ${sheetIndex + 1}/${sheetCount}: ${messageText}`);
 

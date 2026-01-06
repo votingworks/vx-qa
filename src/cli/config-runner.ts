@@ -122,6 +122,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
       ballotsToScan.push({
         ballotStyleId: ballot.ballotStyleId,
         ballotMode: ballot.ballotMode,
+        ballotType: ballot.ballotType,
         pattern: 'blank',
         pdfPath,
         expectedAccepted: ballot.ballotMode === 'official',
@@ -132,6 +133,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
           {
             ballotStyleId: ballot.ballotStyleId,
             ballotMode: ballot.ballotMode,
+            ballotType: ballot.ballotType,
             pattern: 'valid',
             pdfPath,
             expectedAccepted: true,
@@ -139,6 +141,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
           {
             ballotStyleId: ballot.ballotStyleId,
             ballotMode: ballot.ballotMode,
+            ballotType: ballot.ballotType,
             pattern: 'overvote',
             pdfPath,
             expectedAccepted: false,
@@ -236,12 +239,29 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
           path: adminExportedPackage.path,
         });
 
+        const otherPrecinctAndBallotsToScan = [...ballotsToScanByPrecinct].find(([otherPrecinct,]) => otherPrecinct.id !== precinct.id);
+
+        if (otherPrecinctAndBallotsToScan) {
+          // Add a ballot from another precinct to ensure it's rejected.
+          const ballotToScan = otherPrecinctAndBallotsToScan[1].find((b) => b.expectedAccepted);
+
+          if (ballotToScan) {
+            precinctBallotsToScan.push({
+              ...ballotToScan,
+              expectedAccepted: false,
+            });
+          }
+        } else {
+          assert(election.precincts.length === 1);
+        }
+
         await runScanWorkflow(
           repoPath,
           page,
           electionPackage,
           adminExportedPackage.path,
           electionPackagePath, // Use the extracted election package ZIP
+          { kind: 'SinglePrecinct', precinctId: precinct.id },
           precinctBallotsToScan,
           config.output.directory,
           dataPath,

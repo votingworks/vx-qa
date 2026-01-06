@@ -77,47 +77,47 @@ export interface ValidationResult {
 /** Output from a workflow step */
 export type StepOutput =
   | {
-      type: 'ballot';
-      label: string;
-      description?: string;
-      path: string;
-      validationResult?: ValidationResult;
-    }
+    type: 'ballot';
+    label: string;
+    description?: string;
+    path: string;
+    validationResult?: ValidationResult;
+  }
   | {
-      type: 'election-package';
-      label: string;
-      description?: string;
-      path: string;
-      validationResult?: ValidationResult;
-    }
+    type: 'election-package';
+    label: string;
+    description?: string;
+    path: string;
+    validationResult?: ValidationResult;
+  }
   | {
-      type: 'scan-result';
-      label: string;
-      description?: string;
-      accepted: boolean;
-      expected: boolean;
-      rejectedReason?: string;
-      screenshotPath: string;
-      ballotStyleId: string;
-      ballotMode: BallotMode;
-      markPattern: BallotPattern;
-      votes: VotesDict;
-      validationResult?: ValidationResult;
-    }
+    type: 'scan-result';
+    label: string;
+    description?: string;
+    accepted: boolean;
+    expected: boolean;
+    rejectedReason?: string;
+    screenshotPath: string;
+    ballotStyleId: string;
+    ballotMode: BallotMode;
+    markPattern: BallotPattern;
+    votes: VotesDict;
+    validationResult?: ValidationResult;
+  }
   | {
-      type: 'print';
-      label: string;
-      description?: string;
-      path: string;
-      validationResult?: ValidationResult;
-    }
+    type: 'print';
+    label: string;
+    description?: string;
+    path: string;
+    validationResult?: ValidationResult;
+  }
   | {
-      type: 'report';
-      label: string;
-      description?: string;
-      path: string;
-      validationResult?: ValidationResult;
-    };
+    type: 'report';
+    label: string;
+    description?: string;
+    path: string;
+    validationResult?: ValidationResult;
+  };
 
 /** Collected artifacts from a QA run */
 export interface ArtifactCollection {
@@ -152,3 +152,15 @@ export interface ErrorArtifact {
   timestamp: Date;
   stack?: string;
 }
+
+export type PrecinctSelectionKind = 'SinglePrecinct' | 'AllPrecincts';
+
+export interface SinglePrecinctSelection {
+  kind: 'SinglePrecinct';
+  precinctId: string;
+}
+export interface AllPrecinctsSelection {
+  kind: 'AllPrecincts';
+}
+
+export type PrecinctSelection = SinglePrecinctSelection | AllPrecinctsSelection;
