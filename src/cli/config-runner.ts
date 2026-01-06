@@ -239,7 +239,9 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
           path: adminExportedPackage.path,
         });
 
-        const otherPrecinctAndBallotsToScan = [...ballotsToScanByPrecinct].find(([otherPrecinct,]) => otherPrecinct.id !== precinct.id);
+        const otherPrecinctAndBallotsToScan = [...ballotsToScanByPrecinct].find(
+          ([otherPrecinct]) => otherPrecinct.id !== precinct.id,
+        );
 
         if (otherPrecinctAndBallotsToScan) {
           // Add a ballot from another precinct to ensure it's rejected.

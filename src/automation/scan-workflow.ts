@@ -15,7 +15,13 @@ import type { StepCollector, ArtifactCollector } from '../report/artifacts.js';
 import { basename, join } from 'path';
 import { createMockScannerController } from '../mock-hardware/scanner.js';
 import { generateMarkedBallotForPattern } from '../ballots/ballot-marker.js';
-import { BallotMode, BallotType, Election, ElectionPackage, VotesDict } from '../ballots/election-loader.js';
+import {
+  BallotMode,
+  BallotType,
+  Election,
+  ElectionPackage,
+  VotesDict,
+} from '../ballots/election-loader.js';
 import { copyFile, readdir, readFile, writeFile } from 'node:fs/promises';
 import assert from 'node:assert';
 import { PDFDocument } from 'pdf-lib';
@@ -98,14 +104,14 @@ export async function runScanWorkflow(
     }
   }
 
-  const precinctToSelect = precinctSelection.kind === 'AllPrecincts' ? 'All Precincts' :
-    election.precincts.find(({ id }) => id === precinctSelection.precinctId)?.name;
+  const precinctToSelect =
+    precinctSelection.kind === 'AllPrecincts'
+      ? 'All Precincts'
+      : election.precincts.find(({ id }) => id === precinctSelection.precinctId)?.name;
   assert(precinctToSelect, 'Invalid precinct selection');
 
   await page.getByText('Select a precinct…').click({ force: true });
-  await page
-    .getByText(precinctToSelect, { exact: true })
-    .click({ force: true });
+  await page.getByText(precinctToSelect, { exact: true }).click({ force: true });
   await page.getByText('Official Ballot Mode').click();
 
   await openingPollsStep.captureScreenshot('scan-configured', 'Configured');
@@ -349,10 +355,7 @@ async function scanBallot(
     logger.debug(`Message after sheet ${sheetIndex + 1}: ${messageText}`);
 
     // If rejected, handle immediately and stop scanning more sheets
-    if (
-      messageText !== 'Your ballot was counted!' &&
-      /ballot|wrong/i.test(messageText)
-    ) {
+    if (messageText !== 'Your ballot was counted!' && /ballot|wrong/i.test(messageText)) {
       logger.info(`Ballot rejected after sheet ${sheetIndex + 1}/${sheetCount}: ${messageText}`);
 
       const screenshot = await stepCollector.captureScreenshot(
