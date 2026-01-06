@@ -78,20 +78,8 @@ Example `vx-qa-config.json`:
 
 ## Output
 
-Each run creates a timestamped directory with:
-
-```
-qa-output/run-2024-01-15T10-30-00/
-├── ballots/              # Generated ballot PDFs and PNGs
-│   ├── ballot-style1-blank.pdf
-│   ├── ballot-style1-fully_filled.pdf
-│   └── ...
-├── screenshots/          # UI screenshots at each step
-│   ├── 001-admin-locked.png
-│   ├── 002-admin-configured.png
-│   └── ...
-└── report.html           # Summary HTML report
-```
+Each run creates a timestamped directory with an HTML report and the supporting files,
+including various inputs, outputs, and screenshots.
 
 ## Requirements
 
