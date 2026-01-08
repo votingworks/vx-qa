@@ -5,9 +5,10 @@
 import { logger, formatDuration, printDivider } from '../utils/logger.js';
 import { resolvePath } from '../utils/paths.js';
 import type { QARunConfig } from '../config/types.js';
+import { existsSync } from 'fs';
 
 // Repository management
-import { cloneOrUpdateRepo, getCurrentCommit } from '../repo/clone.js';
+import { cloneOrUpdateRepo, getCurrentCommit, applyPatch } from '../repo/clone.js';
 import { bootstrapRepo, checkPnpmAvailable, checkNodeVersion } from '../repo/bootstrap.js';
 
 // Election package loading
@@ -60,6 +61,12 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     const repoPath = await cloneOrUpdateRepo(config.vxsuite);
     const commit = await getCurrentCommit(repoPath);
     logger.info(`Repository at ${repoPath} (commit: ${commit.slice(0, 8)})`);
+
+    // Apply patch if it exists
+    const patchPath = resolvePath('vxsuite.patch');
+    if (existsSync(patchPath)) {
+      await applyPatch(repoPath, patchPath);
+    }
 
     await bootstrapRepo(repoPath);
 
@@ -145,6 +152,25 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
             pattern: 'overvote',
             pdfPath,
             expectedAccepted: false,
+          },
+        );
+
+        ballotsToScan.push(
+          {
+            ballotStyleId: ballot.ballotStyleId,
+            ballotMode: ballot.ballotMode,
+            ballotType: ballot.ballotType,
+            pattern: 'marked-write-in',
+            pdfPath,
+            expectedAccepted: true,
+          },
+          {
+            ballotStyleId: ballot.ballotStyleId,
+            ballotMode: ballot.ballotMode,
+            ballotType: ballot.ballotType,
+            pattern: 'unmarked-write-in',
+            pdfPath,
+            expectedAccepted: true,
           },
         );
       }

@@ -154,7 +154,7 @@ program
         source: './election.json',
       },
       ballots: {
-        patterns: ['blank', 'valid', 'overvote'],
+        patterns: ['blank', 'valid', 'overvote', 'marked-write-in', 'unmarked-write-in'],
       },
       output: {
         directory: './qa-output',

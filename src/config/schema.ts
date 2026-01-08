@@ -6,7 +6,13 @@ import { z } from 'zod/v4';
 import { resolvePath } from '../utils/paths.js';
 import { dirname } from 'node:path';
 
-export const BallotPatternSchema = z.enum(['blank', 'valid', 'overvote']);
+export const BallotPatternSchema = z.enum([
+  'blank',
+  'valid',
+  'overvote',
+  'marked-write-in',
+  'unmarked-write-in',
+]);
 
 export const VxSuiteConfigSchema = z.object({
   repoPath: z.string().min(1, 'Repository path is required'),

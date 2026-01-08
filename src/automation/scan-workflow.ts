@@ -289,6 +289,18 @@ async function scanBallot(
         .map(([contestId, votes]) => [
           contestId,
           votes.filter((vote) => {
+            // Handle write-in votes
+            if (typeof vote !== 'string' && vote.isWriteIn) {
+              return gridLayout.gridPositions.some(
+                (p) =>
+                  p.sheetNumber === sheetIndex + 1 &&
+                  p.contestId === contestId &&
+                  p.type === 'write-in' &&
+                  p.writeInIndex === vote.writeInIndex,
+              );
+            }
+
+            // Handle regular option votes
             const optionId = typeof vote === 'string' ? vote : vote.id;
             return gridLayout.gridPositions.some(
               (p) =>

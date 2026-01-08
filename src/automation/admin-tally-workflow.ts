@@ -297,6 +297,11 @@ async function findExportedTallyCsv(usbDataPath: string): Promise<string | undef
   return sorted[0].path;
 }
 
+export interface Adjudications {
+  markedWriteIns: 'invalid' | 'new-candidate' | 'official-candidate';
+  unmarkedWriteIns: 'invalid' | 'new-candidate' | 'official-candidate';
+}
+
 /**
  * Validate tally results against scanned ballots
  */
@@ -307,22 +312,32 @@ export async function validateTallyResults(
     let tallyCsvOutput: Extract<StepOutput, { type: 'report' }> | undefined;
 
     // Get votes from accepted scan results stored in step outputs
-    const expectedVotes: Record<string, Record<string, number>> = {}; // contestId -> optionId -> count
+    const expectedVotes = new Map<string, Map<string, number>>(); // contestId -> optionId -> count
     let totalOutputs = 0;
 
     for (const step of collection.steps) {
       for (const output of step.outputs) {
-        if (output.type === 'scan-result' && output.accepted && output.votes) {
+        if (
+          output.type === 'scan-result' &&
+          output.accepted &&
+          output.votes &&
+          output.markPattern !== 'unmarked-write-in'
+        ) {
           totalOutputs++;
 
           const votes = output.votes;
           for (const [contestId, contestVotes] of Object.entries(votes)) {
-            if (!expectedVotes[contestId]) {
-              expectedVotes[contestId] = {};
+            if (!expectedVotes.has(contestId)) {
+              expectedVotes.set(contestId, new Map());
             }
             for (const vote of contestVotes) {
               const optionId = typeof vote === 'string' ? vote : vote.id;
-              expectedVotes[contestId][optionId] = (expectedVotes[contestId][optionId] || 0) + 1;
+              const contestMap = expectedVotes.get(contestId) as Map<string, number>;
+              if (optionId.startsWith('write-in')) {
+                contestMap.set('write-in', (contestMap.get('write-in') ?? 0) + 1);
+              } else {
+                contestMap.set(optionId, (contestMap.get(optionId) ?? 0) + 1);
+              }
             }
           }
         }
@@ -348,7 +363,7 @@ export async function validateTallyResults(
     const csvContent = await readFile(tallyCsvOutput.path, 'utf-8');
     const lines = csvContent.trim().split('\n');
 
-    const actualVotes: Record<string, number> = {}; // selectionId -> count
+    const actualVotes = new Map<string, Map<string, number>>(); // contestId -> selectionId -> count
     let totalExpectedVotes = 0;
     let totalActualVotes = 0;
 
@@ -359,11 +374,17 @@ export async function validateTallyResults(
 
       const fields = line.split(',').map((f) => f.trim().replace(/^"|"$/g, ''));
       if (fields.length >= 5) {
+        const contestId = fields[1];
         const selectionId = fields[3];
         const votes = parseInt(fields[4] || '0', 10);
 
         if (!isNaN(votes) && selectionId !== 'overvotes' && selectionId !== 'undervotes') {
-          actualVotes[selectionId] = votes;
+          if (!actualVotes.has(contestId)) {
+            actualVotes.set(contestId, new Map());
+          }
+          const contestMap = actualVotes.get(contestId) as Map<string, number>;
+          contestMap.set(selectionId, (contestMap.get(selectionId) ?? 0) + votes);
+
           if (votes > 0) {
             totalActualVotes += votes;
           }
@@ -372,8 +393,8 @@ export async function validateTallyResults(
     }
 
     // Count expected votes
-    for (const contest of Object.values(expectedVotes)) {
-      for (const count of Object.values(contest)) {
+    for (const contest of expectedVotes.values()) {
+      for (const count of contest.values()) {
         totalExpectedVotes += count;
       }
     }
@@ -381,29 +402,33 @@ export async function validateTallyResults(
     // Compare expected vs actual votes by candidate
     const mismatches: string[] = [];
 
-    for (const [contestId, candidates] of Object.entries(expectedVotes)) {
-      for (const [candidateId, expectedCount] of Object.entries(candidates)) {
-        const actualCount = actualVotes[candidateId] || 0;
+    for (const [contestId, candidates] of expectedVotes) {
+      for (const [candidateId, expectedCount] of candidates) {
+        const actualCount = actualVotes.get(contestId)?.get(candidateId) ?? 0;
         if (actualCount !== expectedCount) {
           mismatches.push(
-            `Contest ${contestId}, Candidate ${candidateId}: expected ${expectedCount}, got ${actualCount}`,
+            `Contest ${contestId}, Candidate ${candidateId}: expected ${expectedCount} based on marked ballots, got ${actualCount} from tally CSV`,
           );
         }
       }
     }
 
     // Check for votes in CSV that weren't expected
-    for (const [selectionId, actualCount] of Object.entries(actualVotes)) {
-      if (actualCount > 0) {
-        let found = false;
-        for (const candidates of Object.values(expectedVotes)) {
-          if (candidates[selectionId]) {
-            found = true;
-            break;
+    for (const [contestId, candidates] of actualVotes) {
+      for (const [selectionId, actualCount] of candidates) {
+        if (actualCount > 0) {
+          let found = false;
+          for (const candidates of expectedVotes.values()) {
+            if (candidates.get(selectionId)) {
+              found = true;
+              break;
+            }
           }
-        }
-        if (!found) {
-          mismatches.push(`Unexpected votes in CSV for ${selectionId}: ${actualCount}`);
+          if (!found) {
+            mismatches.push(
+              `Unexpected votes in CSV for ${contestId}/${selectionId}: ${actualCount}`,
+            );
+          }
         }
       }
     }

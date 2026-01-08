@@ -5,7 +5,12 @@
 import { BallotToScan } from '../automation/scan-workflow.js';
 import { BallotMode, BallotType, VotesDict } from '../ballots/election-loader.js';
 
-export type BallotPattern = 'blank' | 'valid' | 'overvote';
+export type BallotPattern =
+  | 'blank'
+  | 'valid'
+  | 'overvote'
+  | 'marked-write-in'
+  | 'unmarked-write-in';
 
 export interface VxSuiteConfig {
   /** Path where VxSuite repo should be cloned */

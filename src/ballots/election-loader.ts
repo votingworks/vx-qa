@@ -27,6 +27,7 @@ export interface Candidate {
   name: string;
   partyIds?: string[];
   isWriteIn?: boolean;
+  writeInIndex?: number;
 }
 
 export interface CandidateContest {
@@ -92,26 +93,28 @@ export interface GridLayout {
 
 export type BallotSide = 'front' | 'back';
 
-export type GridPosition =
-  | {
-      type: 'option';
-      sheetNumber: number;
-      side: BallotSide;
-      column: number;
-      row: number;
-      contestId: string;
-      optionId: string;
-    }
-  | {
-      type: 'write-in';
-      sheetNumber: number;
-      side: BallotSide;
-      column: number;
-      row: number;
-      contestId: string;
-      writeInIndex: number;
-      writeInArea: Rect;
-    };
+export type GridPosition = GridPositionOption | GridPositionWriteIn;
+
+export interface GridPositionWriteIn {
+  type: 'write-in';
+  sheetNumber: number;
+  side: BallotSide;
+  column: number;
+  row: number;
+  contestId: string;
+  writeInIndex: number;
+  writeInArea: Rect;
+}
+
+export interface GridPositionOption {
+  type: 'option';
+  sheetNumber: number;
+  side: BallotSide;
+  column: number;
+  row: number;
+  contestId: string;
+  optionId: string;
+}
 
 export interface Rect {
   x: number;

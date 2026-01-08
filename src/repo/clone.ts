@@ -7,7 +7,8 @@ import { existsSync } from 'fs';
 import { logger } from '../utils/logger.js';
 import { ensureDir, resolvePath } from '../utils/paths.js';
 import type { VxSuiteConfig } from '../config/types.js';
-import { rm } from 'node:fs/promises';
+import { rm, readFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
 
 const VXSUITE_REPO_URL = 'https://github.com/votingworks/vxsuite.git';
 
@@ -104,4 +105,96 @@ export async function getCurrentCommit(repoPath: string): Promise<string> {
   const git: SimpleGit = simpleGit(repoPath);
   const log = await git.log({ maxCount: 1 });
   return log.latest?.hash || 'unknown';
+}
+
+/**
+ * Apply a patch file to the repository using the patch command
+ */
+async function runPatchCommand(
+  repoPath: string,
+  patchContent: string,
+  dryRun: boolean,
+): Promise<{ success: boolean; output: string }> {
+  return new Promise((resolve, reject) => {
+    const args = ['-p1', '--forward'];
+    if (dryRun) {
+      args.push('--dry-run');
+    }
+
+    const patchProcess = spawn('patch', args, {
+      cwd: repoPath,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    patchProcess.stdout?.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    patchProcess.stderr?.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    patchProcess.on('error', (error) => {
+      reject(error);
+    });
+
+    patchProcess.on('close', (code) => {
+      const output = stdout + stderr;
+      if (code === 0) {
+        resolve({ success: true, output });
+      } else {
+        resolve({ success: false, output });
+      }
+    });
+
+    // Write patch content to stdin
+    patchProcess.stdin?.write(patchContent);
+    patchProcess.stdin?.end();
+  });
+}
+
+/**
+ * Apply a patch file to the repository
+ */
+export async function applyPatch(repoPath: string, patchPath: string): Promise<void> {
+  const spinner = logger.spinner('Applying patch...');
+
+  try {
+    // Read patch content
+    const patchContent = await readFile(patchPath, 'utf-8');
+
+    // Try to apply the patch with dry-run first
+    const dryRunResult = await runPatchCommand(repoPath, patchContent, true);
+
+    if (!dryRunResult.success) {
+      // Check if patch was already applied
+      if (
+        dryRunResult.output.includes('Reversed (or previously applied) patch detected') ||
+        dryRunResult.output.includes('previously applied')
+      ) {
+        spinner.succeed('Patch already applied');
+        return;
+      }
+
+      // Patch failed
+      spinner.fail('Failed to apply patch');
+      throw new Error(`Patch application failed:\n${dryRunResult.output}`);
+    }
+
+    // Apply for real
+    const applyResult = await runPatchCommand(repoPath, patchContent, false);
+
+    if (!applyResult.success) {
+      spinner.fail('Failed to apply patch');
+      throw new Error(`Patch application failed:\n${applyResult.output}`);
+    }
+
+    spinner.succeed('Patch applied successfully');
+  } catch (error) {
+    spinner.fail('Failed to apply patch');
+    throw error;
+  }
 }
