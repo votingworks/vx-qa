@@ -22,7 +22,14 @@
     "lint": "oxfmt --check && oxlint --type-aware",
     "lint:fix": "oxfmt && oxlint --type-aware --fix",
     "test": "vitest",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest --coverage",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,js}": [
+      "oxfmt",
+      "oxlint --type-aware --fix"
+    ]
   },
   "dependencies": {
     "@playwright/test": "^1.40.0",
@@ -41,6 +48,8 @@
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@vitest/coverage-v8": "^4.0.16",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
     "oxfmt": "^0.18.0",
     "oxlint": "^1.33.0",
     "oxlint-tsgolint": "^0.9.1",
