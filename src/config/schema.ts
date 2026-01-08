@@ -49,6 +49,7 @@ export function validateConfig(config: unknown, configPath: string): QARunConfig
   const configDir = dirname(configPath);
   parsedConfig.vxsuite.repoPath = resolvePath(parsedConfig.vxsuite.repoPath, configDir);
   parsedConfig.election.source = resolvePath(parsedConfig.election.source, configDir);
+  parsedConfig.output.directory = resolvePath(parsedConfig.output.directory, configDir);
   return parsedConfig;
 }
 

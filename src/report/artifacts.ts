@@ -87,7 +87,6 @@ export interface ArtifactCollector {
    * Get subdirectory paths
    */
   getBallotsDir(): string;
-  getScreenshotsDir(): string;
 }
 
 /**
@@ -111,7 +110,6 @@ export function createArtifactCollector(outputDir: string, config: QARunConfig):
   // Create directory structure
   const dirs = {
     ballots: join(outputDir, 'ballots'),
-    screenshots: join(outputDir, 'screenshots'),
   };
 
   for (const dir of Object.values(dirs)) {
@@ -218,10 +216,6 @@ export function createArtifactCollector(outputDir: string, config: QARunConfig):
 
     getBallotsDir(): string {
       return dirs.ballots;
-    },
-
-    getScreenshotsDir(): string {
-      return dirs.screenshots;
     },
   };
 }

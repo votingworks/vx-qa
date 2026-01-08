@@ -155,15 +155,10 @@ async function prepareReportData(
     })),
   );
 
-  // Calculate statistics
+  // Collect scan results for validation
   const scanResults = collection.steps.flatMap((step) =>
     step.outputs.filter((output) => output.type === 'scan-result'),
   );
-  const totalScanned = scanResults.length;
-  const accepted = scanResults.filter((r) => r.accepted).length;
-  const rejected = scanResults.filter((r) => !r.accepted).length;
-  const handledAsExpected = scanResults.filter((r) => r.expected === r.accepted).length;
-  const handledUnexpectedly = scanResults.filter((r) => r.expected !== r.accepted).length;
 
   // Check for validation failures
   const validationFailures: Array<{ step: string; message: string; stepId: string }> = [];
@@ -200,15 +195,6 @@ async function prepareReportData(
       tag: collection.config.vxsuite.ref,
       election: collection.config.election.source,
       patterns: collection.config.ballots.patterns.join(', '),
-    },
-    statistics: {
-      totalBallotStyles: collection.ballots.length / collection.config.ballots.patterns.length || 0,
-      totalBallots: collection.ballots.length,
-      totalScanned,
-      accepted,
-      rejected,
-      handledAsExpected,
-      handledUnexpectedly,
     },
     steps,
     ballots,
@@ -250,15 +236,6 @@ interface ReportData {
     tag: string;
     election: string;
     patterns: string;
-  };
-  statistics: {
-    totalBallotStyles: number;
-    totalBallots: number;
-    totalScanned: number;
-    accepted: number;
-    rejected: number;
-    handledAsExpected: number;
-    handledUnexpectedly: number;
   };
   steps: {
     id: string;
@@ -377,13 +354,6 @@ function renderTemplate(data: ReportData): string {
       margin-bottom: 1.5rem;
     }
 
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; }
-    .stat { text-align: center; padding: 1rem; background: var(--gray-100); border-radius: 0.25rem; }
-    .stat-value { font-size: 2rem; font-weight: 700; color: var(--primary); }
-    .stat-label { font-size: 0.875rem; color: var(--gray-700); }
-    .stat.success .stat-value { color: var(--success); }
-    .stat.error .stat-value { color: var(--error); }
-
     table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
     th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--gray-200); }
     th { background: var(--gray-100); font-weight: 600; }
@@ -485,32 +455,6 @@ function renderTemplate(data: ReportData): string {
       {{/each}}
     </div>
     {{/if}}
-
-    <div class="card">
-      <h2>Statistics</h2>
-      <div class="stats">
-        <div class="stat">
-          <div class="stat-value">{{statistics.totalBallotStyles}}</div>
-          <div class="stat-label">Ballot Styles</div>
-        </div>
-        <div class="stat">
-          <div class="stat-value">{{statistics.totalBallots}}</div>
-          <div class="stat-label">Ballots Generated</div>
-        </div>
-        <div class="stat">
-          <div class="stat-value">{{statistics.totalScanned}}</div>
-          <div class="stat-label">Sheets Scanned</div>
-        </div>
-        <div class="stat success">
-          <div class="stat-value">{{statistics.handledAsExpected}}</div>
-          <div class="stat-label">Handled Correctly</div>
-        </div>
-        <div class="stat error">
-          <div class="stat-value">{{statistics.handledUnexpectedly}}</div>
-          <div class="stat-label">Handled Incorrectly</div>
-        </div>
-      </div>
-    </div>
 
     <h2>Workflow Steps</h2>
 
