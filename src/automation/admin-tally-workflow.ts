@@ -20,6 +20,46 @@ import { join } from 'node:path';
 import { Election } from '../ballots/election-loader.js';
 
 /**
+ * Parse a CSV line respecting quoted fields that may contain commas
+ * Based on RFC 4180
+ */
+export function parseCsvLine(line: string): string[] {
+  const fields: string[] = [];
+  let currentField = '';
+  let inQuotes = false;
+  let wasQuoted = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const nextChar = line[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        // Escaped quote
+        currentField += '"';
+        i++; // Skip next quote
+      } else {
+        // Toggle quote state
+        inQuotes = !inQuotes;
+        wasQuoted = true;
+      }
+    } else if (char === ',' && !inQuotes) {
+      // Field separator - only trim unquoted fields
+      fields.push(wasQuoted ? currentField : currentField.trim());
+      currentField = '';
+      wasQuoted = false;
+    } else {
+      currentField += char;
+    }
+  }
+
+  // Add the last field - only trim if it wasn't quoted
+  fields.push(wasQuoted ? currentField : currentField.trim());
+
+  return fields;
+}
+
+/**
  * Run the VxAdmin tally workflow - import CVRs and generate reports
  */
 export async function runAdminTallyWorkflow(
@@ -372,7 +412,7 @@ export async function validateTallyResults(
       const line = lines[i];
       if (!line.trim()) continue;
 
-      const fields = line.split(',').map((f) => f.trim().replace(/^"|"$/g, ''));
+      const fields = parseCsvLine(line);
       if (fields.length >= 5) {
         const contestId = fields[1];
         const selectionId = fields[3];
