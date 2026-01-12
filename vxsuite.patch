@@ -1,3 +1,31 @@
+diff --git a/apps/mark/backend/src/util/print_ballot.tsx b/apps/mark/backend/src/util/print_ballot.tsx
+index 933f00d15..8d2367049 100644
+--- a/apps/mark/backend/src/util/print_ballot.tsx
++++ b/apps/mark/backend/src/util/print_ballot.tsx
+@@ -112,7 +112,8 @@ async function printMarkOverlay(p: PrintBallotProps): Promise<void> {
+     election,
+     p.ballotStyleId,
+     p.votes,
+-    p.store.getPrintCalibration()
++    p.store.getPrintCalibration(),
++    undefined
+   );
+ 
+   return p.printer.print({
+diff --git a/libs/hmpb/src/marking.test.ts b/libs/hmpb/src/marking.test.ts
+index 025c6e183..6c01ee21f 100644
+--- a/libs/hmpb/src/marking.test.ts
++++ b/libs/hmpb/src/marking.test.ts
+@@ -26,7 +26,8 @@ test('places marks consistently', async () => {
+     election.unsafeUnwrap(),
+     fixture.ballotStyleId,
+     fixture.votes,
+-    { offsetMmX: 0, offsetMmY: 0 }
++    { offsetMmX: 0, offsetMmY: 0 },
++    undefined
+   );
+ 
+   const ballotBuf = fs.readFileSync(fixture.blankBallotPath);
 diff --git a/libs/hmpb/src/marking.ts b/libs/hmpb/src/marking.ts
 index 4bcd1f0e8..edc6043b3 100644
 --- a/libs/hmpb/src/marking.ts
