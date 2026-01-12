@@ -169,3 +169,16 @@ index 4bcd1f0e8..edc6043b3 100644
      }
    }
  
+diff --git a/script/bootstrap b/script/bootstrap
+index 1a8304cfc..8b3adce85 100755
+--- a/script/bootstrap
++++ b/script/bootstrap
+@@ -12,7 +12,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+ 
+ for app in ${DIR}/../apps/*/frontend ${DIR}/../apps/*/backend; do
+   if [ -d "${app}" ]; then
+-    make -C "${app}" bootstrap
++    make -C "${app}" -n bootstrap && make -C "${app}" bootstrap
+   fi
+ done
+ 
