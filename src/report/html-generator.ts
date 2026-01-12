@@ -141,7 +141,7 @@ async function prepareReportData(
                 ? 'success'
                 : 'error',
           thumbnail:
-            output.type === 'print' && output.path
+            (output.type === 'print' || output.type === 'report') && output.path?.endsWith('.pdf')
               ? await generatePdfThumbnail(resolvePath(output.path, outputDir))
               : null,
         })),
