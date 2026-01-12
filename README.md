@@ -71,6 +71,10 @@ Example `vx-qa-config.json`:
 Each run creates a timestamped directory with an HTML report and the supporting files,
 including various inputs, outputs, and screenshots.
 
+## Troubleshooting
+
+To see the browser as the workflows run, run with `--no-headless`. You may also consider running with the `DEBUG=1` environment variable.
+
 ## Requirements
 
 - Node.js 20+
