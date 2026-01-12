@@ -194,7 +194,6 @@ async function prepareReportData(
     config: {
       tag: collection.config.vxsuite.ref,
       election: collection.config.election.source,
-      patterns: collection.config.ballots.patterns.join(', '),
     },
     steps,
     ballots,
@@ -235,7 +234,6 @@ interface ReportData {
   config: {
     tag: string;
     election: string;
-    patterns: string;
   };
   steps: {
     id: string;
@@ -424,10 +422,6 @@ function renderTemplate(data: ReportData): string {
         <div class="meta-item">
           <div class="meta-label">Election</div>
           <div class="meta-value">{{config.election}}</div>
-        </div>
-        <div class="meta-item">
-          <div class="meta-label">Ballot Patterns</div>
-          <div class="meta-value">{{config.patterns}}</div>
         </div>
       </div>
     </div>

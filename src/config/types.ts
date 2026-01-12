@@ -39,7 +39,6 @@ export interface OutputConfig {
 export interface QARunConfig {
   vxsuite: VxSuiteConfig;
   election: ElectionConfig;
-  ballots: BallotConfig;
   output: OutputConfig;
   basePath?: string;
 }

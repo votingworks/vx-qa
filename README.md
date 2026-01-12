@@ -60,21 +60,11 @@ Example `vx-qa-config.json`:
   "election": {
     "source": "./election.json"
   },
-  "ballots": {
-    "patterns": ["blank", "fully_filled", "partial", "overvote"]
-  },
   "output": {
     "directory": "./qa-output"
   }
 }
 ```
-
-### Ballot Patterns
-
-- `blank` - No votes (empty ballot)
-- `fully_filled` - Maximum valid votes in each contest
-- `partial` - Some contests voted, some left blank
-- `overvote` - Too many votes in a candidate contest (should be rejected)
 
 ## Output
 

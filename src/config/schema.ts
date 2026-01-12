@@ -24,10 +24,6 @@ export const ElectionConfigSchema = z.object({
   source: z.string().min(1, 'Election source path is required'),
 });
 
-export const BallotConfigSchema = z.object({
-  patterns: z.array(BallotPatternSchema).min(1, 'At least one ballot pattern is required'),
-});
-
 export const OutputConfigSchema = z.object({
   directory: z.string().min(1, 'Output directory is required'),
 });
@@ -35,7 +31,6 @@ export const OutputConfigSchema = z.object({
 export const QARunConfigSchema = z.object({
   vxsuite: VxSuiteConfigSchema,
   election: ElectionConfigSchema,
-  ballots: BallotConfigSchema,
   output: OutputConfigSchema,
 });
 
