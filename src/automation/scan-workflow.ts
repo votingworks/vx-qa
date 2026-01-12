@@ -104,14 +104,17 @@ export async function runScanWorkflow(
     }
   }
 
-  const precinctToSelect =
-    precinctSelection.kind === 'AllPrecincts'
-      ? 'All Precincts'
-      : election.precincts.find(({ id }) => id === precinctSelection.precinctId)?.name;
-  assert(precinctToSelect, 'Invalid precinct selection');
+  if (election.precincts.length > 1) {
+    const precinctToSelect =
+      precinctSelection.kind === 'AllPrecincts'
+        ? 'All Precincts'
+        : election.precincts.find(({ id }) => id === precinctSelection.precinctId)?.name;
+    assert(precinctToSelect, 'Invalid precinct selection');
 
-  await page.getByText('Select a precinct…').click({ force: true });
-  await page.getByText(precinctToSelect, { exact: true }).click({ force: true });
+    await page.getByText('Select a precinct…').click({ force: true });
+    await page.getByText(precinctToSelect, { exact: true }).click({ force: true });
+  }
+
   await page.getByText('Official Ballot Mode').click();
 
   await openingPollsStep.captureScreenshot('scan-configured', 'Configured');
