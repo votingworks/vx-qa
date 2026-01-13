@@ -81,6 +81,8 @@ To see the browser as the workflows run, run with `--no-headless`. You may also 
 - pnpm 8+
 - Git
 
+If `pnpm install` returns a `ERR_PNPM_INVALID_WORKSPACE_CONFIGURATION` you may need to update your pnpm version. You can gloablly install the latest version of pnpm with `npm install -g pnpm@latest`
+
 ## Development
 
 ```bash
