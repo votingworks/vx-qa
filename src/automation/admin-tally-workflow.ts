@@ -897,9 +897,29 @@ export async function validateTallyResults(
     );
 
     // Parse CSV to get actual vote counts by selection ID
-    // CSV format: Contest,Contest ID,Selection,Selection ID,Total Votes
+    // CSV format varies based on whether manual tallies exist:
+    // - With manual tallies: Contest,Contest ID,Selection,Selection ID,Manual Votes,Scanned Votes,Total Votes
+    // - Without manual tallies: Contest,Contest ID,Selection,Selection ID,Total Votes
     const csvContent = await readFile(tallyCsvOutput.path, 'utf-8');
     const lines = csvContent.trim().split('\n');
+
+    // Determine CSV format by checking the header row
+    const headerLine = parseCsvLine(lines[1]);
+    const columnMap = new Map<string, number>();
+    for (let i = 0; i < headerLine.length; i++) {
+      columnMap.set(headerLine[i], i);
+    }
+
+    const hasManualResults = columnMap.has('Manual Votes');
+    const totalVotesColumnIndex = columnMap.get('Total Votes');
+
+    if (totalVotesColumnIndex === undefined) {
+      throw new Error('CSV header does not contain "Total Votes" column');
+    }
+
+    logger.debug(
+      `CSV format: ${hasManualResults ? 'with manual tallies (7 columns)' : 'scanned only (5 columns)'}`,
+    );
 
     const actualVotes = new Map<string, Map<string, number>>(); // contestId -> selectionId -> count
     let totalExpectedVotes = 0;
@@ -911,10 +931,13 @@ export async function validateTallyResults(
       if (!line.trim()) continue;
 
       const fields = parseCsvLine(line);
-      if (fields.length >= 5) {
-        const contestId = fields[1];
-        const selectionId = fields[3];
-        const votes = parseInt(fields[4] || '0', 10);
+      const contestIdIndex = columnMap.get('Contest ID');
+      const selectionIdIndex = columnMap.get('Selection ID');
+
+      if (contestIdIndex !== undefined && selectionIdIndex !== undefined && hasManualResults) {
+        const contestId = fields[contestIdIndex];
+        const selectionId = fields[selectionIdIndex];
+        const votes = parseInt(fields[totalVotesColumnIndex] || '0', 10);
 
         if (!isNaN(votes) && selectionId !== 'overvotes' && selectionId !== 'undervotes') {
           if (!actualVotes.has(contestId)) {
