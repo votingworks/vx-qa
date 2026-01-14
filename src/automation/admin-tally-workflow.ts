@@ -2,7 +2,7 @@
  * VxAdmin tally workflow - imports CVRs and generates reports
  */
 
-import { Page } from '@playwright/test';
+import { Page, Locator } from '@playwright/test';
 import { logger } from '../utils/logger.js';
 import { createMockUsbController } from '../mock-hardware/usb.js';
 import { dipElectionManagerCardAndLogin } from './auth-helpers.js';
@@ -13,11 +13,31 @@ import {
   clickTextInApp,
   toggleDevDock,
 } from './browser.js';
-import { loadCollection, type StepCollector } from '../report/artifacts.js';
+import { loadCollection, type StepCollector, type ArtifactCollector } from '../report/artifacts.js';
 import { ArtifactCollection, StepOutput, ValidationResult } from '../config/types.js';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Election } from '../ballots/election-loader.js';
+import {
+  Contest,
+  Election,
+  getContestsForBallotStyle,
+  Precinct,
+} from '../ballots/election-loader.js';
+
+/**
+ * Contest result tallies for manual data entry
+ */
+interface ContestResult {
+  contestId: string;
+  ballots: number;
+  overvotes: number;
+  undervotes: number;
+  tallies: Record<string, number>;
+  validation?: {
+    type: 'success' | 'warning' | 'error';
+    message: string;
+  };
+}
 
 /**
  * Parse a CSV line respecting quoted fields that may contain commas
@@ -60,36 +80,426 @@ export function parseCsvLine(line: string): string[] {
 }
 
 /**
- * Run the VxAdmin tally workflow - import CVRs and generate reports
+ * Add manual tallies for all ballot styles
  */
-export async function runAdminTallyWorkflow(
+async function addManualTally(
   page: Page,
   election: Election,
-  electionPackagePath: string,
-  outputDir: string,
-  dataPath: string,
-  stepCollector: StepCollector,
+  collector: ArtifactCollector,
+  limitManualTallies?: number,
 ): Promise<void> {
-  logger.step('Running VxAdmin tally workflow');
+  logger.step('Adding manual tallies for all ballot styles');
 
-  await page.setViewportSize({
-    width: 1920,
-    height: 1200,
-  });
-  const usbController = createMockUsbController({ dataPath });
+  logger.info(`Found ${election.ballotStyles.length} ballot styles`);
 
-  // Navigate to app
-  await navigateToApp(page);
-  await toggleDevDock(page);
-  await stepCollector.captureScreenshot('admin-tally-locked', 'VxAdmin locked (before tally)');
-
-  // Ensure USB is inserted with CVRs
-  logger.debug('Inserting USB drive with CVRs');
-  await usbController.insert();
+  // Navigate to Manual Tallies tab
+  await clickTextInApp(page, 'Manual Tallies');
   await page.waitForTimeout(1000);
 
-  // Log in as election manager
-  await dipElectionManagerCardAndLogin(page, electionPackagePath);
+  if (election.ballotStyles.length === 0) {
+    logger.info('No ballot styles in election - skipping manual tallies');
+    return;
+  }
+
+  // Determine how many ballot styles to process
+  const ballotStylesToProcess =
+    limitManualTallies !== undefined && limitManualTallies >= 0
+      ? Math.min(limitManualTallies, election.ballotStyles.length)
+      : election.ballotStyles.length;
+
+  if (limitManualTallies !== undefined && limitManualTallies >= 0) {
+    logger.info(
+      `Limited manual tallies to ${ballotStylesToProcess} ballot styles (from ${election.ballotStyles.length})`,
+    );
+  }
+
+  // Loop through each ballot style
+  for (let styleIndex = 0; styleIndex < ballotStylesToProcess; styleIndex++) {
+    const ballotStyle = election.ballotStyles[styleIndex];
+    const ballotStyleGroupId = ballotStyle.id;
+    const precinctId = ballotStyle.precincts[0]; // Use first precinct
+    const contests = getContestsForBallotStyle(election, ballotStyleGroupId);
+
+    logger.info(
+      `Processing ballot style ${styleIndex + 1}/${ballotStylesToProcess}: ${ballotStyleGroupId} (${contests.length} contests)`,
+    );
+
+    // Create a step for this ballot style's manual tally
+    const manualTallyStep = collector.startStep(
+      page,
+      `manual-tally-${ballotStyleGroupId}`,
+      `Manual Tally: ${ballotStyleGroupId}`,
+      `Enter manual tallies for ballot style ${ballotStyleGroupId} in precinct ${precinctId}`,
+    );
+
+    await processBallotStyle(
+      page,
+      manualTallyStep,
+      election,
+      ballotStyleGroupId,
+      precinctId,
+      contests,
+      styleIndex,
+    );
+
+    manualTallyStep.complete();
+  }
+
+  logger.success(`Added manual tallies for ${ballotStylesToProcess} ballot styles`);
+}
+
+/**
+ * Process a single ballot style - select it and fill out all contests
+ */
+async function processBallotStyle(
+  page: Page,
+  stepCollector: StepCollector,
+  election: Election,
+  ballotStyleGroupId: string,
+  precinctId: string,
+  contests: Array<Contest>,
+  styleIndex: number,
+): Promise<void> {
+  const votingMethod = 'precinct' as const;
+
+  // Calculate ballot count: give 1 vote to each option in the contest with most options
+  const maxOptionsPerContest = Math.max(
+    ...contests.map((c) => {
+      if (c.type === 'candidate') {
+        return c.candidates.length + 2; // candidates + undervotes + overvotes
+      }
+      return 4; // yes-no contests: yes + no + undervotes + overvotes
+    }),
+  );
+  const ballotCount = maxOptionsPerContest;
+
+  logger.debug(`Using ballot count ${ballotCount} for ${ballotStyleGroupId}`);
+
+  const contestResults: Record<string, ContestResult> = {};
+
+  // Select ballot style from dropdown using the ID selector
+  const ballotStyleSelect = page.locator('#selectPrecinctAndBallotStyle');
+
+  // Check if it's disabled
+  const isDisabled = await ballotStyleSelect.isDisabled();
+  logger.debug(`Ballot style dropdown disabled: ${isDisabled}`);
+
+  await ballotStyleSelect.click();
+
+  // Wait for the menu to open - react-select uses a div with specific class or just wait for options
+  await page.waitForTimeout(1000);
+
+  await stepCollector.captureScreenshot(
+    `admin-manual-tallies-style-${styleIndex}-clicked`,
+    `After clicking ballot style dropdown for ${ballotStyleGroupId}`,
+  );
+
+  // Log all elements to debug what's actually present
+  const allDivs = await page.locator('div').all();
+  logger.debug(`Total divs on page: ${allDivs.length}`);
+
+  // Find and click the ballot style option
+  // The label format is "{Precinct or Split Name}" or "{Precinct or Split Name} - {Party}"
+  const precinctInfo = election.precincts.find((p) => p.id === precinctId);
+  const ballotStyleInfo = election.ballotStyles.find((bs) => bs.id === ballotStyleGroupId);
+
+  // Determine the display name: if the precinct has splits, use the split name; otherwise use precinct name
+  let displayName = precinctInfo?.name || precinctId;
+
+  // Check for splits (not in our type definition, but may exist in runtime data)
+  const precinctWithSplits = precinctInfo as Precinct & {
+    splits?: Array<{ name: string; districtIds?: string[] }>;
+  };
+  if (precinctWithSplits.splits && precinctWithSplits.splits.length > 0) {
+    // If there are splits, we need to find the right one for this ballot style
+    // The ballot style's groupId corresponds to the split's corresponding district or identifier
+    const matchingSplit = precinctWithSplits.splits.find((split) => {
+      // The split corresponds to this ballot style if they share districts
+      return ballotStyleInfo?.districts?.some((districtId: string) =>
+        split.districtIds?.includes(districtId),
+      );
+    });
+
+    if (matchingSplit) {
+      displayName = matchingSplit.name;
+    }
+  }
+
+  logger.debug(`Looking for ballot style option containing "${displayName}"`);
+
+  // Click on the text - try multiple strategies
+  try {
+    // First try exact text match
+    const optionElement = page.getByText(displayName, { exact: true });
+    const count = await optionElement.count();
+    logger.debug(`Found ${count} elements with text "${displayName}"`);
+
+    if (count > 0) {
+      // Click the last one (dropdown options are typically later in the DOM than labels)
+      await optionElement.last().click({ timeout: 5000, force: true });
+      logger.debug(`Selected ballot style option "${displayName}"`);
+    } else {
+      throw new Error(`No elements found with text "${displayName}"`);
+    }
+  } catch (error) {
+    logger.error(`Failed to click ballot style option "${displayName}": ${String(error)}`);
+    await stepCollector.captureScreenshot(
+      `admin-manual-tallies-style-${styleIndex}-no-options`,
+      'Failed to select option',
+    );
+    return;
+  }
+
+  await page.waitForTimeout(500);
+
+  // Select voting method using the ID selector
+  const votingMethodSelect = page.locator('#selectBallotType');
+  await votingMethodSelect.click();
+  await page.waitForTimeout(800);
+
+  const precinctOption = page.getByText('Precinct', { exact: true });
+  await precinctOption.first().click();
+  await page.waitForTimeout(500);
+
+  await stepCollector.captureScreenshot(
+    `admin-manual-tallies-style-${styleIndex}-selected`,
+    `Selected ${ballotStyleGroupId}`,
+  );
+
+  // Click "Enter Tallies" button
+  const enterTalliesButton = page.getByText('Enter Tallies');
+  await enterTalliesButton.click();
+  await page.waitForTimeout(1000);
+
+  // Fill ballot count
+  const ballotCountInput = page.locator('input#ballotCount');
+  await ballotCountInput.waitFor({ state: 'visible', timeout: 5000 });
+  await ballotCountInput.fill(String(ballotCount));
+  await page.waitForTimeout(500);
+
+  // Click "Save & Next" to proceed to first contest
+  await page.getByText('Save & Next').click();
+  await page.waitForTimeout(1000);
+
+  // Loop through each contest
+  for (let contestIndex = 0; contestIndex < contests.length; contestIndex++) {
+    const contest = contests[contestIndex];
+    const isLastContest = contestIndex === contests.length - 1;
+
+    logger.debug(`Contest ${contestIndex + 1}/${contests.length}: ${contest.id}`);
+
+    await fillContest(
+      page,
+      stepCollector,
+      contest,
+      ballotCount,
+      contestResults,
+      styleIndex,
+      contestIndex,
+      isLastContest,
+    );
+  }
+
+  // After filling all contests, we should be back at the manual tallies tab
+  await page.waitForTimeout(1000);
+
+  // Record the manual tally as output
+  await stepCollector.addOutput({
+    type: 'manual-tally',
+    label: `Manual Tally: ${ballotStyleGroupId}`,
+    description: `Manual tally for ${ballotStyleGroupId} in ${precinctId} (${votingMethod})`,
+    precinctId,
+    ballotStyleGroupId,
+    votingMethod,
+    ballotCount,
+    contestResults,
+  });
+}
+
+/**
+ * Fill out a single contest with valid tallies
+ */
+async function fillContest(
+  page: Page,
+  stepCollector: StepCollector,
+  contest: Contest,
+  ballotCount: number,
+  contestResults: Record<string, ContestResult>,
+  styleIndex: number,
+  contestIndex: number,
+  isLastContest: boolean,
+): Promise<void> {
+  // Get contest ID from URL
+  const contestUrl = page.url();
+  const urlParts = contestUrl.split('/');
+  const contestId = urlParts[urlParts.length - 1] || contest.id;
+
+  // Wait for form to load
+  await page.locator('input#undervotes').waitFor({ state: 'visible' });
+
+  // Build a map of input IDs to actual option IDs
+  // For yes-no contests, the input IDs are "yes" and "no", but we need the actual option IDs
+  const inputIdToOptionId = new Map<string, string>();
+  if (contest.type === 'yesno') {
+    inputIdToOptionId.set('yes', contest.yesOption.id);
+    inputIdToOptionId.set('no', contest.noOption.id);
+  } else {
+    // For candidate contests, the input ID is the candidate ID
+    for (const candidate of contest.candidates) {
+      inputIdToOptionId.set(candidate.id, candidate.id);
+    }
+  }
+
+  // Find all number inputs
+  const allInputs = await page.locator('input[type="text"]:not([disabled])').all();
+  const candidateInputs: Array<{ input: Locator; id: string; optionId: string }> = [];
+
+  // Step 1: Initialize all candidate inputs with 0
+  for (const input of allInputs) {
+    const inputId = await input.getAttribute('id');
+    if (
+      inputId &&
+      inputId !== 'undervotes' &&
+      inputId !== 'overvotes' &&
+      inputId !== 'ballotCount'
+    ) {
+      await input.fill('0');
+      const optionId = inputIdToOptionId.get(inputId) || inputId;
+      candidateInputs.push({ input, id: inputId, optionId });
+      await page.waitForTimeout(50);
+    }
+  }
+
+  logger.debug(`Found ${candidateInputs.length} candidate/option inputs`);
+
+  // Step 2: Fill undervotes and overvotes
+  // For candidate contests with multiple seats, the total must equal ballotCount × seats
+  // For yes-no contests, the total must equal ballotCount × 1
+  const totalMarksNeeded = contest.type === 'candidate' ? ballotCount * contest.seats : ballotCount;
+
+  // Give each candidate 1 vote, rest goes to undervotes
+  const votesForCandidates = candidateInputs.length;
+  const undervotes = totalMarksNeeded - votesForCandidates;
+
+  await page.locator('input#undervotes').fill(String(undervotes));
+  await page.locator('input#overvotes').fill('0');
+  await page.waitForTimeout(200);
+
+  // Step 3: Give 1 vote to each candidate/option
+  const tallies: Record<string, number> = {};
+  for (const { input, optionId } of candidateInputs) {
+    await input.fill('1');
+    tallies[optionId] = 1;
+    await page.waitForTimeout(50);
+  }
+
+  // Record results
+  contestResults[contestId] = {
+    contestId,
+    ballots: ballotCount,
+    overvotes: 0,
+    undervotes,
+    tallies,
+  };
+
+  logger.debug(
+    `Filled contest ${contestId}: ${candidateInputs.length} options with 1 vote each, ${undervotes} undervotes`,
+  );
+
+  await page.waitForTimeout(500);
+
+  // Capture screenshot after all values are entered but before clicking button
+  await stepCollector.captureScreenshot(
+    `admin-manual-tallies-style-${styleIndex}-contest-${contestIndex}`,
+    `Contest ${contest.id} with values entered`,
+  );
+
+  // Click appropriate button based on whether this is the last contest
+  const buttonText = isLastContest ? 'Finish' : 'Save & Next';
+  const button = page.getByText(buttonText);
+  await button.click({ timeout: 120_000 });
+  await page.waitForTimeout(1000);
+
+  // Check for validation message (success or warning)
+  const validationMessage = await captureValidationMessage(page);
+  if (validationMessage) {
+    if (validationMessage.type === 'error') {
+      logger.error(`Contest ${contestId}: ${validationMessage.text}`);
+    } else if (validationMessage.type === 'warning') {
+      logger.warn(`Contest ${contestId}: ${validationMessage.text}`);
+    } else {
+      logger.info(`Contest ${contestId}: ${validationMessage.text}`);
+    }
+
+    // Store validation info in contest results
+    contestResults[contestId].validation = {
+      type: validationMessage.type,
+      message: validationMessage.text,
+    };
+  }
+}
+
+/**
+ * Capture validation message from the tally form
+ * Returns the message text and type (success/warning/error)
+ */
+async function captureValidationMessage(
+  page: Page,
+): Promise<{ type: 'success' | 'warning' | 'error'; text: string } | null> {
+  try {
+    // VxAdmin shows validation messages in a <p> tag near the form actions
+    // Messages can be:
+    // - "Incomplete tallies" (warning)
+    // - "Entered tallies do not match total ballots cast" (warning)
+    // - "Entered tallies are valid" (success)
+
+    // Wait a moment for the validation message to appear
+    await page.waitForTimeout(500);
+
+    // Try to find validation text
+    const validationTexts = [
+      'Entered tallies are valid',
+      'Entered tallies do not match total ballots cast',
+      'Incomplete tallies',
+    ];
+
+    for (const validationText of validationTexts) {
+      try {
+        const element = page.getByText(validationText, { exact: false });
+        if (await element.isVisible({ timeout: 1000 })) {
+          const text = validationText;
+          const type = text.includes('valid')
+            ? 'success'
+            : text.includes('do not match') || text.includes('Incomplete')
+              ? 'warning'
+              : 'error';
+
+          logger.debug(`Captured validation message: ${text} (${type})`);
+          return { type, text };
+        }
+      } catch {
+        // Not found, try next
+      }
+    }
+
+    logger.debug('No validation message found');
+    return null;
+  } catch (error) {
+    logger.debug(`Could not capture validation message: ${String(error)}`);
+    return null;
+  }
+}
+
+/**
+ * Load CVRs from VxScan USB drives
+ */
+async function loadCvrs(
+  page: Page,
+  election: Election,
+  outputDir: string,
+  stepCollector: StepCollector,
+): Promise<void> {
+  await stepCollector.captureScreenshot('admin-tally-locked', 'VxAdmin locked (before tally)');
   await stepCollector.captureScreenshot('admin-tally-logged-in', 'Logged in as Election Manager');
 
   // Navigate to Tally section
@@ -169,6 +579,17 @@ export async function runAdminTallyWorkflow(
   await page.waitForTimeout(1000);
   await stepCollector.captureScreenshot('admin-tally-after-cvr-load', 'Tally page after CVR load');
 
+  logger.success('CVRs loaded successfully');
+}
+
+/**
+ * Generate and export tally reports
+ */
+async function generateReports(
+  page: Page,
+  usbController: ReturnType<typeof createMockUsbController>,
+  stepCollector: StepCollector,
+): Promise<void> {
   // Navigate to Reports section
   logger.debug('Navigating to Reports section');
 
@@ -244,6 +665,63 @@ export async function runAdminTallyWorkflow(
     });
   }
 
+  logger.success('Tally reports generated and exported');
+}
+
+export async function runAdminTallyWorkflow(
+  page: Page,
+  election: Election,
+  electionPackagePath: string,
+  outputDir: string,
+  dataPath: string,
+  collector: ArtifactCollector,
+  limitManualTallies?: number,
+): Promise<void> {
+  logger.step('Running VxAdmin tally workflow');
+
+  await page.setViewportSize({
+    width: 1920,
+    height: 1200,
+  });
+  const usbController = createMockUsbController({ dataPath });
+
+  // Navigate to app
+  await navigateToApp(page);
+  await toggleDevDock(page);
+
+  // Ensure USB is inserted with CVRs
+  logger.debug('Inserting USB drive with CVRs');
+  await usbController.insert();
+  await page.waitForTimeout(1000);
+
+  // Log in as election manager
+  await dipElectionManagerCardAndLogin(page, electionPackagePath);
+
+  // Step 1: Load CVRs
+  const loadCvrsStep = collector.startStep(
+    page,
+    'loading-cvrs',
+    'Loading CVRs in VxAdmin',
+    'Import CVR files from VxScan USB drives',
+  );
+
+  await loadCvrs(page, election, outputDir, loadCvrsStep);
+  loadCvrsStep.complete();
+
+  // Step 2: Add manual tallies (creates individual steps for each ballot style)
+  await addManualTally(page, election, collector, limitManualTallies);
+
+  // Step 3: Generate reports
+  const reportsStep = collector.startStep(
+    page,
+    'generating-reports',
+    'Generating Tally Reports',
+    'Generate and export tally reports as PDF and CSV',
+  );
+
+  await generateReports(page, usbController, reportsStep);
+  reportsStep.complete();
+
   // Lock machine before logging out
   logger.debug('Locking machine');
 
@@ -251,7 +729,7 @@ export async function runAdminTallyWorkflow(
 
   await page.waitForTimeout(500);
 
-  await stepCollector.captureScreenshot('admin-tally-logged-out', 'Logged out after tally');
+  await reportsStep.captureScreenshot('admin-tally-logged-out', 'Logged out after tally');
 
   // Remove USB
   await usbController.remove();
@@ -343,7 +821,7 @@ export interface Adjudications {
 }
 
 /**
- * Validate tally results against scanned ballots
+ * Validate tally results against scanned ballots and manual tallies
  */
 export async function validateTallyResults(
   collection: ArtifactCollection,
@@ -354,6 +832,7 @@ export async function validateTallyResults(
     // Get votes from accepted scan results stored in step outputs
     const expectedVotes = new Map<string, Map<string, number>>(); // contestId -> optionId -> count
     let totalOutputs = 0;
+    let manualTallyCount = 0;
 
     for (const step of collection.steps) {
       for (const output of step.outputs) {
@@ -382,6 +861,23 @@ export async function validateTallyResults(
           }
         }
 
+        // Include manual tallies in expected votes
+        if (output.type === 'manual-tally') {
+          manualTallyCount++;
+
+          for (const [contestId, contestTally] of Object.entries(output.contestResults)) {
+            if (!expectedVotes.has(contestId)) {
+              expectedVotes.set(contestId, new Map());
+            }
+            const contestMap = expectedVotes.get(contestId) as Map<string, number>;
+
+            // Add the manual tally votes to expected votes
+            for (const [optionId, count] of Object.entries(contestTally.tallies)) {
+              contestMap.set(optionId, (contestMap.get(optionId) ?? 0) + count);
+            }
+          }
+        }
+
         if (
           output.type === 'report' &&
           output.path.includes('tally-report') &&
@@ -396,7 +892,9 @@ export async function validateTallyResults(
       throw new Error('No tally report CSV output found');
     }
 
-    logger.debug(`Validation: processed ${totalOutputs} scanned sheets`);
+    logger.debug(
+      `Validation: processed ${totalOutputs} scanned sheets and ${manualTallyCount} manual tally entries`,
+    );
 
     // Parse CSV to get actual vote counts by selection ID
     // CSV format: Contest,Contest ID,Selection,Selection ID,Total Votes

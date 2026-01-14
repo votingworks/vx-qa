@@ -10,6 +10,20 @@ import { getMockEnvironment, APP_PORTS, getBackendPort, type MachineType } from 
 import { waitForDevDock } from '../mock-hardware/client.js';
 import { promisify } from 'util';
 
+/**
+ * Check if a port is free (not in use)
+ */
+async function isPortFree(port: number): Promise<boolean> {
+  const execFileAsync = promisify(execFile);
+  try {
+    const { stdout } = await execFileAsync('lsof', [`-ti:${port}`]);
+    return stdout.trim().length === 0;
+  } catch {
+    // If lsof errors (e.g., no process found), port is free
+    return true;
+  }
+}
+
 export interface AppOrchestrator {
   /**
    * Start a VxSuite app (admin or scan)
@@ -169,8 +183,21 @@ export function createAppOrchestrator(repoPath: string): AppOrchestrator {
         state.process = null;
         state.currentApp = null;
 
-        // Wait a moment for ports to be released
-        await sleep(1000);
+        // Wait for ports to be released by checking they're actually free
+        const backendPort = getBackendPort(appName);
+        const maxWaitTime = 5000; // 5 seconds max
+        const startTime = Date.now();
+
+        while (Date.now() - startTime < maxWaitTime) {
+          const portFree = await isPortFree(backendPort);
+          if (portFree) {
+            break;
+          }
+          await sleep(200);
+        }
+
+        // Additional short wait for good measure
+        await sleep(500);
 
         spinner.succeed(`${appName} app stopped`);
       } catch (error) {

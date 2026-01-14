@@ -35,6 +35,7 @@ import { spawn } from 'node:child_process';
 export interface RunOptions {
   headless?: boolean;
   limitBallots?: number;
+  limitManualTallies?: number;
 }
 
 /**
@@ -43,6 +44,10 @@ export interface RunOptions {
 export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {}): Promise<void> {
   const startTime = Date.now();
   const collector = createArtifactCollector(config.output.directory, config);
+
+  // Set up log file in the run directory
+  const logFilePath = join(config.output.directory, 'run.log');
+  logger.setLogFile(logFilePath);
 
   logger.step('Starting VxSuite QA automation');
   logger.info(`Output directory: ${config.output.directory}`);
@@ -308,24 +313,15 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     await orchestrator.startApp('admin');
 
     try {
-      // Create step for tallying CVRs
-      const tallyStep = collector.startStep(
-        page,
-        'tallying-cvrs',
-        'Tallying CVRs in VxAdmin',
-        'Import CVRs from VxScan and generate tally reports',
-      );
-
       await runAdminTallyWorkflow(
         page,
         election,
         electionPackagePath,
         config.output.directory,
         dataPath,
-        tallyStep,
+        collector,
+        options.limitManualTallies,
       );
-
-      tallyStep.complete();
     } finally {
       await orchestrator.stopApp();
       await browser.close();

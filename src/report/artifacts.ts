@@ -163,7 +163,12 @@ export function createArtifactCollector(outputDir: string, config: QARunConfig):
         },
 
         async addOutput(output: StepOutput): Promise<void> {
-          if (output.type !== 'scan-result' && output.path) {
+          if (
+            output.type !== 'scan-result' &&
+            output.type !== 'manual-tally' &&
+            'path' in output &&
+            output.path
+          ) {
             const fileName = basename(output.path);
             const stepCopyPath = join(stepDir, fileName);
             await copyFile(output.path, stepCopyPath);

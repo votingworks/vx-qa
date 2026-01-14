@@ -34,6 +34,11 @@ program
   .option('--headless', 'Run browser in headless mode (default)')
   .option('--no-headless', 'Run browser in headed mode for debugging')
   .option('--limit-ballots <number>', 'Limit the number of ballots to scan (for testing)', parseInt)
+  .option(
+    '--limit-manual-tallies <number>',
+    'Limit the number of ballot styles with manual tallies (for testing)',
+    parseInt,
+  )
   .action(async (options) => {
     printHeader('VxSuite QA Automation');
 
@@ -73,6 +78,7 @@ program
       await runQAWorkflow(config, {
         headless: options.headless !== false,
         limitBallots: options.limitBallots,
+        limitManualTallies: options.limitManualTallies,
       });
     } catch (error) {
       if (error instanceof Error) {
@@ -151,7 +157,7 @@ program
         ref: 'v4.0.4',
       },
       election: {
-        source: './election.json',
+        source: './election-package-and-ballots.zip',
       },
       output: {
         directory: './qa-output',

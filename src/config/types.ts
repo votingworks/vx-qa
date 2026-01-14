@@ -22,7 +22,7 @@ export interface VxSuiteConfig {
 }
 
 export interface ElectionConfig {
-  /** Path to election.json or election package ZIP */
+  /** Path to election package ZIP (election-package-and-ballots-*.zip) */
   source: string;
 }
 
@@ -121,6 +121,17 @@ export type StepOutput =
       description?: string;
       path: string;
       validationResult?: ValidationResult;
+    }
+  | {
+      type: 'manual-tally';
+      label: string;
+      description?: string;
+      precinctId: string;
+      ballotStyleGroupId: string;
+      votingMethod: ManualResultsVotingMethod;
+      ballotCount: number;
+      contestResults: Record<string, ContestManualTally>;
+      validationResult?: ValidationResult;
     };
 
 /** Collected artifacts from a QA run */
@@ -155,6 +166,31 @@ export interface ErrorArtifact {
   step: string;
   timestamp: Date;
   stack?: string;
+}
+
+export type ManualResultsVotingMethod = 'absentee' | 'precinct';
+
+export interface ManualResultsIdentifier {
+  precinctId: string;
+  ballotStyleGroupId: string;
+  votingMethod: ManualResultsVotingMethod;
+}
+
+export interface ManualTallyEntry extends ManualResultsIdentifier {
+  ballotCount: number;
+  contestResults: Record<string, ContestManualTally>;
+}
+
+export interface ContestManualTally {
+  contestId: string;
+  ballots: number;
+  overvotes: number;
+  undervotes: number;
+  tallies: Record<string, number>; // candidateId/optionId -> count
+  validation?: {
+    type: 'success' | 'warning' | 'error';
+    message: string;
+  };
 }
 
 export type PrecinctSelectionKind = 'SinglePrecinct' | 'AllPrecincts';

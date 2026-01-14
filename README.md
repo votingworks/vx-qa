@@ -58,7 +58,7 @@ Example `vx-qa-config.json`:
     "ref": "v4.0.4"
   },
   "election": {
-    "source": "./election.json"
+    "source": "./election-package-and-ballots.zip"
   },
   "output": {
     "directory": "./qa-output"

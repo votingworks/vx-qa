@@ -124,27 +124,62 @@ async function prepareReportData(
         })),
       ),
       outputs: await Promise.all(
-        step.outputs.map(async (output) => ({
-          type: output.type,
-          label: output.label,
-          description: output.description,
-          path:
-            output.type !== 'scan-result'
-              ? relative(outputDir, resolvePath(output.path, outputDir))
-              : undefined,
-          accepted: output.type === 'scan-result' ? output.accepted : undefined,
-          expected: output.type === 'scan-result' ? output.expected : undefined,
-          statusClass:
-            output.type !== 'scan-result'
-              ? 'neutral'
-              : output.accepted === output.expected
-                ? 'success'
-                : 'error',
-          thumbnail:
-            (output.type === 'print' || output.type === 'report') && output.path?.endsWith('.pdf')
-              ? await generatePdfThumbnail(resolvePath(output.path, outputDir))
-              : null,
-        })),
+        step.outputs.map(async (output) => {
+          const baseOutput = {
+            type: output.type,
+            label: output.label,
+            description: output.description,
+            path:
+              output.type !== 'scan-result' && output.type !== 'manual-tally' && 'path' in output
+                ? relative(outputDir, resolvePath(output.path, outputDir))
+                : undefined,
+            accepted: output.type === 'scan-result' ? output.accepted : undefined,
+            expected: output.type === 'scan-result' ? output.expected : undefined,
+            statusClass:
+              output.type !== 'scan-result'
+                ? 'neutral'
+                : output.accepted === output.expected
+                  ? 'success'
+                  : 'error',
+            thumbnail:
+              (output.type === 'print' || output.type === 'report') &&
+              'path' in output &&
+              output.path?.endsWith('.pdf')
+                ? await generatePdfThumbnail(resolvePath(output.path, outputDir))
+                : null,
+          };
+
+          // Add manual tally specific data
+          if (output.type === 'manual-tally') {
+            const contestsWithValidation = Object.values(output.contestResults).filter(
+              (c) => c.validation,
+            );
+            const hasWarnings = contestsWithValidation.some(
+              (c) => c.validation?.type === 'warning',
+            );
+            const hasErrors = contestsWithValidation.some((c) => c.validation?.type === 'error');
+
+            return {
+              ...baseOutput,
+              data: {
+                ballotStyleGroupId: output.ballotStyleGroupId,
+                precinctId: output.precinctId,
+                ballotCount: output.ballotCount,
+                contestCount: Object.keys(output.contestResults).length,
+                validationMessages: contestsWithValidation.map((c) => ({
+                  contestId: c.contestId,
+                  type: c.validation!.type,
+                  message: c.validation!.message,
+                })),
+                hasWarnings,
+                hasErrors,
+              },
+              statusClass: hasErrors ? 'error' : hasWarnings ? 'warning' : 'success',
+            };
+          }
+
+          return baseOutput;
+        }),
       ),
       screenshots: step.screenshots.map((screenshot) => ({
         ...screenshot,
@@ -313,9 +348,14 @@ function renderTemplate(data: ReportData): string {
     :root {
       --primary: #2563eb;
       --success: #16a34a;
+      --success-bg: #f0fdf4;
+      --warning: #ca8a04;
+      --warning-bg: #fef9c3;
       --error: #dc2626;
+      --error-bg: #fef2f2;
       --gray-100: #f3f4f6;
       --gray-200: #e5e7eb;
+      --gray-400: #9ca3af;
       --gray-700: #374151;
       --gray-900: #111827;
     }
@@ -380,8 +420,14 @@ function renderTemplate(data: ReportData): string {
     .io-description { font-size: 0.875rem; color: var(--gray-700); }
     .io-meta { font-size: 0.75rem; color: var(--gray-700); margin-top: 0.5rem; }
     .output-success { border-left: 4px solid var(--success); }
+    .output-warning { border-left: 4px solid var(--warning); }
     .output-error { border-left: 4px solid var(--error); }
     .output-neutral { border-left: 4px solid var(--gray-400); }
+    .validation-messages { margin-top: 0.75rem; }
+    .validation-message { padding: 0.5rem; margin-top: 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; }
+    .validation-error { background: var(--error-bg); border-left: 3px solid var(--error); }
+    .validation-warning { background: var(--warning-bg); border-left: 3px solid var(--warning); }
+    .validation-success { background: var(--success-bg); border-left: 3px solid var(--success); }
     .step-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
     .thumbnail-wrapper { margin-top: 0.5rem; }
     .thumbnail-wrapper img { max-width: 200px; border-radius: 0.25rem; }
@@ -527,6 +573,24 @@ function renderTemplate(data: ReportData): string {
               {{#if data.expected}} • Expected: {{#if data.expected}}Accepted{{else}}Rejected{{/if}}{{/if}}
               {{#unless data.isExpected}} • ⚠️ Unexpected result{{/unless}}
             </div>
+            {{/eq}}
+            {{#eq type "manual-tally"}}
+            <div class="io-meta">
+              Ballot Style: {{data.ballotStyleGroupId}} • Precinct: {{data.precinctId}}
+              <br>Ballots: {{data.ballotCount}} • Contests: {{data.contestCount}}
+            </div>
+            {{#if data.validationMessages.length}}
+            <div class="io-meta validation-messages">
+              {{#each data.validationMessages}}
+              <div class="validation-message validation-{{type}}">
+                {{#eq type "error"}}❌{{/eq}}
+                {{#eq type "warning"}}⚠️{{/eq}}
+                {{#eq type "success"}}✓{{/eq}}
+                {{message}}
+              </div>
+              {{/each}}
+            </div>
+            {{/if}}
             {{/eq}}
             {{#eq type "pdf"}}
             {{#if data.validationMessage}}
