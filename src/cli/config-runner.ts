@@ -31,6 +31,7 @@ import { State } from '../repo/state.js';
 import { writeFile } from 'node:fs/promises';
 import assert from 'node:assert';
 import { spawn } from 'node:child_process';
+import type { AppOrchestrator } from '../apps/orchestrator.js';
 
 export interface RunOptions {
   headless?: boolean;
@@ -44,6 +45,30 @@ export interface RunOptions {
 export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {}): Promise<void> {
   const startTime = Date.now();
   const collector = createArtifactCollector(config.output.directory, config);
+  let orchestrator: AppOrchestrator | null = null;
+  let browser: Awaited<ReturnType<typeof createBrowserSession>>['browser'] | null = null;
+
+  // Set up signal handlers to ensure clean shutdown
+  const handleShutdown = async (signal: string) => {
+    logger.info(`\nReceived ${signal}, cleaning up...`);
+    try {
+      if (orchestrator?.isRunning()) {
+        await orchestrator.stopApp();
+      }
+      if (browser) {
+        await browser.close();
+      }
+    } catch (error) {
+      logger.error(`Error during cleanup: ${(error as Error).message}`);
+    }
+    process.exit(1);
+  };
+
+  const sigintHandler = () => void handleShutdown('SIGINT');
+  const sigtermHandler = () => void handleShutdown('SIGTERM');
+
+  process.on('SIGINT', sigintHandler);
+  process.on('SIGTERM', sigtermHandler);
 
   // Set up log file in the run directory
   const logFilePath = join(config.output.directory, 'run.log');
@@ -194,9 +219,11 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     printDivider();
     logger.step('Phase 5: VxAdmin Configuration');
 
-    const { browser, page } = await createBrowserSession({
+    const browserSession = await createBrowserSession({
       headless: options.headless ?? true,
     });
+    browser = browserSession.browser;
+    const { page } = browserSession;
     const adminStep = collector.startStep(
       page,
       'programming-vxadmin',
@@ -211,7 +238,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
       path: electionPackagePath,
     });
 
-    const orchestrator = createAppOrchestrator(repoPath);
+    orchestrator = createAppOrchestrator(repoPath);
     await orchestrator.startApp('admin');
 
     // FIXME: It'd be nice to not need to hardcode this as the mock USB drive data location.
@@ -376,6 +403,10 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     }
 
     throw error;
+  } finally {
+    // Clean up signal handlers
+    process.off('SIGINT', sigintHandler);
+    process.off('SIGTERM', sigtermHandler);
   }
 }
 
