@@ -63,7 +63,7 @@ jobs:
           name: Run QA Test - e71c80e
           command: |
             cd test-fixtures
-            node ../dist/index.js run vx-qa-config-e71c80e.json
+            node ../dist/index.js run --config vx-qa-config-e71c80e.json
           no_output_timeout: 30m
       - store_artifacts:
           path: test-fixtures/output
