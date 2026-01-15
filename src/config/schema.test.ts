@@ -15,9 +15,6 @@ describe('validateConfig', () => {
       election: {
         source: './election.json',
       },
-      ballots: {
-        patterns: ['blank', 'valid'],
-      },
       output: {
         directory: './output',
       },
@@ -37,9 +34,6 @@ describe('validateConfig', () => {
       },
       election: {
         source: './election.json',
-      },
-      ballots: {
-        patterns: ['blank', 'valid'],
       },
       output: {
         directory: './output',
@@ -61,9 +55,6 @@ describe('validateConfig', () => {
       election: {
         source: './election.json',
       },
-      ballots: {
-        patterns: ['blank', 'valid'],
-      },
       output: {
         directory: './qa-output',
       },
@@ -83,9 +74,6 @@ describe('validateConfig', () => {
       },
       election: {
         source: '/absolute/path/election.json',
-      },
-      ballots: {
-        patterns: ['blank', 'valid'],
       },
       output: {
         directory: '/absolute/path/output',
@@ -109,9 +97,6 @@ describe('validateConfig', () => {
       election: {
         source: '../elections/election.json',
       },
-      ballots: {
-        patterns: ['blank', 'valid'],
-      },
       output: {
         directory: '../results/output',
       },
@@ -134,9 +119,6 @@ describe('validateConfig', () => {
       election: {
         source: './election.json',
       },
-      ballots: {
-        patterns: ['blank', 'valid'],
-      },
       output: {
         directory: './output',
       },
@@ -156,9 +138,6 @@ describe('validateConfig', () => {
       },
       election: {
         source: './election.json',
-      },
-      ballots: {
-        patterns: ['blank', 'valid'],
       },
       output: {
         directory: './output',
@@ -183,9 +162,6 @@ describe('safeValidateConfig', () => {
       election: {
         source: './election.json',
       },
-      ballots: {
-        patterns: ['blank', 'valid'],
-      },
       output: {
         directory: './output',
       },
@@ -207,9 +183,6 @@ describe('safeValidateConfig', () => {
       election: {
         source: './election.json',
       },
-      ballots: {
-        patterns: ['blank', 'valid'],
-      },
       output: {
         directory: './output',
       },
@@ -219,52 +192,6 @@ describe('safeValidateConfig', () => {
 
     expect(result.success).toBe(false);
     expect(result.data).toBeUndefined();
-    expect(result.error).toBeDefined();
-  });
-
-  test('return error for missing required fields', () => {
-    const config = {
-      vxsuite: {
-        repoPath: './vxsuite',
-        ref: 'v4.0.4',
-      },
-      election: {
-        source: './election.json',
-      },
-      ballots: {
-        patterns: [],
-      },
-      output: {
-        directory: './output',
-      },
-    };
-
-    const result = safeValidateConfig(config);
-
-    expect(result.success).toBe(false);
-    expect(result.error).toBeDefined();
-  });
-
-  test('return error for invalid ballot patterns', () => {
-    const config = {
-      vxsuite: {
-        repoPath: './vxsuite',
-        ref: 'v4.0.4',
-      },
-      election: {
-        source: './election.json',
-      },
-      ballots: {
-        patterns: ['invalid-pattern'],
-      },
-      output: {
-        directory: './output',
-      },
-    };
-
-    const result = safeValidateConfig(config);
-
-    expect(result.success).toBe(false);
     expect(result.error).toBeDefined();
   });
 });
