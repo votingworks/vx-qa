@@ -19,10 +19,11 @@ commands:
             - v1-pnpm-{{ checksum "pnpm-lock.yaml" }}
             - v1-pnpm-
       - run:
+          name: Install Latest pnpm
+          command: npm install -g pnpm@latest
+      - run:
           name: Install Dependencies
-          command: |
-            corepack enable
-            pnpm install --frozen-lockfile
+          command: pnpm install --frozen-lockfile
       - save_cache:
           name: Save pnpm Cache
           key: v1-pnpm-{{ checksum "pnpm-lock.yaml" }}
