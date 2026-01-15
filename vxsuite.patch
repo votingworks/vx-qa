@@ -170,27 +170,27 @@ index 4bcd1f0e8..edc6043b3 100644
    }
  
 diff --git a/script/bootstrap b/script/bootstrap
-index 1a8304cfc..8b3adce85 100755
+index 1a8304cfc..09defe092 100755
 --- a/script/bootstrap
 +++ b/script/bootstrap
-@@ -2,13 +2,10 @@
- 
+@@ -2,17 +2,14 @@
+
  set -euo pipefail
- 
+
 -local_user=`logname`
 -local_user_home_dir=$( getent passwd "${local_user}" | cut -d: -f6 )
 -
  # Make sure PATH includes cargo and /sbin
 -export PATH="${local_user_home_dir}/.cargo/bin:${PATH}:/sbin/"
 +export PATH="${HOME}/.cargo/bin:${PATH}:/sbin/"
- 
+
 -DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 +DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
- 
+
  for app in ${DIR}/../apps/*/frontend ${DIR}/../apps/*/backend; do
    if [ -d "${app}" ]; then
 -    make -C "${app}" bootstrap
 +    make -C "${app}" -n bootstrap && make -C "${app}" bootstrap
    fi
  done
- 
+
