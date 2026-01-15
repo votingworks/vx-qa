@@ -46,6 +46,12 @@ program
 
     try {
       // Load config from file
+      if (!options.config) {
+        logger.error(
+          'No configuration file specified. Use --config <path> to specify a config file.',
+        );
+        process.exit(1);
+      }
       const configPath = resolvePath(options.config);
       if (!existsSync(configPath)) {
         logger.error(`Config file not found: ${configPath}`);
