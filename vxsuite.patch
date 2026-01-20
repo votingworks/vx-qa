@@ -49,6 +49,39 @@ index 3c995d047..ae5b91883 100644
  
    const audioPlayer = new AudioPlayer(NODE_ENV, logger, audioInfo.builtin.name);
  
+diff --git a/libs/backend/src/system_call/get_audio_info.ts b/libs/backend/src/system_call/get_audio_info.ts
+index b00654cf1..1499c0a07 100644
+--- a/libs/backend/src/system_call/get_audio_info.ts
++++ b/libs/backend/src/system_call/get_audio_info.ts
+@@ -2,6 +2,7 @@ import { LogEventId, Logger } from '@votingworks/logging';
+ import { z } from 'zod/v4';
+ import { execFile } from '../exec';
+ import { NODE_ENV } from '../scan_globals';
++import { isIntegrationTest } from '@votingworks/utils';
+ 
+ /** System audio info. */
+ export interface AudioInfo {
+@@ -31,11 +32,20 @@ const PactlSinkListSchema = z.array(
+   })
+ );
+ 
++const MOCK_AUDIO_INFO: AudioInfo = {
++  builtin: { headphonesActive: false, name: 'mock.builtin.stereo' },
++};
++
++
+ /** Get current system audio status. */
+ export async function getAudioInfo(ctx: {
+   logger: Logger;
+   nodeEnv: typeof NODE_ENV;
+ }): Promise<AudioInfo> {
++  if (isIntegrationTest()) {
++    return MOCK_AUDIO_INFO;
++  }
++
+   const { logger, nodeEnv } = ctx;
+   let errorOutput: string;
+   let commandOutput: string;
 diff --git a/libs/hmpb/src/marking.test.ts b/libs/hmpb/src/marking.test.ts
 index 025c6e183..6c01ee21f 100644
 --- a/libs/hmpb/src/marking.test.ts
