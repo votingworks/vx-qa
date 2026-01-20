@@ -81,6 +81,15 @@ async function checkoutTag(repoPath: string, tag: string): Promise<void> {
   try {
     const git: SimpleGit = simpleGit(repoPath);
 
+    // Restore any modified tracked files to their committed state
+    // This ensures the patch can be applied cleanly
+    try {
+      await git.raw(['restore', '.']);
+      logger.debug('Restored modified tracked files');
+    } catch {
+      // Ignore if there are no changes to restore
+    }
+
     // First try to fetch the specific tag/branch if not available locally
     try {
       await git.fetch(['origin', tag, '--depth', '1']);

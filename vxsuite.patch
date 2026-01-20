@@ -53,31 +53,20 @@ diff --git a/libs/backend/src/system_call/get_audio_info.ts b/libs/backend/src/s
 index b00654cf1..1499c0a07 100644
 --- a/libs/backend/src/system_call/get_audio_info.ts
 +++ b/libs/backend/src/system_call/get_audio_info.ts
-@@ -2,6 +2,7 @@ import { LogEventId, Logger } from '@votingworks/logging';
- import { z } from 'zod/v4';
- import { execFile } from '../exec';
- import { NODE_ENV } from '../scan_globals';
-+import { isIntegrationTest } from '@votingworks/utils';
- 
- /** System audio info. */
- export interface AudioInfo {
-@@ -31,11 +32,20 @@ const PactlSinkListSchema = z.array(
+@@ -31,11 +31,17 @@ const PactlSinkListSchema = z.array(
    })
  );
- 
+
 +const MOCK_AUDIO_INFO: AudioInfo = {
 +  builtin: { headphonesActive: false, name: 'mock.builtin.stereo' },
 +};
-+
 +
  /** Get current system audio status. */
  export async function getAudioInfo(ctx: {
    logger: Logger;
    nodeEnv: typeof NODE_ENV;
  }): Promise<AudioInfo> {
-+  if (isIntegrationTest()) {
-+    return MOCK_AUDIO_INFO;
-+  }
++  return MOCK_AUDIO_INFO;
 +
    const { logger, nodeEnv } = ctx;
    let errorOutput: string;

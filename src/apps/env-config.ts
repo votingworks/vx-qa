@@ -8,9 +8,6 @@ import assert from 'node:assert';
  * Environment variables to enable mock hardware
  */
 export const MOCK_ENV_VARS: Record<string, string> = {
-  // Generic mock/test flag
-  IS_INTEGRATION_TEST: 'TRUE',
-
   // Enable mock hardware
   REACT_APP_VX_USE_MOCK_CARDS: 'TRUE',
   REACT_APP_VX_USE_MOCK_USB_DRIVE: 'TRUE',
