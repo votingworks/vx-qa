@@ -60,11 +60,34 @@ jobs:
             pnpm exec playwright install-deps
             pnpm exec playwright install chromium
       - run:
+          name: Compute VxSuite Cache Key
+          command: |
+            # Extract the vxsuite ref from the config file
+            VXSUITE_REF=$(node -e "console.log(require('./test-fixtures/vx-qa-config-e71c80e.json').vxsuite.ref)")
+            echo "VxSuite ref: $VXSUITE_REF"
+
+            # Compute hash of the patch file
+            PATCH_HASH=$(sha256sum vxsuite.patch | cut -d' ' -f1)
+            echo "Patch hash: $PATCH_HASH"
+
+            # Create cache key file
+            echo "${VXSUITE_REF}-${PATCH_HASH}" > /tmp/vxsuite-cache-key.txt
+            cat /tmp/vxsuite-cache-key.txt
+      - restore_cache:
+          name: Restore VxSuite Repository Cache
+          keys:
+            - v1-vxsuite-{{ checksum "/tmp/vxsuite-cache-key.txt" }}
+      - run:
           name: Run QA Test - e71c80e
           command: |
             cd test-fixtures
             node ../dist/index.js run --config vx-qa-config-e71c80e.json
           no_output_timeout: 30m
+      - save_cache:
+          name: Save VxSuite Repository Cache
+          key: v1-vxsuite-{{ checksum "/tmp/vxsuite-cache-key.txt" }}
+          paths:
+            - ~/.vx-qa/vxsuite
       - store_artifacts:
           path: test-fixtures/output
 
