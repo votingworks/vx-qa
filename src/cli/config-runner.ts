@@ -252,7 +252,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
       path: electionPackagePath,
     });
 
-    orchestrator = createAppOrchestrator(repoPath);
+    orchestrator = createAppOrchestrator(repoPath, config.output.directory);
     await orchestrator.startApp('admin');
 
     // FIXME: It'd be nice to not need to hardcode this as the mock USB drive data location.
