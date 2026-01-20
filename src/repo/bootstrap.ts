@@ -3,7 +3,7 @@
  */
 
 import { existsSync } from 'fs';
-import { join } from 'path';
+import { join } from 'node:path';
 import { logger } from '../utils/logger.js';
 import { execCommandWithOutput, execCommand } from '../utils/process.js';
 
@@ -13,7 +13,23 @@ import { execCommandWithOutput, execCommand } from '../utils/process.js';
 export function needsBootstrap(repoPath: string): boolean {
   // Check if node_modules exists in the root
   const nodeModulesPath = join(repoPath, 'node_modules');
-  return !existsSync(nodeModulesPath);
+  if (!existsSync(nodeModulesPath)) {
+    return true;
+  }
+
+  // Check if the admin and scan apps are built
+  const adminFrontendBuild = join(repoPath, 'apps/admin/frontend/build');
+  const adminBackendBuild = join(repoPath, 'apps/admin/backend/build');
+  const scanFrontendBuild = join(repoPath, 'apps/scan/frontend/build');
+  const scanBackendBuild = join(repoPath, 'apps/scan/backend/build');
+
+  const allBuildsExist =
+    existsSync(adminFrontendBuild) &&
+    existsSync(adminBackendBuild) &&
+    existsSync(scanFrontendBuild) &&
+    existsSync(scanBackendBuild);
+
+  return !allBuildsExist;
 }
 
 /**
@@ -28,58 +44,27 @@ export async function bootstrapRepo(repoPath: string): Promise<void> {
 
   logger.step('Bootstrapping admin and scan apps (this may take several minutes)...');
 
-  // Install dependencies for admin and scan apps only using pnpm workspace filtering
-  // The "..." syntax includes all dependencies (transitive)
-  // We need to install admin, scan, and dev-dock (required for integration testing)
-  logger.info('Running pnpm install for admin and scan apps and their dependencies...');
-  const pnpmCode = await execCommandWithOutput(
-    'pnpm',
-    [
-      'install',
-      '--filter',
-      '@votingworks/admin-frontend...',
-      '--filter',
-      '@votingworks/admin-backend...',
-      '--filter',
-      '@votingworks/scan-frontend...',
-      '--filter',
-      '@votingworks/scan-backend...',
-    ],
-    {
+  // Run make bootstrap for admin and scan apps specifically
+  // This follows the same pattern as the original script/bootstrap but only for the apps we need
+  const appsToBootstrap = [
+    join(repoPath, 'apps/admin/frontend'),
+    join(repoPath, 'apps/admin/backend'),
+    join(repoPath, 'apps/scan/frontend'),
+    join(repoPath, 'apps/scan/backend'),
+  ];
+
+  for (const appPath of appsToBootstrap) {
+    const appName = appPath.replace(repoPath + '/', '');
+    logger.info(`Bootstrapping ${appName}...`);
+
+    const makeCode = await execCommandWithOutput('make', ['-C', appPath, 'bootstrap'], {
       cwd: repoPath,
-      env: { ...process.env },
-    },
-  );
+      env: { ...process.env, PATH: `${process.env.HOME}/.cargo/bin:${process.env.PATH}:/sbin/` },
+    });
 
-  if (pnpmCode !== 0) {
-    throw new Error(`pnpm install failed with code ${pnpmCode}`);
-  }
-
-  // Build the libraries and apps that were installed
-  // Use --recursive to build dependencies in the correct order
-  logger.info('Building admin and scan apps and their dependencies...');
-  const buildCode = await execCommandWithOutput(
-    'pnpm',
-    [
-      '--recursive',
-      '--filter',
-      '@votingworks/admin-frontend...',
-      '--filter',
-      '@votingworks/admin-backend...',
-      '--filter',
-      '@votingworks/scan-frontend...',
-      '--filter',
-      '@votingworks/scan-backend...',
-      'build',
-    ],
-    {
-      cwd: repoPath,
-      env: { ...process.env },
-    },
-  );
-
-  if (buildCode !== 0) {
-    throw new Error(`Build failed with code ${buildCode}`);
+    if (makeCode !== 0) {
+      throw new Error(`Bootstrap failed for ${appName} with code ${makeCode}`);
+    }
   }
 
   logger.success('Admin and scan apps bootstrapped successfully');
