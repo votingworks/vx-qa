@@ -18,6 +18,7 @@ export function needsBootstrap(repoPath: string): boolean {
 
 /**
  * Run the bootstrap script to set up the repository
+ * Only bootstraps admin and scan apps to save time
  */
 export async function bootstrapRepo(repoPath: string): Promise<void> {
   if (!needsBootstrap(repoPath)) {
@@ -25,37 +26,63 @@ export async function bootstrapRepo(repoPath: string): Promise<void> {
     return;
   }
 
-  logger.step('Running repository bootstrap (this may take several minutes)...');
+  logger.step('Bootstrapping admin and scan apps (this may take several minutes)...');
 
-  // First, run script/bootstrap
-  const bootstrapScript = join(repoPath, 'script', 'bootstrap');
-
-  if (existsSync(bootstrapScript)) {
-    logger.info('Running script/bootstrap...');
-    const bootstrapCode = await execCommandWithOutput('bash', [bootstrapScript], {
+  // Install dependencies for admin and scan apps only using pnpm workspace filtering
+  // The "..." syntax includes all dependencies (transitive)
+  // We need to install admin, scan, and dev-dock (required for integration testing)
+  logger.info('Running pnpm install for admin and scan apps and their dependencies...');
+  const pnpmCode = await execCommandWithOutput(
+    'pnpm',
+    [
+      'install',
+      '--filter',
+      '@votingworks/admin-frontend...',
+      '--filter',
+      '@votingworks/admin-backend...',
+      '--filter',
+      '@votingworks/scan-frontend...',
+      '--filter',
+      '@votingworks/scan-backend...',
+    ],
+    {
       cwd: repoPath,
       env: { ...process.env },
-    });
-
-    if (bootstrapCode !== 0) {
-      throw new Error(`Bootstrap script failed with code ${bootstrapCode}`);
-    }
-  } else {
-    logger.warn('Bootstrap script not found, running pnpm install directly...');
-  }
-
-  // Then run pnpm install
-  logger.info('Running pnpm install...');
-  const pnpmCode = await execCommandWithOutput('pnpm', ['install'], {
-    cwd: repoPath,
-    env: { ...process.env },
-  });
+    },
+  );
 
   if (pnpmCode !== 0) {
     throw new Error(`pnpm install failed with code ${pnpmCode}`);
   }
 
-  logger.success('Repository bootstrapped successfully');
+  // Build the libraries and apps that were installed
+  // Use --recursive to build dependencies in the correct order
+  logger.info('Building admin and scan apps and their dependencies...');
+  const buildCode = await execCommandWithOutput(
+    'pnpm',
+    [
+      '--recursive',
+      '--filter',
+      '@votingworks/admin-frontend...',
+      '--filter',
+      '@votingworks/admin-backend...',
+      '--filter',
+      '@votingworks/scan-frontend...',
+      '--filter',
+      '@votingworks/scan-backend...',
+      'build',
+    ],
+    {
+      cwd: repoPath,
+      env: { ...process.env },
+    },
+  );
+
+  if (buildCode !== 0) {
+    throw new Error(`Build failed with code ${buildCode}`);
+  }
+
+  logger.success('Admin and scan apps bootstrapped successfully');
 }
 
 /**
