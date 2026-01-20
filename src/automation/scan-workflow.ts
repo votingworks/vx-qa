@@ -9,7 +9,12 @@ import {
   insertElectionManagerCardAndLogin,
   insertPollWorkerCardAndLogin as insertPollWorkerCard,
 } from './auth-helpers.js';
-import { toggleDevDock, clickButtonWithDebug, waitForTextInApp } from './browser.js';
+import {
+  toggleDevDock,
+  clickButtonWithDebug,
+  waitForTextInApp,
+  waitForTextInAppWithDebug,
+} from './browser.js';
 import type { BallotPattern, PrecinctSelection } from '../config/types.js';
 import type { StepCollector, ArtifactCollector } from '../report/artifacts.js';
 import { basename, join } from 'path';
@@ -86,7 +91,11 @@ export async function runScanWorkflow(
   await usbController.insert();
 
   // Log in as election manager
-  const electionManagerCard = await insertElectionManagerCardAndLogin(page, electionPath);
+  const electionManagerCard = await insertElectionManagerCardAndLogin(
+    page,
+    electionPath,
+    outputDir,
+  );
   await openingPollsStep.captureScreenshot('scan-unconfigured', 'Logged in');
 
   const precinctsForAllBallots = new Set(election.precincts.map((p) => p.id));
@@ -135,7 +144,11 @@ export async function runScanWorkflow(
     label: 'Confirming Open Polls',
   });
 
-  await waitForTextInApp(page, 'Polls Opened');
+  await waitForTextInAppWithDebug(page, 'Polls Opened', {
+    timeout: 10000,
+    outputDir,
+    label: 'Waiting for polls opened confirmation',
+  });
   await openingPollsStep.captureScreenshot('scan-polls-open', 'Polls opened');
   await pollWorkerCardForOpeningPolls.removeCard();
 
@@ -143,7 +156,11 @@ export async function runScanWorkflow(
   await addThermalPrinterReports(printerWorkspace, openingPollsStep, existingPrinterFiles);
 
   // Ready to scan
-  await waitForTextInApp(page, 'Insert Your Ballot');
+  await waitForTextInAppWithDebug(page, 'Insert Your Ballot', {
+    timeout: 10000,
+    outputDir,
+    label: 'Waiting for ready to scan screen',
+  });
   await openingPollsStep.captureScreenshot('scan-ready', 'Ready to scan');
 
   // Mark opening polls step as complete
@@ -179,7 +196,11 @@ export async function runScanWorkflow(
   );
 
   const pollWorkerCardForClosingPolls = await insertPollWorkerCard(page, electionPath);
-  await waitForTextInApp(page, 'Do you want to close the polls?');
+  await waitForTextInAppWithDebug(page, 'Do you want to close the polls?', {
+    timeout: 10000,
+    outputDir,
+    label: 'Waiting for close polls confirmation prompt',
+  });
 
   await clickButtonWithDebug(page, 'Close Polls', {
     timeout: 10000,
@@ -187,13 +208,21 @@ export async function runScanWorkflow(
     label: 'Confirming Close Polls',
   });
 
-  await waitForTextInApp(page, 'Polls Closed');
+  await waitForTextInAppWithDebug(page, 'Polls Closed', {
+    timeout: 10000,
+    outputDir,
+    label: 'Waiting for polls closed confirmation',
+  });
 
   // Clean up
   await pollWorkerCardForClosingPolls.removeCard();
   await usbController.remove();
 
-  await waitForTextInApp(page, 'Voting is complete.');
+  await waitForTextInAppWithDebug(page, 'Voting is complete.', {
+    timeout: 10000,
+    outputDir,
+    label: 'Waiting for voting complete message',
+  });
   await closingPollsStep.captureScreenshot('scan-polls-closed', 'Polls Closed');
 
   // Add thermal printer reports from closing polls
@@ -213,19 +242,36 @@ export async function runScanWorkflow(
   const unconfiguringElectionManagerCard = await insertElectionManagerCardAndLogin(
     page,
     electionPackagePath,
+    outputDir,
   );
 
   await page.getByText('Unconfigure Machine').click();
 
   const confirmUnconfigureButton = page.getByText('Delete All Election Data');
-  await confirmUnconfigureButton.waitFor({ state: 'visible' });
+  try {
+    await confirmUnconfigureButton.waitFor({ state: 'visible', timeout: 10000 });
+  } catch (error) {
+    await unconfiguringStep.captureScreenshot(
+      'timeout-unconfigure-button',
+      'Timeout waiting for unconfigure button',
+    );
+    throw error;
+  }
 
   await unconfiguringStep.captureScreenshot('confirm-unconfigure', 'Confirming unconfigure');
   await confirmUnconfigureButton.click();
 
-  await waitForTextInApp(page, 'Insert a USB drive containing an election package');
+  await waitForTextInAppWithDebug(page, 'Insert a USB drive containing an election package', {
+    timeout: 10000,
+    outputDir,
+    label: 'Waiting for USB drive prompt after unconfigure',
+  });
   await unconfiguringElectionManagerCard.removeCard();
-  await waitForTextInApp(page, 'Insert an election manager card to configure VxScan');
+  await waitForTextInAppWithDebug(page, 'Insert an election manager card to configure VxScan', {
+    timeout: 10000,
+    outputDir,
+    label: 'Waiting for card prompt after unconfigure',
+  });
   await unconfiguringStep.captureScreenshot('unconfigured', 'VxScan unconfigured');
 
   unconfiguringStep.complete();
@@ -357,7 +403,15 @@ async function scanBallot(
 
     // Wait for scan to process
     await waitForTextInApp(page, 'Please wait…');
-    await page.getByText('Please wait…').waitFor({ state: 'hidden' });
+    try {
+      await page.getByText('Please wait…').waitFor({ state: 'hidden', timeout: 30000 });
+    } catch (error) {
+      await stepCollector.captureScreenshot(
+        'timeout-scan-processing',
+        'Timeout waiting for scan to complete',
+      );
+      throw error;
+    }
 
     logger.debug(`Scanned sheet ${sheetIndex + 1}/${sheetCount}`);
 
@@ -365,7 +419,15 @@ async function scanBallot(
     const message = page
       .getByRole('heading')
       .and(page.locator(':not([data-testid="ballot-count"])'));
-    await message.waitFor({ state: 'visible', timeout: 5000 });
+    try {
+      await message.waitFor({ state: 'visible', timeout: 5000 });
+    } catch (error) {
+      await stepCollector.captureScreenshot(
+        'timeout-scan-result',
+        'Timeout waiting for scan result message',
+      );
+      throw error;
+    }
     const messageText = await message.innerText();
     logger.debug(`Message after sheet ${sheetIndex + 1}: ${messageText}`);
 
@@ -383,7 +445,15 @@ async function scanBallot(
       const returnButton = page.getByRole('button', { name: 'Return Ballot' });
       if (await returnButton.isVisible()) {
         await returnButton.click();
-        await waitForTextInApp(page, 'Remove Your Ballot');
+        try {
+          await waitForTextInApp(page, 'Remove Your Ballot');
+        } catch (error) {
+          await stepCollector.captureScreenshot(
+            'timeout-remove-ballot',
+            'Timeout waiting for remove ballot prompt',
+          );
+          throw error;
+        }
       }
 
       await page.waitForTimeout(1500);

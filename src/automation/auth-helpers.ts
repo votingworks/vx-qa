@@ -11,15 +11,19 @@ import {
   DEFAULT_PIN,
   MockCardController,
 } from '../mock-hardware/cards.js';
-import { clickTextInApp, waitForText, waitForTextInApp } from './browser.js';
+import { clickTextInApp, waitForTextWithDebug, waitForTextInApp } from './browser.js';
 
 /**
  * Enter the PIN on the PIN pad screen
  */
-export async function enterPin(page: Page, pin = DEFAULT_PIN): Promise<void> {
+export async function enterPin(page: Page, pin = DEFAULT_PIN, outputDir?: string): Promise<void> {
   logger.debug('Entering PIN');
 
-  await waitForText(page, 'Enter Card PIN');
+  await waitForTextWithDebug(page, 'Enter Card PIN', {
+    timeout: 10000,
+    outputDir,
+    label: 'Waiting for PIN entry screen',
+  });
 
   for (const digit of pin) {
     await page.getByRole('button', { name: digit }).click();
@@ -32,6 +36,7 @@ export async function enterPin(page: Page, pin = DEFAULT_PIN): Promise<void> {
 export async function dipSystemAdministratorCardAndLogin(
   page: Page,
   electionPath?: string,
+  outputDir?: string,
 ): Promise<void> {
   logger.step('Logging in as System Administrator');
 
@@ -46,7 +51,7 @@ export async function dipSystemAdministratorCardAndLogin(
   await cardController.insertCard('system_administrator');
 
   // Enter PIN
-  await enterPin(page);
+  await enterPin(page, DEFAULT_PIN, outputDir);
 
   // Remove card
   await cardController.removeCard();
@@ -64,6 +69,7 @@ export async function dipSystemAdministratorCardAndLogin(
 export async function dipElectionManagerCardAndLogin(
   page: Page,
   electionPath?: string,
+  outputDir?: string,
 ): Promise<void> {
   logger.step('Logging in as Election Manager');
 
@@ -78,7 +84,7 @@ export async function dipElectionManagerCardAndLogin(
   await cardController.insertCard('election_manager');
 
   // Enter PIN
-  await enterPin(page);
+  await enterPin(page, DEFAULT_PIN, outputDir);
 
   // Remove card
   await cardController.removeCard();
@@ -93,6 +99,7 @@ export async function dipElectionManagerCardAndLogin(
 export async function insertElectionManagerCardAndLogin(
   page: Page,
   electionPath?: string,
+  outputDir?: string,
 ): Promise<MockCardController> {
   logger.step('Logging in as Election Manager');
 
@@ -107,7 +114,7 @@ export async function insertElectionManagerCardAndLogin(
   await cardController.insertCard('election_manager');
 
   // Enter PIN
-  await enterPin(page);
+  await enterPin(page, DEFAULT_PIN, outputDir);
 
   logger.debug('Logged in as Election Manager');
   return cardController;
