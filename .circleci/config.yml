@@ -88,6 +88,7 @@ jobs:
           key: v1-vxsuite-{{ checksum "/tmp/vxsuite-cache-key.txt" }}
           paths:
             - ~/.vx-qa/vxsuite
+          when: always
       - store_artifacts:
           path: test-fixtures/output
 
