@@ -5,7 +5,7 @@
  * For full functionality, it uses VxSuite's libs/hmpb/src/marking.ts.
  */
 
-import { join } from 'path';
+import { join } from 'node:path';
 import { logger } from '../utils/logger.js';
 import {
   getContestsForBallotStyle,

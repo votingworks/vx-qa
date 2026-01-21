@@ -2,7 +2,7 @@
  * Bootstrap and setup VxSuite repository
  */
 
-import { existsSync } from 'fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { logger } from '../utils/logger.js';
 import { execCommandWithOutput, execCommand } from '../utils/process.js';

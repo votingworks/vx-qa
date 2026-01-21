@@ -5,7 +5,7 @@
 import { logger, formatDuration, printDivider } from '../utils/logger.js';
 import { resolvePath } from '../utils/paths.js';
 import type { QARunConfig } from '../config/types.js';
-import { existsSync } from 'fs';
+import { existsSync } from 'node:fs';
 
 // Repository management
 import { cloneOrUpdateRepo, getCurrentCommit, applyPatch } from '../repo/clone.js';

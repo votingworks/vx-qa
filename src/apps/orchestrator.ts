@@ -2,13 +2,13 @@
  * App orchestration - starting and stopping VxSuite apps
  */
 
-import { ChildProcess, execFile } from 'child_process';
-import { createInterface } from 'readline';
+import { ChildProcess, execFile } from 'node:child_process';
+import { createInterface } from 'node:readline';
 import { logger } from '../utils/logger.js';
 import { spawnBackground, killProcessTree, waitForPort, sleep } from '../utils/process.js';
 import { getMockEnvironment, APP_PORTS, getBackendPort, type MachineType } from './env-config.js';
 import { waitForDevDock } from '../mock-hardware/client.js';
-import { promisify } from 'util';
+import { promisify } from 'node:util';
 import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 

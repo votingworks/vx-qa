@@ -3,9 +3,9 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, rmSync, existsSync } from 'fs';
-import { join } from 'path';
-import { homedir, tmpdir } from 'os';
+import { mkdirSync, rmSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
 import { expandHome, resolvePath, ensureDir, generateTimestampedDir, pathsEqual } from './paths.js';
 
 describe('expandHome', () => {

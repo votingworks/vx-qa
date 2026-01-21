@@ -7,13 +7,13 @@
  */
 
 import { Command } from 'commander';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { logger, printHeader } from './utils/logger.js';
 import { validateConfig, safeValidateConfig } from './config/schema.js';
 import { resolvePath, generateTimestampedDir, ensureDir } from './utils/paths.js';
 import { runQAWorkflow } from './cli/config-runner.js';
 import type { QARunConfig } from './config/types.js';
-import { dirname } from 'path';
+import { dirname } from 'node:path';
 import { regenerateHtmlReportFromRawData } from './report/html-generator.js';
 import { revalidateTallyResults } from './automation/admin-tally-workflow.js';
 

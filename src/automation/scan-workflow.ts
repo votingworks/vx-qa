@@ -17,7 +17,7 @@ import {
 } from './browser.js';
 import type { BallotPattern, PrecinctSelection } from '../config/types.js';
 import type { StepCollector, ArtifactCollector } from '../report/artifacts.js';
-import { basename, join } from 'path';
+import { basename, join } from 'node:path';
 import { createMockScannerController } from '../mock-hardware/scanner.js';
 import { generateMarkedBallotForPattern } from '../ballots/ballot-marker.js';
 import {

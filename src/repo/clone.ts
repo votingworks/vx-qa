@@ -3,7 +3,7 @@
  */
 
 import { simpleGit, SimpleGit } from 'simple-git';
-import { existsSync } from 'fs';
+import { existsSync } from 'node:fs';
 import { logger } from '../utils/logger.js';
 import { ensureDir, resolvePath } from '../utils/paths.js';
 import type { VxSuiteConfig } from '../config/types.js';

@@ -3,8 +3,8 @@
  */
 
 import { Page } from '@playwright/test';
-import { join } from 'path';
-import { mkdirSync, existsSync } from 'fs';
+import { join } from 'node:path';
+import { mkdirSync, existsSync } from 'node:fs';
 import { logger } from '../utils/logger.js';
 import type { ScreenshotArtifact } from '../config/types.js';
 

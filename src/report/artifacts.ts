@@ -2,8 +2,8 @@
  * Artifact collection and management
  */
 
-import { existsSync, mkdirSync, readdirSync, statSync, readFileSync } from 'fs';
-import { join, basename, extname, isAbsolute } from 'path';
+import { existsSync, mkdirSync, readdirSync, statSync, readFileSync } from 'node:fs';
+import { join, basename, extname, isAbsolute } from 'node:path';
 import { logger } from '../utils/logger.js';
 import type {
   ArtifactCollection,
@@ -15,8 +15,8 @@ import type {
   StepOutput,
   ScreenshotArtifact,
 } from '../config/types.js';
-import { copyFile, readFile } from 'fs/promises';
-import assert from 'assert';
+import { copyFile, readFile } from 'node:fs/promises';
+import assert from 'node:assert';
 import { Page } from '@playwright/test';
 import { createScreenshotManager } from '../automation/screenshot.js';
 
