@@ -58,25 +58,17 @@ export async function bootstrapRepo(repoPath: string): Promise<void> {
   // Then build just the admin and scan apps (and their dependencies)
   // Use the "..." filter syntax to include all dependencies
   // Build each app separately in sequence to ensure dependencies are built first
-  logger.info('Building admin and scan apps and their dependencies...');
+  logger.info('Building apps and their dependencies...');
 
-  const appsToBuild = [
-    '@votingworks/admin-frontend',
-    '@votingworks/admin-backend',
-    '@votingworks/scan-frontend',
-    '@votingworks/scan-backend',
-  ];
+  const bootstrapScriptPath = join(repoPath, 'script/bootstrap');
 
-  for (const app of appsToBuild) {
-    logger.info(`Building ${app} and its dependencies...`);
-    const buildCode = await execCommandWithOutput('pnpm', ['--filter', `${app}...`, 'build'], {
-      cwd: repoPath,
-      env: { ...process.env, IS_CI: 'true' },
-    });
+  const bootstrapCode = await execCommandWithOutput(bootstrapScriptPath, [], {
+    cwd: repoPath,
+    env: { ...process.env, IS_CI: 'true' },
+  });
 
-    if (buildCode !== 0) {
-      throw new Error(`Build failed for ${app} with code ${buildCode}`);
-    }
+  if (bootstrapCode !== 0) {
+    throw new Error(`Build failed with code ${bootstrapCode}`);
   }
 
   logger.success('Admin and scan apps bootstrapped successfully');
