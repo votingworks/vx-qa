@@ -40,7 +40,7 @@ export async function generateMarkedBallot(
 ): Promise<Uint8Array> {
   logger.debug(`Generating marked ballot for style ${ballotStyleId}`);
 
-  const { generateMarkOverlay } = await import(join(repoPath, 'libs/hmpb/src/marking'));
+  const { generateMarkOverlay } = await import(join(repoPath, 'libs/hmpb/build/marking'));
   return await generateMarkOverlay(
     election,
     ballotStyleId,
