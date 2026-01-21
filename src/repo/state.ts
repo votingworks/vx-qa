@@ -2,9 +2,9 @@
  * State management - clearing mock state between runs
  */
 
-import { existsSync } from 'fs';
-import { rm, readdir, cp, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { existsSync } from 'node:fs';
+import { rm, readdir, cp, mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { logger } from '../utils/logger.js';
 import { expandHome, resolvePath } from '../utils/paths.js';
 

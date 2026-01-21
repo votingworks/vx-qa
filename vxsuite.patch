@@ -12,6 +12,65 @@ index 933f00d15..8d2367049 100644
    );
  
    return p.printer.print({
+diff --git a/apps/scan/backend/src/server.ts b/apps/scan/backend/src/server.ts
+index 3c995d047..ae5b91883 100644
+--- a/apps/scan/backend/src/server.ts
++++ b/apps/scan/backend/src/server.ts
+@@ -90,28 +90,10 @@ export async function start({
+     nodeEnv: NODE_ENV,
+   });
+ 
+-  if (audioInfo.usb) {
+-    const resultDefaultAudio = await setDefaultAudio(audioInfo.usb.name, {
+-      logger,
+-      nodeEnv: NODE_ENV,
+-    });
+-    resultDefaultAudio.assertOk('unable to set USB audio as default output');
+-
+-    // Screen reader volume levels are calibrated against a maximum system
+-    // volume setting:
+-    const resultVolume = await setAudioVolume({
+-      logger,
+-      nodeEnv: NODE_ENV,
+-      sinkName: audioInfo.usb.name,
+-      volumePct: 100,
+-    });
+-    resultVolume.assertOk('unable to set USB audio volume');
+-  } else {
+-    void logger.logAsCurrentRole(LogEventId.AudioDeviceMissing, {
+-      message: 'USB audio device not detected.',
+-      disposition: 'failure',
+-    });
+-  }
++  void logger.logAsCurrentRole(LogEventId.AudioDeviceMissing, {
++    message: 'USB audio device not detected.',
++    disposition: 'failure',
++  });
+ 
+   const audioPlayer = new AudioPlayer(NODE_ENV, logger, audioInfo.builtin.name);
+ 
+diff --git a/libs/backend/src/system_call/get_audio_info.ts b/libs/backend/src/system_call/get_audio_info.ts
+index b00654cf1..1499c0a07 100644
+--- a/libs/backend/src/system_call/get_audio_info.ts
++++ b/libs/backend/src/system_call/get_audio_info.ts
+@@ -31,11 +31,17 @@ const PactlSinkListSchema = z.array(
+   })
+ );
+
++const MOCK_AUDIO_INFO: AudioInfo = {
++  builtin: { headphonesActive: false, name: 'mock.builtin.stereo' },
++};
++
+ /** Get current system audio status. */
+ export async function getAudioInfo(ctx: {
+   logger: Logger;
+   nodeEnv: typeof NODE_ENV;
+ }): Promise<AudioInfo> {
++  return MOCK_AUDIO_INFO;
++
+   const { logger, nodeEnv } = ctx;
+   let errorOutput: string;
+   let commandOutput: string;
 diff --git a/libs/hmpb/src/marking.test.ts b/libs/hmpb/src/marking.test.ts
 index 025c6e183..6c01ee21f 100644
 --- a/libs/hmpb/src/marking.test.ts
@@ -170,10 +229,22 @@ index 4bcd1f0e8..edc6043b3 100644
    }
  
 diff --git a/script/bootstrap b/script/bootstrap
-index 1a8304cfc..8b3adce85 100755
+index 1a8304cfc..09defe092 100755
 --- a/script/bootstrap
 +++ b/script/bootstrap
-@@ -12,7 +12,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+@@ -2,17 +2,14 @@
+ 
+ set -euo pipefail
+ 
+-local_user=`logname`
+-local_user_home_dir=$( getent passwd "${local_user}" | cut -d: -f6 )
+-
+ # Make sure PATH includes cargo and /sbin
+-export PATH="${local_user_home_dir}/.cargo/bin:${PATH}:/sbin/"
++export PATH="${HOME}/.cargo/bin:${PATH}:/sbin/"
+ 
+-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
++DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
  
  for app in ${DIR}/../apps/*/frontend ${DIR}/../apps/*/backend; do
    if [ -d "${app}" ]; then

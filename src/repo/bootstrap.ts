@@ -2,8 +2,8 @@
  * Bootstrap and setup VxSuite repository
  */
 
-import { existsSync } from 'fs';
-import { join } from 'path';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { logger } from '../utils/logger.js';
 import { execCommandWithOutput, execCommand } from '../utils/process.js';
 
@@ -13,11 +13,28 @@ import { execCommandWithOutput, execCommand } from '../utils/process.js';
 export function needsBootstrap(repoPath: string): boolean {
   // Check if node_modules exists in the root
   const nodeModulesPath = join(repoPath, 'node_modules');
-  return !existsSync(nodeModulesPath);
+  if (!existsSync(nodeModulesPath)) {
+    return true;
+  }
+
+  // Check if the admin and scan apps are built
+  const adminFrontendBuild = join(repoPath, 'apps/admin/frontend/build');
+  const adminBackendBuild = join(repoPath, 'apps/admin/backend/build');
+  const scanFrontendBuild = join(repoPath, 'apps/scan/frontend/build');
+  const scanBackendBuild = join(repoPath, 'apps/scan/backend/build');
+
+  const allBuildsExist =
+    existsSync(adminFrontendBuild) &&
+    existsSync(adminBackendBuild) &&
+    existsSync(scanFrontendBuild) &&
+    existsSync(scanBackendBuild);
+
+  return !allBuildsExist;
 }
 
 /**
  * Run the bootstrap script to set up the repository
+ * Only bootstraps admin and scan apps to save time
  */
 export async function bootstrapRepo(repoPath: string): Promise<void> {
   if (!needsBootstrap(repoPath)) {
@@ -25,37 +42,36 @@ export async function bootstrapRepo(repoPath: string): Promise<void> {
     return;
   }
 
-  logger.step('Running repository bootstrap (this may take several minutes)...');
+  logger.step('Bootstrapping admin and scan apps (this may take several minutes)...');
 
-  // First, run script/bootstrap
-  const bootstrapScript = join(repoPath, 'script', 'bootstrap');
-
-  if (existsSync(bootstrapScript)) {
-    logger.info('Running script/bootstrap...');
-    const bootstrapCode = await execCommandWithOutput('bash', [bootstrapScript], {
-      cwd: repoPath,
-      env: { ...process.env },
-    });
-
-    if (bootstrapCode !== 0) {
-      throw new Error(`Bootstrap script failed with code ${bootstrapCode}`);
-    }
-  } else {
-    logger.warn('Bootstrap script not found, running pnpm install directly...');
-  }
-
-  // Then run pnpm install
-  logger.info('Running pnpm install...');
-  const pnpmCode = await execCommandWithOutput('pnpm', ['install'], {
+  // First, run pnpm install at the root to set up all workspace symlinks
+  logger.info('Installing workspace dependencies...');
+  const installCode = await execCommandWithOutput('pnpm', ['install'], {
     cwd: repoPath,
     env: { ...process.env },
   });
 
-  if (pnpmCode !== 0) {
-    throw new Error(`pnpm install failed with code ${pnpmCode}`);
+  if (installCode !== 0) {
+    throw new Error(`pnpm install failed with code ${installCode}`);
   }
 
-  logger.success('Repository bootstrapped successfully');
+  // Then build just the admin and scan apps (and their dependencies)
+  // Use the "..." filter syntax to include all dependencies
+  // Build each app separately in sequence to ensure dependencies are built first
+  logger.info('Building apps and their dependencies...');
+
+  const bootstrapScriptPath = join(repoPath, 'script/bootstrap');
+
+  const bootstrapCode = await execCommandWithOutput(bootstrapScriptPath, [], {
+    cwd: repoPath,
+    env: { ...process.env, IS_CI: 'true' },
+  });
+
+  if (bootstrapCode !== 0) {
+    throw new Error(`Build failed with code ${bootstrapCode}`);
+  }
+
+  logger.success('Admin and scan apps bootstrapped successfully');
 }
 
 /**

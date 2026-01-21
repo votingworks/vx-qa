@@ -2,7 +2,7 @@
  * Process management utilities for spawning and killing child processes
  */
 
-import { spawn, ChildProcess, SpawnOptions } from 'child_process';
+import { spawn, ChildProcess, SpawnOptions } from 'node:child_process';
 import treeKill from 'tree-kill';
 import { logger } from './logger.js';
 

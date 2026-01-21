@@ -8,8 +8,8 @@ import { createMockUsbController } from '../mock-hardware/usb.js';
 import { dipSystemAdministratorCardAndLogin, logOut } from './auth-helpers.js';
 import {
   navigateToApp,
-  waitForTextInApp,
-  clickTextInApp,
+  waitForTextInAppWithDebug,
+  clickTextInAppWithDebug,
   waitForTextWithDebug,
   clickButtonWithDebug,
   toggleDevDock,
@@ -42,7 +42,7 @@ export async function runAdminConfigureWorkflow(
   await stepCollector.captureScreenshot('admin-locked', 'Initial locked screen');
 
   // Log in as system administrator
-  await dipSystemAdministratorCardAndLogin(page, electionPackagePath);
+  await dipSystemAdministratorCardAndLogin(page, electionPackagePath, outputDir);
   await stepCollector.captureScreenshot('admin-unconfigured', 'Logged in, unconfigured');
 
   // Need to load election from USB
@@ -66,8 +66,16 @@ export async function runAdminConfigureWorkflow(
   await stepCollector.captureScreenshot('admin-usb-detected', 'USB drive detected');
 
   // Wait for package to appear and click it (in main app, not dev-dock)
-  await waitForTextInApp(page, packageFilename, { timeout: 15000 });
-  await clickTextInApp(page, packageFilename);
+  await waitForTextInAppWithDebug(page, packageFilename, {
+    timeout: 15000,
+    outputDir,
+    label: 'Waiting for election package to appear',
+  });
+  await clickTextInAppWithDebug(page, packageFilename, {
+    timeout: 10000,
+    outputDir,
+    label: 'Clicking election package',
+  });
 
   // Wait for election to load
   await page.waitForTimeout(3000);

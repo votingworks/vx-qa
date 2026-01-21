@@ -93,6 +93,16 @@ pnpm build
 pnpm test
 ```
 
+## CI
+
+The project runs automated QA tests in CircleCI using test fixtures in the `test-fixtures/` directory. The CI workflow:
+
+1. Runs unit tests with `pnpm test`
+2. Executes a full QA test run using the `vx-qa-config-e71c80e.json` configuration
+3. Stores output artifacts for review
+
+Test configurations and election packages can be added to `test-fixtures/` to expand CI coverage.
+
 ## Architecture
 
 ```

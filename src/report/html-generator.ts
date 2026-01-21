@@ -3,12 +3,12 @@
  */
 
 import Handlebars from 'handlebars';
-import { join, relative } from 'path';
+import { join, relative } from 'node:path';
 import { logger } from '../utils/logger.js';
 import type { ArtifactCollection, ScreenshotArtifact } from '../config/types.js';
 import { collectFilesInDir, loadCollection, readFileAsBase64 } from './artifacts.js';
 import { generatePdfThumbnail } from './pdf-thumbnail.js';
-import { writeFile } from 'fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { resolvePath } from '../utils/paths.js';
 import { validateTallyResults } from '../automation/admin-tally-workflow.js';
 

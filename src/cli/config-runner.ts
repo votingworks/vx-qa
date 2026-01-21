@@ -5,7 +5,7 @@
 import { logger, formatDuration, printDivider } from '../utils/logger.js';
 import { resolvePath } from '../utils/paths.js';
 import type { QARunConfig } from '../config/types.js';
-import { existsSync } from 'fs';
+import { existsSync } from 'node:fs';
 
 // Repository management
 import { cloneOrUpdateRepo, getCurrentCommit, applyPatch } from '../repo/clone.js';
@@ -26,17 +26,29 @@ import { runAdminTallyWorkflow } from '../automation/admin-tally-workflow.js';
 // Reporting
 import { createArtifactCollector } from '../report/artifacts.js';
 import { generateHtmlReport } from '../report/html-generator.js';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { State } from '../repo/state.js';
 import { writeFile } from 'node:fs/promises';
 import assert from 'node:assert';
 import { spawn } from 'node:child_process';
 import type { AppOrchestrator } from '../apps/orchestrator.js';
+import { fileURLToPath } from 'node:url';
 
 export interface RunOptions {
   headless?: boolean;
   limitBallots?: number;
   limitManualTallies?: number;
+}
+
+/**
+ * Get the project root directory (where vxsuite.patch is located)
+ */
+function getProjectRoot(): string {
+  // Get the directory of this source file
+  const currentFileUrl = import.meta.url;
+  const currentFilePath = fileURLToPath(currentFileUrl);
+  // Go up from src/cli/config-runner.ts to project root
+  return join(dirname(currentFilePath), '..', '..');
 }
 
 /**
@@ -92,9 +104,11 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     const commit = await getCurrentCommit(repoPath);
     logger.info(`Repository at ${repoPath} (commit: ${commit.slice(0, 8)})`);
 
-    // Apply patch if it exists
-    const patchPath = resolvePath('vxsuite.patch');
+    // Apply patch if it exists (look in project root, not CWD)
+    const projectRoot = getProjectRoot();
+    const patchPath = join(projectRoot, 'vxsuite.patch');
     if (existsSync(patchPath)) {
+      logger.info(`Applying patch from ${patchPath}`);
       await applyPatch(repoPath, patchPath);
     }
 
@@ -238,7 +252,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
       path: electionPackagePath,
     });
 
-    orchestrator = createAppOrchestrator(repoPath);
+    orchestrator = createAppOrchestrator(repoPath, config.output.directory);
     await orchestrator.startApp('admin');
 
     // FIXME: It'd be nice to not need to hardcode this as the mock USB drive data location.

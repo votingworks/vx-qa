@@ -3,7 +3,7 @@
  */
 
 import { simpleGit, SimpleGit } from 'simple-git';
-import { existsSync } from 'fs';
+import { existsSync } from 'node:fs';
 import { logger } from '../utils/logger.js';
 import { ensureDir, resolvePath } from '../utils/paths.js';
 import type { VxSuiteConfig } from '../config/types.js';
@@ -80,6 +80,15 @@ async function checkoutTag(repoPath: string, tag: string): Promise<void> {
 
   try {
     const git: SimpleGit = simpleGit(repoPath);
+
+    // Restore any modified tracked files to their committed state
+    // This ensures the patch can be applied cleanly
+    try {
+      await git.raw(['restore', '.']);
+      logger.debug('Restored modified tracked files');
+    } catch {
+      // Ignore if there are no changes to restore
+    }
 
     // First try to fetch the specific tag/branch if not available locally
     try {

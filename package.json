@@ -18,7 +18,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "start": "tsx src/index.ts",
+    "start": "pnpm build && node dist/index.js",
     "lint": "oxfmt --check && oxlint --type-aware",
     "lint:fix": "oxfmt && oxlint --type-aware --fix",
     "test": "vitest",
@@ -53,7 +53,6 @@
     "oxfmt": "^0.18.0",
     "oxlint": "^1.33.0",
     "oxlint-tsgolint": "^0.9.1",
-    "tsx": "^4.6.0",
     "typescript": "^5.3.0",
     "vitest": "^4.0.16"
   },

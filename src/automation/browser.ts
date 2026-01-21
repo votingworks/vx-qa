@@ -206,11 +206,49 @@ export async function waitForTextInApp(
 }
 
 /**
+ * Wait for text in the main app content with debug on timeout
+ */
+export async function waitForTextInAppWithDebug(
+  page: Page,
+  text: string,
+  options: { timeout?: number; outputDir?: string; label?: string } = {},
+): Promise<void> {
+  const { timeout = 10000, outputDir, label } = options;
+  const mainContent = getMainContent(page);
+
+  try {
+    await mainContent.getByText(text).first().waitFor({ timeout });
+  } catch (error) {
+    await debugPageState(page, label || `Timeout waiting for text in app: "${text}"`, outputDir);
+    throw error;
+  }
+}
+
+/**
  * Click text in the main app content (excluding dev-dock)
  */
 export async function clickTextInApp(page: Page, text: string): Promise<void> {
   const mainContent = getMainContent(page);
   await mainContent.getByText(text).first().click();
+}
+
+/**
+ * Click text in the main app content with debug on failure
+ */
+export async function clickTextInAppWithDebug(
+  page: Page,
+  text: string,
+  options: { timeout?: number; outputDir?: string; label?: string } = {},
+): Promise<void> {
+  const { timeout = 10000, outputDir, label } = options;
+  const mainContent = getMainContent(page);
+
+  try {
+    await mainContent.getByText(text).first().click({ timeout });
+  } catch (error) {
+    await debugPageState(page, label || `Failed to click text in app: "${text}"`, outputDir);
+    throw error;
+  }
 }
 
 /**

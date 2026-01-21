@@ -2,12 +2,12 @@
  * Election definition loading from JSON files and ZIP packages
  */
 
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
-import { extname, join } from 'path';
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
+import { extname, join } from 'node:path';
 import JSZip from 'jszip';
 import { logger } from '../utils/logger.js';
-import assert from 'assert';
-import { createInterface } from 'readline/promises';
+import assert from 'node:assert';
+import { createInterface } from 'node:readline/promises';
 import { z } from 'zod/v4';
 
 /**

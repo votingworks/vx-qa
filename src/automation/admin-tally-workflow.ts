@@ -695,7 +695,7 @@ export async function runAdminTallyWorkflow(
   await page.waitForTimeout(1000);
 
   // Log in as election manager
-  await dipElectionManagerCardAndLogin(page, electionPackagePath);
+  await dipElectionManagerCardAndLogin(page, electionPackagePath, outputDir);
 
   // Step 1: Load CVRs
   const loadCvrsStep = collector.startStep(

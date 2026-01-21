@@ -2,10 +2,10 @@
  * Path utilities for resolving and managing file paths
  */
 
-import { homedir } from 'os';
-import { join, resolve, isAbsolute } from 'path';
-import { existsSync, mkdirSync } from 'fs';
-import assert from 'assert';
+import { homedir } from 'node:os';
+import { join, resolve, isAbsolute } from 'node:path';
+import { existsSync, mkdirSync } from 'node:fs';
+import assert from 'node:assert';
 
 /**
  * Expand ~ to home directory

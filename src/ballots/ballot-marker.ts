@@ -5,7 +5,7 @@
  * For full functionality, it uses VxSuite's libs/hmpb/src/marking.ts.
  */
 
-import { join } from 'path';
+import { join } from 'node:path';
 import { logger } from '../utils/logger.js';
 import {
   getContestsForBallotStyle,
@@ -40,7 +40,7 @@ export async function generateMarkedBallot(
 ): Promise<Uint8Array> {
   logger.debug(`Generating marked ballot for style ${ballotStyleId}`);
 
-  const { generateMarkOverlay } = await import(join(repoPath, 'libs/hmpb/src/marking'));
+  const { generateMarkOverlay } = await import(join(repoPath, 'libs/hmpb/build/marking.js'));
   return await generateMarkOverlay(
     election,
     ballotStyleId,

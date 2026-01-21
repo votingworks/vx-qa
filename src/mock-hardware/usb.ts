@@ -2,9 +2,9 @@
  * Mock USB drive control via dev-dock API
  */
 
-import { existsSync, readdirSync } from 'fs';
-import { basename, join } from 'path';
-import { cp, writeFile } from 'fs/promises';
+import { existsSync, readdirSync } from 'node:fs';
+import { basename, join } from 'node:path';
+import { cp, writeFile } from 'node:fs/promises';
 import { createDevDockClient, type DevDockClient } from './client.js';
 import { logger } from '../utils/logger.js';
 

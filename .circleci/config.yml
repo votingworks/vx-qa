@@ -1,0 +1,99 @@
+version: 2.1
+
+executors:
+  nodejs:
+    docker:
+      - image: votingworks/cimg-debian12:4.2.0
+        auth:
+          username: $VX_DOCKER_USERNAME
+          password: $VX_DOCKER_PASSWORD
+
+commands:
+  checkout-and-install:
+    description: Get the code and install dependencies.
+    steps:
+      - checkout
+      - restore_cache:
+          name: Restore pnpm Cache
+          keys:
+            - v1-pnpm-{{ checksum "pnpm-lock.yaml" }}
+            - v1-pnpm-
+      - run:
+          name: Install Latest pnpm
+          command: npm install -g pnpm@latest
+      - run:
+          name: Install Dependencies
+          command: pnpm install --frozen-lockfile
+      - save_cache:
+          name: Save pnpm Cache
+          key: v1-pnpm-{{ checksum "pnpm-lock.yaml" }}
+          paths:
+            - ~/.local/share/pnpm/store
+
+jobs:
+  test-unit:
+    executor: nodejs
+    resource_class: large
+    steps:
+      - checkout-and-install
+      - run:
+          name: Build
+          command: pnpm build
+      - run:
+          name: Lint
+          command: pnpm lint
+      - run:
+          name: Test
+          command: pnpm test --run
+
+  test-qa-e71c80e:
+    executor: nodejs
+    resource_class: xlarge
+    steps:
+      - checkout-and-install
+      - run:
+          name: Build
+          command: pnpm build
+      - run:
+          name: Install Playwright Browsers
+          command: |
+            pnpm exec playwright install-deps
+            pnpm exec playwright install chromium
+      - run:
+          name: Compute VxSuite Cache Key
+          command: |
+            # Extract the vxsuite ref from the config file
+            VXSUITE_REF=$(node -e "console.log(require('./test-fixtures/vx-qa-config-e71c80e.json').vxsuite.ref)")
+            echo "VxSuite ref: $VXSUITE_REF"
+
+            # Compute hash of the patch file
+            PATCH_HASH=$(sha256sum vxsuite.patch | cut -d' ' -f1)
+            echo "Patch hash: $PATCH_HASH"
+
+            # Create cache key file
+            echo "${VXSUITE_REF}-${PATCH_HASH}" > /tmp/vxsuite-cache-key.txt
+            cat /tmp/vxsuite-cache-key.txt
+      - restore_cache:
+          name: Restore VxSuite Repository Cache
+          keys:
+            - v1-vxsuite-{{ checksum "/tmp/vxsuite-cache-key.txt" }}
+      - run:
+          name: Run QA Test - e71c80e
+          command: |
+            cd test-fixtures
+            node ../dist/index.js run --config vx-qa-config-e71c80e.json
+          no_output_timeout: 30m
+      - save_cache:
+          name: Save VxSuite Repository Cache
+          key: v1-vxsuite-{{ checksum "/tmp/vxsuite-cache-key.txt" }}
+          paths:
+            - ~/.vx-qa/vxsuite
+          when: always
+      - store_artifacts:
+          path: test-fixtures/output
+
+workflows:
+  test:
+    jobs:
+      - test-unit
+      - test-qa-e71c80e
