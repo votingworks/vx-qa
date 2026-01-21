@@ -44,26 +44,38 @@ export async function bootstrapRepo(repoPath: string): Promise<void> {
 
   logger.step('Bootstrapping admin and scan apps (this may take several minutes)...');
 
-  // Run make bootstrap for admin and scan apps specifically
-  // This follows the same pattern as the original script/bootstrap but only for the apps we need
-  const appsToBootstrap = [
-    join(repoPath, 'apps/admin/frontend'),
-    join(repoPath, 'apps/admin/backend'),
-    join(repoPath, 'apps/scan/frontend'),
-    join(repoPath, 'apps/scan/backend'),
+  // First, run pnpm install at the root to set up all workspace symlinks
+  logger.info('Installing workspace dependencies...');
+  const installCode = await execCommandWithOutput('pnpm', ['install'], {
+    cwd: repoPath,
+    env: { ...process.env },
+  });
+
+  if (installCode !== 0) {
+    throw new Error(`pnpm install failed with code ${installCode}`);
+  }
+
+  // Then build just the admin and scan apps (and their dependencies)
+  // Use the "..." filter syntax to include all dependencies
+  // Build each app separately in sequence to ensure dependencies are built first
+  logger.info('Building admin and scan apps and their dependencies...');
+
+  const appsToBuild = [
+    '@votingworks/admin-frontend',
+    '@votingworks/admin-backend',
+    '@votingworks/scan-frontend',
+    '@votingworks/scan-backend',
   ];
 
-  for (const appPath of appsToBootstrap) {
-    const appName = appPath.replace(repoPath + '/', '');
-    logger.info(`Bootstrapping ${appName}...`);
-
-    const makeCode = await execCommandWithOutput('make', ['-C', appPath, 'bootstrap'], {
+  for (const app of appsToBuild) {
+    logger.info(`Building ${app} and its dependencies...`);
+    const buildCode = await execCommandWithOutput('pnpm', ['--filter', `${app}...`, 'build'], {
       cwd: repoPath,
-      env: { ...process.env, PATH: `${process.env.HOME}/.cargo/bin:${process.env.PATH}:/sbin/` },
+      env: { ...process.env, IS_CI: 'true' },
     });
 
-    if (makeCode !== 0) {
-      throw new Error(`Bootstrap failed for ${appName} with code ${makeCode}`);
+    if (buildCode !== 0) {
+      throw new Error(`Build failed for ${app} with code ${buildCode}`);
     }
   }
 
