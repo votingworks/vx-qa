@@ -33,6 +33,7 @@ import { PDFDocument } from 'pdf-lib';
 
 export interface BallotToScan {
   ballotStyleId: string;
+  precinctId: string;
   ballotMode: BallotMode;
   ballotType: BallotType;
   pattern: BallotPattern;
@@ -249,7 +250,10 @@ export async function runScanWorkflow(
 
   const confirmUnconfigureButton = page.getByText('Delete All Election Data');
   try {
-    await confirmUnconfigureButton.waitFor({ state: 'visible', timeout: 10000 });
+    await confirmUnconfigureButton.waitFor({
+      state: 'visible',
+      timeout: 10000,
+    });
   } catch (error) {
     await unconfiguringStep.captureScreenshot(
       'timeout-unconfigure-button',

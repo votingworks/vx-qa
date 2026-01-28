@@ -12,7 +12,7 @@ import { cloneOrUpdateRepo, getCurrentCommit, applyPatch } from '../repo/clone.j
 import { bootstrapRepo, checkPnpmAvailable, checkNodeVersion } from '../repo/bootstrap.js';
 
 // Election package loading
-import { getBallotStylesForPrecinct, loadElectionPackage } from '../ballots/election-loader.js';
+import { loadElectionPackage } from '../ballots/election-loader.js';
 
 // App orchestration
 import { createAppOrchestrator, ensureNoAppsRunning } from '../apps/orchestrator.js';
@@ -172,6 +172,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
 
       ballotsToScan.push({
         ballotStyleId: ballot.ballotStyleId,
+        precinctId: ballot.precinctId,
         ballotMode: ballot.ballotMode,
         ballotType: ballot.ballotType,
         pattern: 'blank',
@@ -183,6 +184,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
         ballotsToScan.push(
           {
             ballotStyleId: ballot.ballotStyleId,
+            precinctId: ballot.precinctId,
             ballotMode: ballot.ballotMode,
             ballotType: ballot.ballotType,
             pattern: 'valid',
@@ -191,6 +193,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
           },
           {
             ballotStyleId: ballot.ballotStyleId,
+            precinctId: ballot.precinctId,
             ballotMode: ballot.ballotMode,
             ballotType: ballot.ballotType,
             pattern: 'overvote',
@@ -202,6 +205,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
         ballotsToScan.push(
           {
             ballotStyleId: ballot.ballotStyleId,
+            precinctId: ballot.precinctId,
             ballotMode: ballot.ballotMode,
             ballotType: ballot.ballotType,
             pattern: 'marked-write-in',
@@ -210,6 +214,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
           },
           {
             ballotStyleId: ballot.ballotStyleId,
+            precinctId: ballot.precinctId,
             ballotMode: ballot.ballotMode,
             ballotType: ballot.ballotType,
             pattern: 'unmarked-write-in',
@@ -280,10 +285,10 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     await orchestrator.startApp('scan');
 
     const ballotsToScanByPrecinct = new Map(
-      election.precincts.map((p) => {
-        const ballotStyleIds = getBallotStylesForPrecinct(election, p.id).map((bs) => bs.id);
-        return [p, ballotsToScan.filter((b) => ballotStyleIds.includes(b.ballotStyleId))] as const;
-      }),
+      election.precincts.map((precinct) => [
+        precinct,
+        ballotsToScan.filter((ballot) => ballot.precinctId === precinct.id),
+      ]),
     );
 
     try {

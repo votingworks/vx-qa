@@ -343,9 +343,3 @@ export async function loadElectionPackage(
     electionPackagePath,
   };
 }
-
-export function getBallotStylesForPrecinct(election: Election, id: string): BallotStyle[] {
-  const precinct = election.precincts.find((p) => p.id === id);
-  assert(precinct, `No precinct with ID: ${id}`);
-  return election.ballotStyles.filter((bs) => bs.precincts.includes(precinct.id));
-}
