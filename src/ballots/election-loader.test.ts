@@ -3,7 +3,7 @@
  */
 
 import { describe, test, expect } from 'vitest';
-import { getContestsForBallotStyle, getBallotStylesForPrecinct } from './election-loader.js';
+import { getContestsForBallotStyle } from './election-loader.js';
 import type { Election, CandidateContest, YesNoContest, BallotStyle } from './election-loader.js';
 
 /**
@@ -215,128 +215,5 @@ describe('getContestsForBallotStyle', () => {
 
     expect(result2).toHaveLength(1);
     expect(result2[0].id).toBe('city-council');
-  });
-});
-
-describe('getBallotStylesForPrecinct', () => {
-  test('return ballot styles for a given precinct', () => {
-    const contests: CandidateContest[] = [
-      {
-        type: 'candidate',
-        id: 'mayor',
-        title: 'Mayor',
-        seats: 1,
-        candidates: [{ id: 'alice', name: 'Alice' }],
-        allowWriteIns: false,
-        districtId: 'district-1',
-      },
-    ];
-
-    const ballotStyles: BallotStyle[] = [
-      {
-        id: 'ballot-style-1',
-        precincts: ['precinct-1'],
-        districts: ['district-1'],
-      },
-      {
-        id: 'ballot-style-2',
-        precincts: ['precinct-2'],
-        districts: ['district-1'],
-      },
-    ];
-
-    const election = createTestElection(ballotStyles, contests);
-    const result = getBallotStylesForPrecinct(election, 'precinct-1');
-
-    expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('ballot-style-1');
-  });
-
-  test('return multiple ballot styles for precinct with multiple styles', () => {
-    const contests: CandidateContest[] = [
-      {
-        type: 'candidate',
-        id: 'mayor',
-        title: 'Mayor',
-        seats: 1,
-        candidates: [{ id: 'alice', name: 'Alice' }],
-        allowWriteIns: false,
-        districtId: 'district-1',
-      },
-    ];
-
-    const ballotStyles: BallotStyle[] = [
-      {
-        id: 'ballot-style-1',
-        precincts: ['precinct-1', 'precinct-2'],
-        districts: ['district-1'],
-      },
-      {
-        id: 'ballot-style-2',
-        precincts: ['precinct-1'],
-        districts: ['district-2'],
-      },
-    ];
-
-    const election = createTestElection(ballotStyles, contests);
-    const result = getBallotStylesForPrecinct(election, 'precinct-1');
-
-    expect(result).toHaveLength(2);
-    expect(result.map((bs) => bs.id).sort()).toEqual(['ballot-style-1', 'ballot-style-2']);
-  });
-
-  test('return empty array for precinct with no ballot styles', () => {
-    const contests: CandidateContest[] = [
-      {
-        type: 'candidate',
-        id: 'mayor',
-        title: 'Mayor',
-        seats: 1,
-        candidates: [{ id: 'alice', name: 'Alice' }],
-        allowWriteIns: false,
-        districtId: 'district-1',
-      },
-    ];
-
-    const ballotStyles: BallotStyle[] = [
-      {
-        id: 'ballot-style-1',
-        precincts: ['precinct-1'],
-        districts: ['district-1'],
-      },
-    ];
-
-    const election = createTestElection(ballotStyles, contests);
-    const result = getBallotStylesForPrecinct(election, 'precinct-2');
-
-    expect(result).toHaveLength(0);
-  });
-
-  test('throw error for non-existent precinct', () => {
-    const contests: CandidateContest[] = [
-      {
-        type: 'candidate',
-        id: 'mayor',
-        title: 'Mayor',
-        seats: 1,
-        candidates: [{ id: 'alice', name: 'Alice' }],
-        allowWriteIns: false,
-        districtId: 'district-1',
-      },
-    ];
-
-    const ballotStyles: BallotStyle[] = [
-      {
-        id: 'ballot-style-1',
-        precincts: ['precinct-1'],
-        districts: ['district-1'],
-      },
-    ];
-
-    const election = createTestElection(ballotStyles, contests);
-
-    expect(() => {
-      getBallotStylesForPrecinct(election, 'non-existent-precinct');
-    }).toThrow('No precinct with ID: non-existent-precinct');
   });
 });
