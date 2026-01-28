@@ -46,7 +46,7 @@ jobs:
           name: Test
           command: pnpm test --run
 
-  test-qa-e71c80e:
+  test-qa-07110bb:
     executor: nodejs
     resource_class: xlarge
     steps:
@@ -63,7 +63,7 @@ jobs:
           name: Compute VxSuite Cache Key
           command: |
             # Extract the vxsuite ref from the config file
-            VXSUITE_REF=$(node -e "console.log(require('./test-fixtures/vx-qa-config-e71c80e.json').vxsuite.ref)")
+            VXSUITE_REF=$(node -e "console.log(require('./test-fixtures/vx-qa-config-07110bb.json').vxsuite.ref)")
             echo "VxSuite ref: $VXSUITE_REF"
 
             # Compute hash of the patch file
@@ -78,10 +78,10 @@ jobs:
           keys:
             - v1-vxsuite-{{ checksum "/tmp/vxsuite-cache-key.txt" }}
       - run:
-          name: Run QA Test - e71c80e
+          name: Run QA Test - 07110bb
           command: |
             cd test-fixtures
-            node ../dist/index.js run --config vx-qa-config-e71c80e.json
+            node ../dist/index.js run --config vx-qa-config-07110bb.json
           no_output_timeout: 30m
       - save_cache:
           name: Save VxSuite Repository Cache
@@ -96,4 +96,4 @@ workflows:
   test:
     jobs:
       - test-unit
-      - test-qa-e71c80e
+      - test-qa-07110bb

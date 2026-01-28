@@ -1,0 +1,12 @@
+{
+  "vxsuite": {
+    "repoPath": "~/.vx-qa/vxsuite",
+    "ref": "v4.0.4"
+  },
+  "election": {
+    "source": "./election-package-and-ballots-07110bb-2c1581b.zip"
+  },
+  "output": {
+    "directory": "./output"
+  }
+}
