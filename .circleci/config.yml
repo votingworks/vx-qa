@@ -1,5 +1,19 @@
 version: 2.1
 
+parameters:
+  export_package_url:
+    type: string
+    default: ''
+  webhook_url:
+    type: string
+    default: ''
+  qa_run_id:
+    type: string
+    default: ''
+  election_id:
+    type: string
+    default: ''
+
 executors:
   nodejs:
     docker:
@@ -92,8 +106,66 @@ jobs:
       - store_artifacts:
           path: test-fixtures/output
 
+  qa-vxdesign:
+    executor: nodejs
+    resource_class: xlarge
+    steps:
+      - checkout-and-install
+      - run:
+          name: Build
+          command: pnpm build
+      - run:
+          name: Install Playwright Browsers
+          command: |
+            pnpm exec playwright install-deps
+            pnpm exec playwright install chromium
+      - run:
+          name: Compute VxSuite Cache Key
+          command: |
+            # Extract the vxsuite ref from the config file
+            VXSUITE_REF=$(node -e "console.log(require('./test-fixtures/vx-qa-config-vxdesign.json').vxsuite.ref)")
+            echo "VxSuite ref: $VXSUITE_REF"
+
+            # Compute hash of the patch file
+            PATCH_HASH=$(sha256sum vxsuite.patch | cut -d' ' -f1)
+            echo "Patch hash: $PATCH_HASH"
+
+            # Create cache key file
+            echo "${VXSUITE_REF}-${PATCH_HASH}" > /tmp/vxsuite-cache-key.txt
+            cat /tmp/vxsuite-cache-key.txt
+      - restore_cache:
+          name: Restore VxSuite Repository Cache
+          keys:
+            - v1-vxsuite-{{ checksum "/tmp/vxsuite-cache-key.txt" }}
+      - run:
+          name: Run QA - VxDesign Export
+          command: |
+            node dist/index.js run \
+              --config test-fixtures/vx-qa-config-vxdesign.json \
+              --election "<< pipeline.parameters.export_package_url >>" \
+              --webhook-url "<< pipeline.parameters.webhook_url >>" \
+              --webhook-secret "$CIRCLECI_WEBHOOK_SECRET"
+          no_output_timeout: 30m
+      - save_cache:
+          name: Save VxSuite Repository Cache
+          key: v1-vxsuite-{{ checksum "/tmp/vxsuite-cache-key.txt" }}
+          paths:
+            - ~/.vx-qa/vxsuite
+          when: always
+      - store_artifacts:
+          path: test-fixtures/output
+
 workflows:
   test:
+    when:
+      equal: ['', << pipeline.parameters.export_package_url >>]
     jobs:
       - test-unit
       - test-qa-e71c80e
+
+  qa-from-vxdesign:
+    when:
+      not:
+        equal: ['', << pipeline.parameters.export_package_url >>]
+    jobs:
+      - qa-vxdesign

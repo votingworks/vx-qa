@@ -2,8 +2,19 @@
  * Election definition loading from JSON files and ZIP packages
  */
 
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
+import {
+  readFileSync,
+  existsSync,
+  writeFileSync,
+  mkdirSync,
+  createWriteStream,
+  copyFileSync,
+} from 'node:fs';
+import { unlink } from 'node:fs/promises';
 import { extname, join } from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { tmpdir } from 'node:os';
 import JSZip from 'jszip';
 import { logger } from '../utils/logger.js';
 import assert from 'node:assert';
@@ -280,11 +291,28 @@ export interface UnpackedElectionPackage {
 }
 
 /**
- * Load election package and extract ballot PDFs
+ * Download a file from a URL to a local path.
+ */
+export async function downloadFile(url: string, destPath: string): Promise<void> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to download ${url}: ${response.status} ${response.statusText}`);
+  }
+  if (!response.body) {
+    throw new Error(`No response body from ${url}`);
+  }
+
+  const nodeStream = Readable.fromWeb(response.body as import('node:stream/web').ReadableStream);
+  const fileStream = createWriteStream(destPath);
+  await pipeline(nodeStream, fileStream);
+}
+
+/**
+ * Load election package and extract ballot PDFs.
  *
- * This handles the VxDesign "election-package-and-ballots" format which contains:
- * - election-package-*.zip (the election package for VxAdmin)
- * - ballots-*.zip (individual ballot PDFs)
+ * Supports two ZIP formats:
+ * - Direct election package: contains `election.json` at the top level (from VxDesign export)
+ * - Wrapper format: contains `election-package-*.zip` inside (existing test fixture format)
  */
 export async function loadElectionPackage(
   sourcePath: string,
@@ -310,22 +338,40 @@ export async function loadElectionPackage(
 
   logger.debug(`ZIP contains: ${fileNames.join(', ')}`);
 
-  // Find the election-package-*.zip and ballots-*.zip
+  // Ensure output directory exists
+  if (!existsSync(outputDir)) {
+    mkdirSync(outputDir, { recursive: true });
+  }
+
+  // Auto-detect format: direct election package vs wrapper
+  const hasElectionJson = fileNames.includes('election.json');
+
+  if (hasElectionJson) {
+    // Direct election package format (from VxDesign)
+    logger.info('Detected direct election package format');
+
+    const electionPackagePath = join(outputDir, 'election-package.zip');
+    copyFileSync(sourcePath, electionPackagePath);
+
+    const electionPackage = await parseElectionPackageZip(zip, sourcePath);
+
+    return {
+      electionPackage,
+      electionPackagePath,
+    };
+  }
+
+  // Wrapper format: find the election-package-*.zip inside
   const electionPackageFile = fileNames.find(
     (f) => f.startsWith('election-package-') && f.endsWith('.zip'),
   );
 
   if (!electionPackageFile) {
     throw new Error(
-      `No election-package-*.zip found in the archive.\n` +
+      `No election-package-*.zip found in the archive and no election.json at top level.\n` +
         `Files found: ${fileNames.join(', ')}\n` +
-        `Please provide a complete VxDesign export (election-package-and-ballots-*.zip)`,
+        `Please provide a complete VxDesign export`,
     );
-  }
-
-  // Ensure output directory exists
-  if (!existsSync(outputDir)) {
-    mkdirSync(outputDir, { recursive: true });
   }
 
   // Extract the election package ZIP
@@ -342,4 +388,30 @@ export async function loadElectionPackage(
     electionPackage,
     electionPackagePath,
   };
+}
+
+/**
+ * Download an election package from a URL and load it.
+ */
+export async function loadElectionPackageFromUrl(
+  url: string,
+  outputDir: string,
+): Promise<UnpackedElectionPackage> {
+  const tempPath = join(tmpdir(), `vx-qa-download-${Date.now()}.zip`);
+  logger.info(`Downloading election package from ${url}`);
+
+  try {
+    await downloadFile(url, tempPath);
+    logger.info('Download complete, loading election package');
+    return await loadElectionPackage(tempPath, outputDir);
+  } finally {
+    // Clean up temp file
+    await unlink(tempPath).catch(() => {});
+  }
+}
+
+export function getBallotStylesForPrecinct(election: Election, id: string): BallotStyle[] {
+  const precinct = election.precincts.find((p) => p.id === id);
+  assert(precinct, `No precinct with ID: ${id}`);
+  return election.ballotStyles.filter((bs) => bs.precincts.includes(precinct.id));
 }

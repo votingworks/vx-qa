@@ -75,6 +75,26 @@ export async function bootstrapRepo(repoPath: string): Promise<void> {
 }
 
 /**
+ * Installs the playwright browsers needed by vxsuite. Note that the versions
+ * of these browser may be different than the versions installed by our version
+ * of playwright.
+ */
+export async function installPlaywrightBrowsers(repoPath: string): Promise<void> {
+  const playwrightInstallCode = await execCommandWithOutput(
+    'pnpm',
+    ['exec', 'playwright', 'install'],
+    {
+      cwd: join(repoPath, 'libs/printing'),
+      env: { ...process.env },
+    },
+  );
+
+  if (playwrightInstallCode !== 0) {
+    throw new Error(`pnpm exec playwright install failed with code ${playwrightInstallCode}`);
+  }
+}
+
+/**
  * Check if pnpm is available
  */
 export async function checkPnpmAvailable(): Promise<boolean> {

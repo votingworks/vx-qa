@@ -204,3 +204,8 @@ export interface AllPrecinctsSelection {
 }
 
 export type PrecinctSelection = SinglePrecinctSelection | AllPrecinctsSelection;
+
+export interface WebhookConfig {
+  url: string;
+  secret: string;
+}

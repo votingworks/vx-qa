@@ -4,12 +4,18 @@
 
 import { logger, formatDuration, printDivider } from '../utils/logger.js';
 import { resolvePath } from '../utils/paths.js';
-import type { QARunConfig } from '../config/types.js';
+import type { QARunConfig, WebhookConfig } from '../config/types.js';
 import { existsSync } from 'node:fs';
+import { relative } from 'node:path';
 
 // Repository management
 import { cloneOrUpdateRepo, getCurrentCommit, applyPatch } from '../repo/clone.js';
-import { bootstrapRepo, checkPnpmAvailable, checkNodeVersion } from '../repo/bootstrap.js';
+import {
+  bootstrapRepo,
+  checkPnpmAvailable,
+  checkNodeVersion,
+  installPlaywrightBrowsers,
+} from '../repo/bootstrap.js';
 
 // Election package loading
 import { loadElectionPackage } from '../ballots/election-loader.js';
@@ -27,6 +33,7 @@ import { runAdminTallyWorkflow } from '../automation/admin-tally-workflow.js';
 import { createArtifactCollector } from '../report/artifacts.js';
 import { generateHtmlReport } from '../report/html-generator.js';
 import { join, dirname } from 'node:path';
+import { sendWebhookUpdate } from '../webhook/client.js';
 import { State } from '../repo/state.js';
 import { writeFile } from 'node:fs/promises';
 import assert from 'node:assert';
@@ -38,6 +45,20 @@ export interface RunOptions {
   headless?: boolean;
   limitBallots?: number;
   limitManualTallies?: number;
+  webhook?: WebhookConfig;
+}
+
+/**
+ * Construct a CircleCI artifacts URL for the report, if running in CI.
+ */
+function buildResultsUrl(reportPath: string): string | undefined {
+  const jobId = process.env.CIRCLE_WORKFLOW_JOB_ID;
+  if (!jobId) {
+    return undefined;
+  }
+  const projectRoot = getProjectRoot();
+  const relativePath = relative(projectRoot, reportPath);
+  return `https://output.circle-artifacts.com/output/job/${jobId}/artifacts/0/${relativePath}`;
 }
 
 /**
@@ -89,6 +110,10 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
   logger.step('Starting VxSuite QA automation');
   logger.info(`Output directory: ${config.output.directory}`);
 
+  if (options.webhook) {
+    await sendWebhookUpdate(options.webhook, 'in_progress', 'QA automation starting');
+  }
+
   try {
     // Pre-flight checks
     await runPreflightChecks();
@@ -113,6 +138,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     }
 
     await bootstrapRepo(repoPath);
+    await installPlaywrightBrowsers(repoPath);
 
     // Phase 2: Clear state
     printDivider();
@@ -400,6 +426,16 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     const rejected = results.filter((r) => !r.accepted).length;
     logger.info(`Scan results: ${accepted} accepted, ${rejected} rejected`);
 
+    if (options.webhook && reportPath) {
+      const resultsUrl = buildResultsUrl(reportPath);
+      await sendWebhookUpdate(
+        options.webhook,
+        'success',
+        `QA completed: ${accepted} accepted, ${rejected} rejected`,
+        resultsUrl,
+      );
+    }
+
     // Open the report in the default browser
     if (reportPath) {
       // Spawn detached process so it doesn't block
@@ -409,6 +445,14 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
       }).unref();
     }
   } catch (error) {
+    if (options.webhook) {
+      await sendWebhookUpdate(
+        options.webhook,
+        'failure',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+
     if (error instanceof Error) {
       collector.logError(error, 'workflow');
     }

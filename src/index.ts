@@ -12,10 +12,12 @@ import { logger, printHeader } from './utils/logger.js';
 import { validateConfig, safeValidateConfig } from './config/schema.js';
 import { resolvePath, generateTimestampedDir, ensureDir } from './utils/paths.js';
 import { runQAWorkflow } from './cli/config-runner.js';
-import type { QARunConfig } from './config/types.js';
-import { dirname } from 'node:path';
+import type { QARunConfig, WebhookConfig } from './config/types.js';
+import { dirname, join } from 'node:path';
 import { regenerateHtmlReportFromRawData } from './report/html-generator.js';
 import { revalidateTallyResults } from './automation/admin-tally-workflow.js';
+import { downloadFile } from './ballots/election-loader.js';
+import { startServe } from './cli/serve.js';
 
 const program = new Command();
 
@@ -38,6 +40,11 @@ program
     '--limit-manual-tallies <number>',
     'Limit the number of ballot styles with manual tallies (for testing)',
     parseInt,
+  )
+  .option('--webhook-url <url>', 'URL for status callbacks')
+  .option(
+    '--webhook-secret <secret>',
+    'Secret for webhook auth (default: $CIRCLECI_WEBHOOK_SECRET env var)',
   )
   .action(async (options) => {
     printHeader('VxSuite QA Automation');
@@ -80,11 +87,37 @@ program
       ensureDir(outputDir);
       config.output.directory = outputDir;
 
+      // Build webhook config if URL is provided
+      let webhook: WebhookConfig | undefined;
+      if (options.webhookUrl) {
+        const secret = options.webhookSecret || process.env.CIRCLECI_WEBHOOK_SECRET;
+        if (!secret) {
+          logger.error(
+            'Webhook secret is required. Use --webhook-secret or set CIRCLECI_WEBHOOK_SECRET.',
+          );
+          process.exit(1);
+        }
+        webhook = { url: options.webhookUrl, secret };
+      }
+
+      // If election source is a URL, download it first
+      if (
+        config.election.source.startsWith('http://') ||
+        config.election.source.startsWith('https://')
+      ) {
+        const downloadPath = join(outputDir, 'election-package-download.zip');
+        logger.info(`Downloading election package from ${config.election.source}`);
+        await downloadFile(config.election.source, downloadPath);
+        logger.info('Download complete');
+        config.election.source = downloadPath;
+      }
+
       // Run the workflow
       await runQAWorkflow(config, {
         headless: options.headless !== false,
         limitBallots: options.limitBallots,
         limitManualTallies: options.limitManualTallies,
+        webhook,
       });
     } catch (error) {
       if (error instanceof Error) {
@@ -174,6 +207,31 @@ program
     writeFileSync(outputPath, JSON.stringify(sampleConfig, null, 2));
     logger.success(`Sample configuration created at ${outputPath}`);
     logger.info('Edit the file to configure your QA run, then use: vx-qa run --config <path>');
+  });
+
+program
+  .command('serve')
+  .description('Start a local CircleCI stand-in server for VxDesign')
+  .requiredOption('-c, --config <path>', 'Path to configuration file')
+  .option('-p, --port <port>', 'Port to listen on', parseInt, 9000)
+  .option('--webhook-secret <secret>', 'Secret for webhook callbacks', 'test-secret')
+  .option('--headless', 'Run browser in headless mode (default)')
+  .option('--no-headless', 'Run browser in headed mode for debugging')
+  .option('--limit-ballots <number>', 'Limit the number of ballots to scan (for testing)', parseInt)
+  .option(
+    '--limit-manual-tallies <number>',
+    'Limit the number of ballot styles with manual tallies (for testing)',
+    parseInt,
+  )
+  .action((options) => {
+    startServe({
+      port: options.port,
+      configPath: options.config,
+      webhookSecret: options.webhookSecret,
+      headless: options.headless !== false,
+      limitBallots: options.limitBallots,
+      limitManualTallies: options.limitManualTallies,
+    });
   });
 
 program.parse();
