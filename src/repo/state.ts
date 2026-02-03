@@ -2,7 +2,6 @@
  * State management - clearing mock state between runs
  */
 
-import { existsSync } from 'node:fs';
 import { rm, readdir, cp, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { logger } from '../utils/logger.js';
@@ -90,10 +89,6 @@ export class State {
  */
 async function clearDirectory(dirPath: string): Promise<void> {
   const resolved = resolvePath(dirPath);
-
-  if (!existsSync(resolved)) {
-    return;
-  }
 
   try {
     await rm(resolved, { recursive: true, force: true });

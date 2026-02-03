@@ -4,7 +4,7 @@
 
 import { Page } from '@playwright/test';
 import { join } from 'node:path';
-import { mkdirSync, existsSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
 import { logger } from '../utils/logger.js';
 import type { ScreenshotArtifact } from '../config/types.js';
 
@@ -23,14 +23,15 @@ export interface ScreenshotManager {
 /**
  * Create a screenshot manager
  */
-export function createScreenshotManager(page: Page, outputDir: string): ScreenshotManager {
+export async function createScreenshotManager(
+  page: Page,
+  outputDir: string,
+): Promise<ScreenshotManager> {
   const screenshotsDir = join(outputDir, 'screenshots');
   const screenshots: ScreenshotArtifact[] = [];
 
   // Ensure screenshots directory exists
-  if (!existsSync(screenshotsDir)) {
-    mkdirSync(screenshotsDir, { recursive: true });
-  }
+  await mkdir(screenshotsDir, { recursive: true });
 
   return {
     async capture(name: string, label: string): Promise<ScreenshotArtifact> {

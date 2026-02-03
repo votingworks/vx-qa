@@ -77,7 +77,7 @@ function getProjectRoot(): string {
  */
 export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {}): Promise<void> {
   const startTime = Date.now();
-  const collector = createArtifactCollector(config.output.directory, config);
+  const collector = await createArtifactCollector(config.output.directory, config);
   let orchestrator: AppOrchestrator | null = null;
   let browser: Awaited<ReturnType<typeof createBrowserSession>>['browser'] | null = null;
 
@@ -269,7 +269,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     });
     browser = browserSession.browser;
     const { page } = browserSession;
-    const adminStep = collector.startStep(
+    const adminStep = await collector.startStep(
       page,
       'programming-vxadmin',
       'Programming VxAdmin',
@@ -320,7 +320,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     try {
       for (const [precinct, precinctBallotsToScan] of ballotsToScanByPrecinct) {
         // Create step for opening polls
-        const openingPollsStep = collector.startStep(
+        const openingPollsStep = await collector.startStep(
           page,
           'opening-polls',
           'Opening Polls',

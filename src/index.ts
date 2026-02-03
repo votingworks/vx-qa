@@ -7,7 +7,6 @@
  */
 
 import { Command } from 'commander';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { logger, printHeader } from './utils/logger.js';
 import { validateConfig, safeValidateConfig } from './config/schema.js';
 import { resolvePath, generateTimestampedDir, ensureDir } from './utils/paths.js';
@@ -18,6 +17,7 @@ import { regenerateHtmlReportFromRawData } from './report/html-generator.js';
 import { revalidateTallyResults } from './automation/admin-tally-workflow.js';
 import { downloadFile } from './ballots/election-loader.js';
 import { startServe } from './cli/serve.js';
+import { readFile, writeFile } from 'node:fs/promises';
 
 const program = new Command();
 
@@ -60,12 +60,7 @@ program
         process.exit(1);
       }
       const configPath = resolvePath(options.config);
-      if (!existsSync(configPath)) {
-        logger.error(`Config file not found: ${configPath}`);
-        process.exit(1);
-      }
-
-      const configData = readFileSync(configPath, 'utf-8');
+      const configData = await readFile(configPath, 'utf-8');
       const parsedConfig = JSON.parse(configData);
       config = validateConfig(parsedConfig, configPath);
       config.basePath = dirname(configPath);
@@ -84,7 +79,7 @@ program
 
       // Generate timestamped output directory
       const outputDir = generateTimestampedDir(config.output.directory);
-      ensureDir(outputDir);
+      await ensureDir(outputDir);
       config.output.directory = outputDir;
 
       // Build webhook config if URL is provided
@@ -134,15 +129,10 @@ program
   .command('validate')
   .description('Validate a configuration file')
   .argument('<config>', 'Path to configuration file')
-  .action((configPath) => {
+  .action(async (configPath) => {
     try {
       const resolved = resolvePath(configPath);
-      if (!existsSync(resolved)) {
-        logger.error(`Config file not found: ${resolved}`);
-        process.exit(1);
-      }
-
-      const configData = readFileSync(resolved, 'utf-8');
+      const configData = await readFile(resolved, 'utf-8');
       const parsedConfig = JSON.parse(configData);
       const result = safeValidateConfig(parsedConfig);
 
@@ -189,7 +179,7 @@ program
   .command('init')
   .description('Create a sample configuration file')
   .option('-o, --output <path>', 'Output path for config file', './vx-qa-config.json')
-  .action((options) => {
+  .action(async (options) => {
     const sampleConfig: QARunConfig = {
       vxsuite: {
         repoPath: '~/.vx-qa/vxsuite',
@@ -204,7 +194,7 @@ program
     };
 
     const outputPath = resolvePath(options.output);
-    writeFileSync(outputPath, JSON.stringify(sampleConfig, null, 2));
+    await writeFile(outputPath, JSON.stringify(sampleConfig, null, 2));
     logger.success(`Sample configuration created at ${outputPath}`);
     logger.info('Edit the file to configure your QA run, then use: vx-qa run --config <path>');
   });

@@ -6,8 +6,8 @@
  * and sends webhook callbacks through the existing webhook client.
  */
 
+import { readFile } from 'node:fs/promises';
 import http from 'node:http';
-import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { logger, printHeader } from '../utils/logger.js';
 import { validateConfig } from '../config/schema.js';
@@ -141,12 +141,7 @@ async function runPipeline(
   try {
     // Load the config
     const configPath = resolvePath(options.configPath);
-    if (!existsSync(configPath)) {
-      logger.error(`Config file not found: ${configPath}`);
-      return;
-    }
-
-    const configData = readFileSync(configPath, 'utf-8');
+    const configData = await readFile(configPath, 'utf-8');
     const parsedConfig = JSON.parse(configData);
     const config: QARunConfig = validateConfig(parsedConfig, configPath);
     config.basePath = dirname(configPath);
@@ -156,7 +151,7 @@ async function runPipeline(
 
     // Generate a timestamped output directory
     const outputDir = generateTimestampedDir(config.output.directory);
-    ensureDir(outputDir);
+    await ensureDir(outputDir);
     config.output.directory = outputDir;
 
     // Download the election package

@@ -2,7 +2,6 @@
  * Mock USB drive control via dev-dock API
  */
 
-import { existsSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { cp, writeFile } from 'node:fs/promises';
 import { createDevDockClient, type DevDockClient } from './client.js';
@@ -50,11 +49,6 @@ export interface MockUsbController {
    * Write content directly to a file on the USB drive
    */
   writeFile(fileName: string, content: Buffer | string): Promise<string>;
-
-  /**
-   * List files on the USB drive
-   */
-  listFiles(): string[];
 }
 
 /**
@@ -108,13 +102,6 @@ export function createMockUsbController({ dataPath }: { dataPath: string }): Moc
       await writeFile(filePath, content);
       logger.debug(`Wrote ${fileName} to USB`);
       return filePath;
-    },
-
-    listFiles(): string[] {
-      if (!existsSync(dataPath)) {
-        return [];
-      }
-      return readdirSync(dataPath);
     },
   };
 }

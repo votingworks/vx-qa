@@ -43,7 +43,7 @@ async function cloneRepo(repoPath: string): Promise<void> {
   try {
     // Ensure parent directory exists
     const parentDir = resolvePath(repoPath, '..');
-    ensureDir(parentDir);
+    await ensureDir(parentDir);
 
     const git: SimpleGit = simpleGit();
     await git.clone(VXSUITE_REPO_URL, repoPath, ['--depth', '1', '--no-single-branch']);

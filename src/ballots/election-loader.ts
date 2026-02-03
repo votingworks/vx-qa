@@ -2,15 +2,8 @@
  * Election definition loading from JSON files and ZIP packages
  */
 
-import {
-  readFileSync,
-  existsSync,
-  writeFileSync,
-  mkdirSync,
-  createWriteStream,
-  copyFileSync,
-} from 'node:fs';
-import { unlink } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
+import { copyFile, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -302,7 +295,7 @@ export async function downloadFile(url: string, destPath: string): Promise<void>
     throw new Error(`No response body from ${url}`);
   }
 
-  const nodeStream = Readable.fromWeb(response.body as import('node:stream/web').ReadableStream);
+  const nodeStream = Readable.fromWeb(response.body);
   const fileStream = createWriteStream(destPath);
   await pipeline(nodeStream, fileStream);
 }
@@ -318,10 +311,6 @@ export async function loadElectionPackage(
   sourcePath: string,
   outputDir: string,
 ): Promise<UnpackedElectionPackage> {
-  if (!existsSync(sourcePath)) {
-    throw new Error(`Election source not found: ${sourcePath}`);
-  }
-
   const ext = extname(sourcePath).toLowerCase();
   if (ext !== '.zip') {
     throw new Error(
@@ -332,16 +321,14 @@ export async function loadElectionPackage(
 
   logger.debug(`Loading election package with ballots from: ${sourcePath}`);
 
-  const zipData = readFileSync(sourcePath);
+  const zipData = await readFile(sourcePath);
   const zip = await JSZip.loadAsync(zipData);
   const fileNames = Object.keys(zip.files);
 
   logger.debug(`ZIP contains: ${fileNames.join(', ')}`);
 
   // Ensure output directory exists
-  if (!existsSync(outputDir)) {
-    mkdirSync(outputDir, { recursive: true });
-  }
+  await mkdir(outputDir, { recursive: true });
 
   // Auto-detect format: direct election package vs wrapper
   const hasElectionJson = fileNames.includes('election.json');
@@ -351,7 +338,7 @@ export async function loadElectionPackage(
     logger.info('Detected direct election package format');
 
     const electionPackagePath = join(outputDir, 'election-package.zip');
-    copyFileSync(sourcePath, electionPackagePath);
+    await copyFile(sourcePath, electionPackagePath);
 
     const electionPackage = await parseElectionPackageZip(zip, sourcePath);
 
@@ -377,7 +364,7 @@ export async function loadElectionPackage(
   // Extract the election package ZIP
   const electionPackageData = await zip.file(electionPackageFile)!.async('uint8array');
   const electionPackagePath = join(outputDir, electionPackageFile);
-  writeFileSync(electionPackagePath, electionPackageData);
+  await writeFile(electionPackagePath, electionPackageData);
   logger.info(`Extracted election package: ${electionPackageFile}`);
 
   // Parse the election package
