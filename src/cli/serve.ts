@@ -124,7 +124,7 @@ export function startServe(options: ServeOptions): void {
     logger.info(`  CIRCLECI_BASE_URL=http://localhost:${options.port} \\`);
     logger.info('  FRONTEND_PORT=4000 \\');
     logger.info('  BASE_URL=http://localhost:4000 \\');
-    logger.info('  pnpm -C apps/design start');
+    logger.info('  pnpm -C apps/design/frontend start');
     logger.info('');
     logger.info('Then export an election in VxDesign.');
   });
