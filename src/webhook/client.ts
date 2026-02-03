@@ -29,6 +29,7 @@ export async function sendWebhookUpdate(
         status,
         statusMessage: statusMessage ? stripAnsi(statusMessage) : statusMessage,
         resultsUrl,
+        jobUrl: process.env.CIRCLE_BUILD_URL,
       }),
     });
 
