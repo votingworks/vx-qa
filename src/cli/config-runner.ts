@@ -124,6 +124,9 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // Phase 1: Repository setup
     printDivider();
     logger.step('Phase 1: Repository Setup');
+    if (options.webhook) {
+      await sendWebhookUpdate(options.webhook, 'in_progress', 'Setting up VxSuite repository');
+    }
 
     const repoPath = await cloneOrUpdateRepo(config.vxsuite);
     const commit = await getCurrentCommit(repoPath);
@@ -143,12 +146,18 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // Phase 2: Clear state
     printDivider();
     logger.step('Phase 2: Clearing State');
+    if (options.webhook) {
+      await sendWebhookUpdate(options.webhook, 'in_progress', 'Clearing previous run state');
+    }
     const state = State.defaultFor(repoPath);
     await state.clear();
 
     // Phase 3: Load election package and ballots
     printDivider();
     logger.step('Phase 3: Loading Election Package');
+    if (options.webhook) {
+      await sendWebhookUpdate(options.webhook, 'in_progress', 'Loading election package');
+    }
 
     const electionSourcePath = resolvePath(config.election.source, config.basePath);
     const { electionPackage, electionPackagePath } = await loadElectionPackage(
@@ -170,6 +179,9 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // Phase 4: Prepare ballots for scanning
     printDivider();
     logger.step('Phase 4: Preparing Ballots');
+    if (options.webhook) {
+      await sendWebhookUpdate(options.webhook, 'in_progress', 'Preparing ballots for scanning');
+    }
 
     const ballotsToScan: BallotToScan[] = [];
     const ballotsPath = join(config.output.directory, 'ballots');
@@ -263,6 +275,13 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // Phase 5: Run VxAdmin workflow
     printDivider();
     logger.step('Phase 5: VxAdmin Configuration');
+    if (options.webhook) {
+      await sendWebhookUpdate(
+        options.webhook,
+        'in_progress',
+        'Configuring VxAdmin with election package',
+      );
+    }
 
     const browserSession = await createBrowserSession({
       headless: options.headless ?? true,
@@ -307,6 +326,9 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // Phase 6: Run VxScan workflow
     printDivider();
     logger.step('Phase 6: VxScan Scanning');
+    if (options.webhook) {
+      await sendWebhookUpdate(options.webhook, 'in_progress', 'Scanning ballots with VxScan');
+    }
 
     await orchestrator.startApp('scan');
 
@@ -381,6 +403,13 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // Phase 7: Run VxAdmin Tally Workflow
     printDivider();
     logger.step('Phase 7: VxAdmin Tally');
+    if (options.webhook) {
+      await sendWebhookUpdate(
+        options.webhook,
+        'in_progress',
+        'Importing CVRs and validating tallies',
+      );
+    }
 
     await orchestrator.startApp('admin');
 
@@ -402,11 +431,17 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // Phase 8: Copy Workspaces
     printDivider();
     logger.step('Phase 8: Copy Workspaces');
+    if (options.webhook) {
+      await sendWebhookUpdate(options.webhook, 'in_progress', 'Copying app workspaces');
+    }
     await state.copyWorkspacesTo(join(collector.getOutputDir(), 'workspaces'));
 
     // Phase 9: Generate report
     printDivider();
     logger.step('Phase 9: Generating Report');
+    if (options.webhook) {
+      await sendWebhookUpdate(options.webhook, 'in_progress', 'Generating QA report');
+    }
 
     collector.complete();
     const reportPath = await generateHtmlReport(collector.getCollection(), config.output.directory);

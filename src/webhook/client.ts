@@ -5,6 +5,13 @@
 import { logger } from '../utils/logger.js';
 import type { WebhookConfig } from '../config/types.js';
 
+// eslint-disable-next-line no-control-regex
+const ANSI_REGEX = /\x1b\[[0-9;]*[a-zA-Z]/g;
+
+function stripAnsi(text: string): string {
+  return text.replace(ANSI_REGEX, '');
+}
+
 export async function sendWebhookUpdate(
   config: WebhookConfig,
   status: 'in_progress' | 'success' | 'failure',
@@ -20,7 +27,7 @@ export async function sendWebhookUpdate(
       },
       body: JSON.stringify({
         status,
-        statusMessage,
+        statusMessage: statusMessage ? stripAnsi(statusMessage) : statusMessage,
         resultsUrl,
       }),
     });
