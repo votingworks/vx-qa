@@ -172,7 +172,7 @@ export async function runScanWorkflow(
     logger.debug(`Scanning ballot: ${ballot.ballotStyleId} - ${ballot.pattern}`);
 
     // Create step for this ballot right before scanning
-    const ballotStep = collector.startStep(
+    const ballotStep = await collector.startStep(
       page,
       `scan-ballot-${index + 1}`,
       `Scan Ballot ${index + 1}: ${ballot.ballotStyleId} - ${ballot.pattern} (${ballot.ballotMode} ${ballot.ballotType})`,
@@ -189,7 +189,7 @@ export async function runScanWorkflow(
   logger.debug('Closing polls');
 
   // Create step for closing polls
-  const closingPollsStep = collector.startStep(
+  const closingPollsStep = await collector.startStep(
     page,
     'closing-polls',
     'Closing Polls',
@@ -232,7 +232,7 @@ export async function runScanWorkflow(
   // Mark closing polls step as complete
   closingPollsStep.complete();
 
-  const unconfiguringStep = collector.startStep(
+  const unconfiguringStep = await collector.startStep(
     page,
     'unconfiguring',
     'Unconfiguring',

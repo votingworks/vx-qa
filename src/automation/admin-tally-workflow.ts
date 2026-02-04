@@ -125,7 +125,7 @@ async function addManualTally(
     );
 
     // Create a step for this ballot style's manual tally
-    const manualTallyStep = collector.startStep(
+    const manualTallyStep = await collector.startStep(
       page,
       `manual-tally-${ballotStyleGroupId}`,
       `Manual Tally: ${ballotStyleGroupId}`,
@@ -698,7 +698,7 @@ export async function runAdminTallyWorkflow(
   await dipElectionManagerCardAndLogin(page, electionPackagePath, outputDir);
 
   // Step 1: Load CVRs
-  const loadCvrsStep = collector.startStep(
+  const loadCvrsStep = await collector.startStep(
     page,
     'loading-cvrs',
     'Loading CVRs in VxAdmin',
@@ -712,7 +712,7 @@ export async function runAdminTallyWorkflow(
   await addManualTally(page, election, collector, limitManualTallies);
 
   // Step 3: Generate reports
-  const reportsStep = collector.startStep(
+  const reportsStep = await collector.startStep(
     page,
     'generating-reports',
     'Generating Tally Reports',

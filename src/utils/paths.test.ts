@@ -3,10 +3,11 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, rmSync, existsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { expandHome, resolvePath, ensureDir, generateTimestampedDir, pathsEqual } from './paths.js';
+import { mkdir, rm } from 'node:fs/promises';
 
 describe('expandHome', () => {
   test('expands ~/ to home directory', () => {
@@ -68,69 +69,61 @@ describe('resolvePath', () => {
 describe('ensureDir', () => {
   const testBaseDir = join(tmpdir(), 'vx-qa-test-ensure-dir');
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // Clean up test directory if it exists
-    if (existsSync(testBaseDir)) {
-      rmSync(testBaseDir, { recursive: true, force: true });
-    }
+    await rm(testBaseDir, { recursive: true, force: true });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // Clean up after tests
-    if (existsSync(testBaseDir)) {
-      rmSync(testBaseDir, { recursive: true, force: true });
-    }
+    await rm(testBaseDir, { recursive: true, force: true });
   });
 
-  test('creates directory if it does not exist', () => {
+  test('creates directory if it does not exist', async () => {
     const testDir = join(testBaseDir, 'new-dir');
     expect(existsSync(testDir)).toBe(false);
 
-    const result = ensureDir(testDir);
+    const result = await ensureDir(testDir);
 
     expect(existsSync(testDir)).toBe(true);
     expect(result).toBe(testDir);
   });
 
-  test('does not fail if directory already exists', () => {
+  test('does not fail if directory already exists', async () => {
     const testDir = join(testBaseDir, 'existing-dir');
-    mkdirSync(testDir, { recursive: true });
+    await mkdir(testDir, { recursive: true });
     expect(existsSync(testDir)).toBe(true);
 
-    const result = ensureDir(testDir);
+    const result = await ensureDir(testDir);
 
     expect(existsSync(testDir)).toBe(true);
     expect(result).toBe(testDir);
   });
 
-  test('creates nested directories', () => {
+  test('creates nested directories', async () => {
     const testDir = join(testBaseDir, 'nested/deep/directory');
     expect(existsSync(testDir)).toBe(false);
 
-    const result = ensureDir(testDir);
+    const result = await ensureDir(testDir);
 
     expect(existsSync(testDir)).toBe(true);
     expect(result).toBe(testDir);
   });
 
-  test('expands ~ in path', () => {
+  test('expands ~ in path', async () => {
     const testDir = '~/vx-qa-test-home-dir';
     const expectedDir = join(homedir(), 'vx-qa-test-home-dir');
 
     // Clean up if exists
-    if (existsSync(expectedDir)) {
-      rmSync(expectedDir, { recursive: true, force: true });
-    }
+    await rm(expectedDir, { recursive: true, force: true });
 
     try {
-      const result = ensureDir(testDir);
+      const result = await ensureDir(testDir);
       expect(existsSync(expectedDir)).toBe(true);
       expect(result).toBe(expectedDir);
     } finally {
       // Clean up
-      if (existsSync(expectedDir)) {
-        rmSync(expectedDir, { recursive: true, force: true });
-      }
+      await rm(expectedDir, { recursive: true, force: true });
     }
   });
 });

@@ -1,0 +1,12 @@
+{
+  "vxsuite": {
+    "repoPath": "~/.vx-qa/vxsuite",
+    "ref": "v4.0.4"
+  },
+  "election": {
+    "source": "(overridden by VxDesign request)"
+  },
+  "output": {
+    "directory": "./output"
+  }
+}

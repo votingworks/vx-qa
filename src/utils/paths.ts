@@ -4,8 +4,8 @@
 
 import { homedir } from 'node:os';
 import { join, resolve, isAbsolute } from 'node:path';
-import { existsSync, mkdirSync } from 'node:fs';
 import assert from 'node:assert';
+import { mkdir } from 'node:fs/promises';
 
 /**
  * Expand ~ to home directory
@@ -34,11 +34,9 @@ export function resolvePath(path: string, basePath?: string): string {
 /**
  * Ensure a directory exists, creating it if necessary
  */
-export function ensureDir(path: string): string {
+export async function ensureDir(path: string): Promise<string> {
   const resolved = resolvePath(path);
-  if (!existsSync(resolved)) {
-    mkdirSync(resolved, { recursive: true });
-  }
+  await mkdir(resolved, { recursive: true });
   return resolved;
 }
 

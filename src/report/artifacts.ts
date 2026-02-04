@@ -2,7 +2,7 @@
  * Artifact collection and management
  */
 
-import { existsSync, mkdirSync, readdirSync, statSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join, basename, extname, isAbsolute } from 'node:path';
 import { logger } from '../utils/logger.js';
 import type {
@@ -15,7 +15,7 @@ import type {
   StepOutput,
   ScreenshotArtifact,
 } from '../config/types.js';
-import { copyFile, readFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, stat } from 'node:fs/promises';
 import assert from 'node:assert';
 import { Page } from '@playwright/test';
 import { createScreenshotManager } from '../automation/screenshot.js';
@@ -66,7 +66,7 @@ export interface ArtifactCollector {
   /**
    * Start a new workflow step
    */
-  startStep(page: Page, id: string, name: string, description: string): StepCollector;
+  startStep(page: Page, id: string, name: string, description: string): Promise<StepCollector>;
 
   /**
    * Mark the run as complete
@@ -92,7 +92,10 @@ export interface ArtifactCollector {
 /**
  * Create an artifact collector
  */
-export function createArtifactCollector(outputDir: string, config: QARunConfig): ArtifactCollector {
+export async function createArtifactCollector(
+  outputDir: string,
+  config: QARunConfig,
+): Promise<ArtifactCollector> {
   assert(isAbsolute(outputDir), 'outputDir must be absolute');
   const runId = basename(outputDir);
   const startTime = new Date();
@@ -112,11 +115,7 @@ export function createArtifactCollector(outputDir: string, config: QARunConfig):
     ballots: join(outputDir, 'ballots'),
   };
 
-  for (const dir of Object.values(dirs)) {
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-  }
+  await Promise.all(Object.values(dirs).map((dir) => mkdir(dir, { recursive: true })));
 
   return {
     addBallot(artifact: BallotArtifact): void {
@@ -135,7 +134,12 @@ export function createArtifactCollector(outputDir: string, config: QARunConfig):
       logger.error(`Error in ${step}: ${error.message} ${error.stack}`);
     },
 
-    startStep(page: Page, id: string, name: string, description: string): StepCollector {
+    async startStep(
+      page: Page,
+      id: string,
+      name: string,
+      description: string,
+    ): Promise<StepCollector> {
       const step: WorkflowStep = {
         id,
         name,
@@ -153,9 +157,9 @@ export function createArtifactCollector(outputDir: string, config: QARunConfig):
       const stepIndex = collection.steps.length - 1;
       const stepIndexStr = stepIndex.toString().padStart(2, '0');
       const stepDir = join(outputDir, 'steps', `${stepIndexStr}-${id.replace(/[^a-z0-9]+/g, '-')}`);
-      mkdirSync(stepDir, { recursive: true });
+      await mkdir(stepDir, { recursive: true });
 
-      const screenshots = createScreenshotManager(page, stepDir);
+      const screenshots = await createScreenshotManager(page, stepDir);
 
       return {
         addInput(input: StepInput): void {
@@ -246,32 +250,32 @@ export async function loadCollection(path: string): Promise<ArtifactCollection> 
 /**
  * Collect all files in a directory
  */
-export function collectFilesInDir(
+export async function collectFilesInDir(
   dir: string,
   extensions?: string[],
-): { name: string; path: string; size: number; mtime?: Date }[] {
+): Promise<{ name: string; path: string; size: number; mtime?: Date }[]> {
   if (!existsSync(dir)) {
     return [];
   }
 
-  const files = readdirSync(dir);
-  const results: { name: string; path: string; size: number; mtime?: Date }[] = [];
-
-  for (const file of files) {
-    const filePath = join(dir, file);
-    const stat = statSync(filePath);
-
-    if (stat.isFile()) {
-      if (!extensions || extensions.includes(extname(file).toLowerCase())) {
-        results.push({
-          name: file,
+  const files = await readdir(dir, { withFileTypes: true });
+  const results = await Promise.all(
+    files
+      .filter(
+        (file) =>
+          file.isFile() && (!extensions || extensions.includes(extname(file.name).toLowerCase())),
+      )
+      .map(async (file) => {
+        const filePath = join(dir, file.name);
+        const { size, mtime } = await stat(filePath);
+        return {
+          name: file.name,
           path: filePath,
-          size: stat.size,
-          mtime: stat.mtime,
-        });
-      }
-    }
-  }
+          size,
+          mtime,
+        };
+      }),
+  );
 
   return results.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -279,7 +283,7 @@ export function collectFilesInDir(
 /**
  * Read a file as base64
  */
-export function readFileAsBase64(filePath: string): string {
-  const buffer = readFileSync(filePath);
+export async function readFileAsBase64(filePath: string): Promise<string> {
+  const buffer = await readFile(filePath);
   return buffer.toString('base64');
 }

@@ -1,0 +1,12 @@
+{
+  "vxsuite": {
+    "repoPath": "~/.vx-qa/vxsuite",
+    "ref": "v4.0.4"
+  },
+  "election": {
+    "source": "./placeholder.zip"
+  },
+  "output": {
+    "directory": "./output"
+  }
+}

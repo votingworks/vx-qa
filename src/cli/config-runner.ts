@@ -4,12 +4,18 @@
 
 import { logger, formatDuration, printDivider } from '../utils/logger.js';
 import { resolvePath } from '../utils/paths.js';
-import type { QARunConfig } from '../config/types.js';
+import type { QARunConfig, WebhookConfig } from '../config/types.js';
 import { existsSync } from 'node:fs';
+import { relative } from 'node:path';
 
 // Repository management
 import { cloneOrUpdateRepo, getCurrentCommit, applyPatch } from '../repo/clone.js';
-import { bootstrapRepo, checkPnpmAvailable, checkNodeVersion } from '../repo/bootstrap.js';
+import {
+  bootstrapRepo,
+  checkPnpmAvailable,
+  checkNodeVersion,
+  installPlaywrightBrowsers,
+} from '../repo/bootstrap.js';
 
 // Election package loading
 import { loadElectionPackage } from '../ballots/election-loader.js';
@@ -27,6 +33,7 @@ import { runAdminTallyWorkflow } from '../automation/admin-tally-workflow.js';
 import { createArtifactCollector } from '../report/artifacts.js';
 import { generateHtmlReport } from '../report/html-generator.js';
 import { join, dirname } from 'node:path';
+import { sendWebhookUpdate } from '../webhook/client.js';
 import { State } from '../repo/state.js';
 import { writeFile } from 'node:fs/promises';
 import assert from 'node:assert';
@@ -38,6 +45,20 @@ export interface RunOptions {
   headless?: boolean;
   limitBallots?: number;
   limitManualTallies?: number;
+  webhook?: WebhookConfig;
+}
+
+/**
+ * Construct a CircleCI artifacts URL for the report, if running in CI.
+ */
+function buildResultsUrl(reportPath: string): string | undefined {
+  const jobId = process.env.CIRCLE_WORKFLOW_JOB_ID;
+  if (!jobId) {
+    return undefined;
+  }
+  const projectRoot = getProjectRoot();
+  const relativePath = relative(projectRoot, reportPath);
+  return `https://output.circle-artifacts.com/output/job/${jobId}/artifacts/0/${relativePath}`;
 }
 
 /**
@@ -56,7 +77,7 @@ function getProjectRoot(): string {
  */
 export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {}): Promise<void> {
   const startTime = Date.now();
-  const collector = createArtifactCollector(config.output.directory, config);
+  const collector = await createArtifactCollector(config.output.directory, config);
   let orchestrator: AppOrchestrator | null = null;
   let browser: Awaited<ReturnType<typeof createBrowserSession>>['browser'] | null = null;
 
@@ -89,6 +110,10 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
   logger.step('Starting VxSuite QA automation');
   logger.info(`Output directory: ${config.output.directory}`);
 
+  if (options.webhook) {
+    await sendWebhookUpdate(options.webhook, 'in_progress', 'QA automation starting');
+  }
+
   try {
     // Pre-flight checks
     await runPreflightChecks();
@@ -99,6 +124,9 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // Phase 1: Repository setup
     printDivider();
     logger.step('Phase 1: Repository Setup');
+    if (options.webhook) {
+      await sendWebhookUpdate(options.webhook, 'in_progress', 'Setting up VxSuite repository');
+    }
 
     const repoPath = await cloneOrUpdateRepo(config.vxsuite);
     const commit = await getCurrentCommit(repoPath);
@@ -113,16 +141,23 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     }
 
     await bootstrapRepo(repoPath);
+    await installPlaywrightBrowsers(repoPath);
 
     // Phase 2: Clear state
     printDivider();
     logger.step('Phase 2: Clearing State');
+    if (options.webhook) {
+      await sendWebhookUpdate(options.webhook, 'in_progress', 'Clearing previous run state');
+    }
     const state = State.defaultFor(repoPath);
     await state.clear();
 
     // Phase 3: Load election package and ballots
     printDivider();
     logger.step('Phase 3: Loading Election Package');
+    if (options.webhook) {
+      await sendWebhookUpdate(options.webhook, 'in_progress', 'Loading election package');
+    }
 
     const electionSourcePath = resolvePath(config.election.source, config.basePath);
     const { electionPackage, electionPackagePath } = await loadElectionPackage(
@@ -144,6 +179,9 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // Phase 4: Prepare ballots for scanning
     printDivider();
     logger.step('Phase 4: Preparing Ballots');
+    if (options.webhook) {
+      await sendWebhookUpdate(options.webhook, 'in_progress', 'Preparing ballots for scanning');
+    }
 
     const ballotsToScan: BallotToScan[] = [];
     const ballotsPath = join(config.output.directory, 'ballots');
@@ -237,13 +275,20 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // Phase 5: Run VxAdmin workflow
     printDivider();
     logger.step('Phase 5: VxAdmin Configuration');
+    if (options.webhook) {
+      await sendWebhookUpdate(
+        options.webhook,
+        'in_progress',
+        'Configuring VxAdmin with election package',
+      );
+    }
 
     const browserSession = await createBrowserSession({
       headless: options.headless ?? true,
     });
     browser = browserSession.browser;
     const { page } = browserSession;
-    const adminStep = collector.startStep(
+    const adminStep = await collector.startStep(
       page,
       'programming-vxadmin',
       'Programming VxAdmin',
@@ -281,6 +326,9 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // Phase 6: Run VxScan workflow
     printDivider();
     logger.step('Phase 6: VxScan Scanning');
+    if (options.webhook) {
+      await sendWebhookUpdate(options.webhook, 'in_progress', 'Scanning ballots with VxScan');
+    }
 
     await orchestrator.startApp('scan');
 
@@ -294,7 +342,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     try {
       for (const [precinct, precinctBallotsToScan] of ballotsToScanByPrecinct) {
         // Create step for opening polls
-        const openingPollsStep = collector.startStep(
+        const openingPollsStep = await collector.startStep(
           page,
           'opening-polls',
           'Opening Polls',
@@ -355,6 +403,13 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // Phase 7: Run VxAdmin Tally Workflow
     printDivider();
     logger.step('Phase 7: VxAdmin Tally');
+    if (options.webhook) {
+      await sendWebhookUpdate(
+        options.webhook,
+        'in_progress',
+        'Importing CVRs and validating tallies',
+      );
+    }
 
     await orchestrator.startApp('admin');
 
@@ -376,11 +431,17 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // Phase 8: Copy Workspaces
     printDivider();
     logger.step('Phase 8: Copy Workspaces');
+    if (options.webhook) {
+      await sendWebhookUpdate(options.webhook, 'in_progress', 'Copying app workspaces');
+    }
     await state.copyWorkspacesTo(join(collector.getOutputDir(), 'workspaces'));
 
     // Phase 9: Generate report
     printDivider();
     logger.step('Phase 9: Generating Report');
+    if (options.webhook) {
+      await sendWebhookUpdate(options.webhook, 'in_progress', 'Generating QA report');
+    }
 
     collector.complete();
     const reportPath = await generateHtmlReport(collector.getCollection(), config.output.directory);
@@ -400,6 +461,16 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     const rejected = results.filter((r) => !r.accepted).length;
     logger.info(`Scan results: ${accepted} accepted, ${rejected} rejected`);
 
+    if (options.webhook && reportPath) {
+      const resultsUrl = buildResultsUrl(reportPath);
+      await sendWebhookUpdate(
+        options.webhook,
+        'success',
+        `QA completed: ${accepted} accepted, ${rejected} rejected`,
+        resultsUrl,
+      );
+    }
+
     // Open the report in the default browser
     if (reportPath) {
       // Spawn detached process so it doesn't block
@@ -409,6 +480,14 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
       }).unref();
     }
   } catch (error) {
+    if (options.webhook) {
+      await sendWebhookUpdate(
+        options.webhook,
+        'failure',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+
     if (error instanceof Error) {
       collector.logError(error, 'workflow');
     }

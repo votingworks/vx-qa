@@ -72,14 +72,14 @@ async function prepareReportData(
 ): Promise<ReportData> {
   // Collect ballot images
   const ballotsDir = join(outputDir, 'ballots');
-  const ballotFiles = collectFilesInDir(ballotsDir, ['.png', '.pdf']);
+  const ballotFiles = await collectFilesInDir(ballotsDir, ['.png', '.pdf']);
   const ballots = await Promise.all(
     ballotFiles.map(async (file) => ({
       name: file.name,
       path: `ballots/${file.name}`,
       thumbnail: file.name.endsWith('.pdf')
         ? await generatePdfThumbnail(file.path)
-        : `data:image/png;base64,${readFileAsBase64(file.path)}`,
+        : `data:image/png;base64,${await readFileAsBase64(file.path)}`,
     })),
   );
 
@@ -117,7 +117,7 @@ async function prepareReportData(
           type: input.type,
           label: input.label,
           description: input.description,
-          path: input.path,
+          path: input.path ? relative(outputDir, resolvePath(input.path, outputDir)) : undefined,
           data: input.data,
           thumbnail:
             input.type === 'ballot' && input.path ? await generatePdfThumbnail(input.path) : null,
