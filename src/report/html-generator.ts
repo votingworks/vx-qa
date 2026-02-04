@@ -117,7 +117,7 @@ async function prepareReportData(
           type: input.type,
           label: input.label,
           description: input.description,
-          path: input.path,
+          path: input.path ? relative(outputDir, resolvePath(input.path, outputDir)) : undefined,
           data: input.data,
           thumbnail:
             input.type === 'ballot' && input.path ? await generatePdfThumbnail(input.path) : null,
