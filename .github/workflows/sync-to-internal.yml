@@ -14,9 +14,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Push to vx-qa-internal
+      - name: Setup SSH key
         env:
-          INTERNAL_REPO_TOKEN: ${{ secrets.INTERNAL_REPO_TOKEN }}
+          SSH_PRIVATE_KEY: ${{ secrets.INTERNAL_REPO_SSH_KEY }}
         run: |
-          git remote add internal https://x-access-token:${INTERNAL_REPO_TOKEN}@github.com/votingworks/vx-qa-internal.git
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+      - name: Push to vx-qa-internal
+        run: |
+          git remote add internal git@github.com:votingworks/vx-qa-internal.git
           git push internal main:main
