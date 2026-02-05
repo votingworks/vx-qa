@@ -18,7 +18,7 @@ import { validateTallyResults } from '../automation/admin-tally-workflow.js';
 export async function generateHtmlReport(
   collection: ArtifactCollection,
   outputDir: string,
-): Promise<string> {
+): Promise<{ reportPath: string; pass: boolean }> {
   logger.step('Generating HTML report');
 
   const collectionPath = join(outputDir, 'collection.json');
@@ -36,7 +36,7 @@ export async function generateHtmlReport(
 
   logger.success(`Report saved: ${reportPath}`);
 
-  return reportPath;
+  return { reportPath, pass: data.pass };
 }
 
 export async function regenerateHtmlReportFromRawData(outputDir: string): Promise<string> {

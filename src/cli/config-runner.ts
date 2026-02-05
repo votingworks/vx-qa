@@ -444,7 +444,10 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     }
 
     collector.complete();
-    const reportPath = await generateHtmlReport(collector.getCollection(), config.output.directory);
+    const { reportPath, pass } = await generateHtmlReport(
+      collector.getCollection(),
+      config.output.directory,
+    );
 
     // Summary
     printDivider();
@@ -465,8 +468,8 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
       const resultsUrl = buildResultsUrl(reportPath);
       await sendWebhookUpdate(
         options.webhook,
-        'success',
-        `QA completed: ${accepted} accepted, ${rejected} rejected`,
+        pass ? 'success' : 'failure',
+        `QA ${pass ? 'passed' : 'failed'}: ${accepted} accepted, ${rejected} rejected`,
         resultsUrl,
       );
     }
@@ -478,6 +481,12 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
         detached: true,
         stdio: 'ignore',
       }).unref();
+    }
+
+    // Exit with non-zero code if QA failed
+    if (!pass) {
+      logger.error('QA validation failed');
+      process.exitCode = 1;
     }
   } catch (error) {
     if (options.webhook) {
