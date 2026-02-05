@@ -486,7 +486,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // Exit with non-zero code if QA failed
     if (!pass) {
       logger.error('QA validation failed');
-      process.exit(1);
+      process.exitCode = 1;
     }
   } catch (error) {
     if (options.webhook) {
