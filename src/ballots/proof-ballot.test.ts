@@ -1,6 +1,10 @@
-import { describe, test, expect } from 'vitest';
+import { afterAll, describe, test, expect } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
+import { join } from 'node:path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { generateProofBallot, getPageGeometry, gridToPdf, getOptionLabel } from './proof-ballot.js';
+import { loadElectionPackage } from './election-loader.js';
 import { expectToMatchPdfSnapshot } from '../test/pdf-snapshot.js';
 import type {
   Election,
@@ -233,15 +237,6 @@ describe('generateProofBallot', () => {
     districtId: 'district-1',
   };
 
-  const yesNoContest: YesNoContest = {
-    type: 'yesno',
-    id: 'measure-a',
-    title: 'Measure A',
-    yesOption: { id: 'yes-a', label: 'Yes on A' },
-    noOption: { id: 'no-a', label: 'No on A' },
-    districtId: 'district-1',
-  };
-
   const gridPositions: GridPosition[] = [
     {
       type: 'option',
@@ -290,19 +285,6 @@ describe('generateProofBallot', () => {
       optionId: 'no-a',
     },
   ];
-
-  test('render annotations matching snapshot', async () => {
-    const election = createTestElection([candidateContest, yesNoContest], gridPositions);
-    const basePdf = await createBlankPdf({ pageCount: 2 });
-    const proofPdf = await generateProofBallot(election, 'ballot-style-1', basePdf);
-
-    const doc = await PDFDocument.load(proofPdf);
-    expect(doc.getPageCount()).toBe(2);
-
-    await expectToMatchPdfSnapshot(proofPdf, {
-      customSnapshotIdentifier: 'proof-ballot-annotations',
-    });
-  });
 
   test('throw when grid layout not found', async () => {
     const election = createTestElection([candidateContest], gridPositions);
@@ -359,5 +341,56 @@ describe('generateProofBallot', () => {
 
     expect(proofPage.getWidth()).toBe(originalPage.getWidth());
     expect(proofPage.getHeight()).toBe(originalPage.getHeight());
+  });
+});
+
+const FIXTURE_PATH = join(
+  import.meta.dirname,
+  '../../test-fixtures/election-package-and-ballots-e71c80e-c4446e7.zip',
+);
+
+describe('generateProofBallot with real election fixture', async () => {
+  const tmp = await mkdtemp(join(tmpdir(), 'vx-qa-proof-test-'));
+  afterAll(() => rm(tmp, { recursive: true, force: true }));
+
+  const { electionPackage } = await loadElectionPackage(FIXTURE_PATH, tmp);
+  const { election } = electionPackage.electionDefinition;
+
+  const ballotStyle1 = electionPackage.ballots.find(
+    (b) => b.ballotStyleId === '1_en' && b.ballotMode === 'official' && b.ballotType === 'precinct',
+  )!;
+
+  const ballotStyle2 = electionPackage.ballots.find(
+    (b) => b.ballotStyleId === '2_en' && b.ballotMode === 'official' && b.ballotType === 'precinct',
+  )!;
+
+  test('ballot style 1_en (2 pages)', async () => {
+    const proofPdf = await generateProofBallot(
+      election,
+      ballotStyle1.ballotStyleId,
+      ballotStyle1.pdfData,
+    );
+
+    const doc = await PDFDocument.load(proofPdf);
+    expect(doc.getPageCount()).toBe(2);
+
+    await expectToMatchPdfSnapshot(proofPdf, {
+      customSnapshotIdentifier: 'fixture-proof-ballot-style-1_en',
+    });
+  });
+
+  test('ballot style 2_en (4 pages)', async () => {
+    const proofPdf = await generateProofBallot(
+      election,
+      ballotStyle2.ballotStyleId,
+      ballotStyle2.pdfData,
+    );
+
+    const doc = await PDFDocument.load(proofPdf);
+    expect(doc.getPageCount()).toBe(4);
+
+    await expectToMatchPdfSnapshot(proofPdf, {
+      customSnapshotIdentifier: 'fixture-proof-ballot-style-2_en',
+    });
   });
 });
