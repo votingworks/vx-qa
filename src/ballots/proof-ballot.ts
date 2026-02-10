@@ -11,7 +11,7 @@ const IN = 72; // PDF points per inch
 const PAGE_MARGINS = { left: 0.19685 * IN, top: 0.16667 * IN } as const;
 const TIMING_MARK = { width: 0.1875 * IN, height: 0.0625 * IN } as const;
 
-interface PageGeometry {
+export interface PageGeometry {
   readonly originX: number;
   readonly originY: number;
   readonly gridWidth: number;
@@ -34,7 +34,7 @@ const PAPER_SIZES: Record<string, { width: number; height: number }> = {
   custom22: { width: 8.5, height: 22 },
 };
 
-function getPageGeometry(paperSize: string): PageGeometry {
+export function getPageGeometry(paperSize: string): PageGeometry {
   const size = PAPER_SIZES[paperSize];
   if (!size) {
     throw new Error(`Unsupported paper size: ${paperSize}`);
@@ -63,7 +63,11 @@ function getPageGeometry(paperSize: string): PageGeometry {
   };
 }
 
-function gridToPdf(column: number, row: number, geometry: PageGeometry): { x: number; y: number } {
+export function gridToPdf(
+  column: number,
+  row: number,
+  geometry: PageGeometry,
+): { x: number; y: number } {
   const x = geometry.originX + (column / (geometry.markCountX - 1)) * geometry.gridWidth;
   // PDF y-axis is bottom-up, grid row 0 is at top
   const topDownY = geometry.originY + (row / (geometry.markCountY - 1)) * geometry.gridHeight;
@@ -98,7 +102,7 @@ function fitText(
   return { text: '…', fontSize: minSize };
 }
 
-function getOptionLabel(election: Election, gridPosition: GridPosition): string {
+export function getOptionLabel(election: Election, gridPosition: GridPosition): string {
   const contest = election.contests.find((c) => c.id === gridPosition.contestId);
   if (!contest) return gridPosition.contestId;
 
