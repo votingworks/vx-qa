@@ -1,4 +1,4 @@
-import { afterAll, describe, test, expect } from 'vitest';
+import { describe, test, expect } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
 import { join } from 'node:path';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -13,6 +13,9 @@ import type {
   GridPositionOption,
   GridPositionWriteIn,
   GridPosition,
+  ElectionPackage,
+  ElectionDefinition,
+  BallotPdfInfo,
 } from './election-loader.js';
 
 const IN = 72;
@@ -349,22 +352,42 @@ const FIXTURE_PATH = join(
   '../../test-fixtures/election-package-and-ballots-e71c80e-c4446e7.zip',
 );
 
+const prooftest = test.extend<{
+  tmp: string;
+  electionPackage: ElectionPackage;
+  electionDefinition: ElectionDefinition;
+  election: Election;
+  ballotStyle1: BallotPdfInfo;
+  ballotStyle2: BallotPdfInfo;
+}>({
+  // eslint-disable-next-line no-empty-pattern
+  tmp: async ({}, use) => {
+    const path = await mkdtemp(join(tmpdir(), 'vx-qa-proof-test-'));
+    await use(path);
+    await rm(path, { recursive: true, force: true });
+  },
+  electionPackage: async ({ tmp }, use) =>
+    use((await loadElectionPackage(FIXTURE_PATH, tmp)).electionPackage),
+  electionDefinition: ({ electionPackage }, use) => use(electionPackage.electionDefinition),
+  election: ({ electionDefinition }, use) => use(electionDefinition.election),
+  ballotStyle1: ({ electionPackage }, use) =>
+    use(
+      electionPackage.ballots.find(
+        (b) =>
+          b.ballotStyleId === '1_en' && b.ballotMode === 'official' && b.ballotType === 'precinct',
+      )!,
+    ),
+  ballotStyle2: ({ electionPackage }, use) =>
+    use(
+      electionPackage.ballots.find(
+        (b) =>
+          b.ballotStyleId === '2_en' && b.ballotMode === 'official' && b.ballotType === 'precinct',
+      )!,
+    ),
+});
+
 describe('generateProofBallot with real election fixture', async () => {
-  const tmp = await mkdtemp(join(tmpdir(), 'vx-qa-proof-test-'));
-  afterAll(() => rm(tmp, { recursive: true, force: true }));
-
-  const { electionPackage } = await loadElectionPackage(FIXTURE_PATH, tmp);
-  const { election } = electionPackage.electionDefinition;
-
-  const ballotStyle1 = electionPackage.ballots.find(
-    (b) => b.ballotStyleId === '1_en' && b.ballotMode === 'official' && b.ballotType === 'precinct',
-  )!;
-
-  const ballotStyle2 = electionPackage.ballots.find(
-    (b) => b.ballotStyleId === '2_en' && b.ballotMode === 'official' && b.ballotType === 'precinct',
-  )!;
-
-  test('ballot style 1_en (2 pages)', async () => {
+  prooftest('ballot style 1_en (2 pages)', async ({ election, ballotStyle1 }) => {
     const proofPdf = await generateProofBallot(
       election,
       ballotStyle1.ballotStyleId,
@@ -379,7 +402,7 @@ describe('generateProofBallot with real election fixture', async () => {
     });
   });
 
-  test('ballot style 2_en (4 pages)', async () => {
+  prooftest('ballot style 2_en (4 pages)', async ({ election, ballotStyle2 }) => {
     const proofPdf = await generateProofBallot(
       election,
       ballotStyle2.ballotStyleId,
