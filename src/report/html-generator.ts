@@ -645,6 +645,22 @@ function renderTemplate(data: ReportData): string {
       {{/if}}
     </div>
     {{/each}}
+
+    {{#if ballots.length}}
+    <h2>Ballot Gallery</h2>
+    <div class="gallery">
+      {{#each ballots}}
+      <div class="gallery-item">
+        {{#if thumbnail}}
+        <a href="{{path}}" target="_blank">
+          <img src="{{thumbnail}}" alt="{{name}}" loading="lazy">
+        </a>
+        {{/if}}
+        <div class="caption">{{name}}</div>
+      </div>
+      {{/each}}
+    </div>
+    {{/if}}
   </div>
 </body>
 </html>`;

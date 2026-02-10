@@ -29,6 +29,9 @@ import { runAdminConfigureWorkflow } from '../automation/admin-workflow.js';
 import { runScanWorkflow, type BallotToScan } from '../automation/scan-workflow.js';
 import { runAdminTallyWorkflow } from '../automation/admin-tally-workflow.js';
 
+// Proof ballot generation
+import { generateProofBallot } from '../ballots/proof-ballot.js';
+
 // Reporting
 import { createArtifactCollector } from '../report/artifacts.js';
 import { generateHtmlReport } from '../report/html-generator.js';
@@ -199,6 +202,15 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
       const pdfPath = join(ballotsPath, pdfName);
 
       await writeFile(pdfPath, ballot.pdfData);
+
+      const proofPdfName = `PROOF-${pdfName}`;
+      const proofPdfPath = join(ballotsPath, proofPdfName);
+      const proofPdfBytes = await generateProofBallot(
+        election,
+        ballot.ballotStyleId,
+        ballot.pdfData,
+      );
+      await writeFile(proofPdfPath, proofPdfBytes);
 
       collector.addBallot({
         ballotStyleId: ballot.ballotStyleId,
