@@ -11,6 +11,7 @@ import { generatePdfThumbnail } from './pdf-thumbnail.js';
 import { writeFile } from 'node:fs/promises';
 import { resolvePath } from '../utils/paths.js';
 import { validateTallyResults } from '../automation/admin-tally-workflow.js';
+import assert from 'node:assert';
 
 /**
  * Generate an HTML report from the artifact collection
@@ -70,18 +71,43 @@ async function prepareReportData(
   collection: ArtifactCollection,
   outputDir: string,
 ): Promise<ReportData> {
-  // Collect ballot images
+  // Collect ballot images, pairing base ballots with their proof counterparts
   const ballotsDir = join(outputDir, 'ballots');
   const ballotFiles = await collectFilesInDir(ballotsDir, ['.png', '.pdf']);
-  const ballots = await Promise.all(
-    ballotFiles.map(async (file) => ({
-      name: file.name,
-      path: `ballots/${file.name}`,
-      thumbnail: file.name.endsWith('.pdf')
-        ? await generatePdfThumbnail(file.path)
-        : `data:image/png;base64,${await readFileAsBase64(file.path)}`,
-    })),
+
+  async function makeBallotGalleryThumbnail(
+    file: (typeof ballotFiles)[number],
+  ): Promise<string | null> {
+    return file.name.endsWith('.pdf')
+      ? await generatePdfThumbnail(file.path, { scale: 2 })
+      : `data:image/png;base64,${await readFileAsBase64(file.path)}`;
+  }
+
+  const proofFileNames = new Set(
+    ballotFiles.filter((f) => f.name.startsWith('PROOF-')).map((f) => f.name),
   );
+  const baseFiles = ballotFiles.filter((f) => proofFileNames.has(`PROOF-${f.name}`));
+
+  const ballotPairs: ReportData['ballotPairs'] = [];
+
+  for (const base of baseFiles) {
+    const proofFile = ballotFiles.find((f) => f.name === `PROOF-${base.name}`);
+    assert(proofFile, `No proof PDF found for base PDF: ${base.name}`);
+
+    ballotPairs.push({
+      name: base.name.replace(/\.pdf$/, '').replace(/^ballot-/, ''),
+      base: {
+        name: base.name,
+        path: `ballots/${base.name}`,
+        thumbnail: await makeBallotGalleryThumbnail(base),
+      },
+      proof: {
+        name: proofFile.name,
+        path: `ballots/${proofFile.name}`,
+        thumbnail: await makeBallotGalleryThumbnail(proofFile),
+      },
+    });
+  }
 
   const validationResult = await validateTallyResults(collection);
   logger.info(`Tally validation: ${validationResult.message}`);
@@ -231,7 +257,7 @@ async function prepareReportData(
       election: collection.config.election.source,
     },
     steps,
-    ballots,
+    ballotPairs,
     scanResults: scanResults.map((r) => {
       const expected = r.expected;
       const actual = r.accepted;
@@ -296,7 +322,11 @@ interface ReportData {
     hasErrors: boolean;
     errors: { step: string; message: string; timestamp: Date }[];
   }[];
-  ballots: { name: string; path: string; thumbnail: string | null }[];
+  ballotPairs: {
+    name: string;
+    base: { name: string; path: string; thumbnail: string | null };
+    proof: { name: string; path: string; thumbnail: string | null };
+  }[];
   scanResults: {
     ballotStyleId: string;
     ballotMode: string;
@@ -399,6 +429,9 @@ function renderTemplate(data: ReportData): string {
     .status-error { color: var(--error); font-weight: 600; }
     .expected-marker { font-size: 0.75rem; color: var(--gray-700); }
 
+    .ballot-pair { background: white; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1.5rem; padding: 1rem; }
+    .ballot-pair-label { font-weight: 600; margin-bottom: 0.75rem; color: var(--gray-700); font-size: 0.875rem; }
+    .ballot-pair-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
     .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
     .gallery-item { background: var(--gray-100); border-radius: 0.25rem; overflow: hidden; }
     .gallery-item a { display: block; cursor: pointer; }
@@ -646,20 +679,31 @@ function renderTemplate(data: ReportData): string {
     </div>
     {{/each}}
 
-    {{#if ballots.length}}
-    <h2>Ballot Gallery</h2>
-    <div class="gallery">
-      {{#each ballots}}
-      <div class="gallery-item">
-        {{#if thumbnail}}
-        <a href="{{path}}" target="_blank">
-          <img src="{{thumbnail}}" alt="{{name}}" loading="lazy">
-        </a>
-        {{/if}}
-        <div class="caption">{{name}}</div>
+    {{#if ballotPairs.length}}
+    <h2>Ballot Proof Gallery</h2>
+    {{#each ballotPairs}}
+    <div class="ballot-pair">
+      <div class="ballot-pair-label">{{name}}</div>
+      <div class="ballot-pair-row">
+        <div class="gallery-item">
+          {{#if base.thumbnail}}
+          <a href="{{base.path}}" target="_blank">
+            <img src="{{base.thumbnail}}" alt="{{base.name}}" loading="lazy">
+          </a>
+          {{/if}}
+          <div class="caption">Unmarked</div>
+        </div>
+        <div class="gallery-item">
+          {{#if proof.thumbnail}}
+          <a href="{{proof.path}}" target="_blank">
+            <img src="{{proof.thumbnail}}" alt="{{proof.name}}" loading="lazy">
+          </a>
+          {{/if}}
+          <div class="caption">Proof</div>
+        </div>
       </div>
-      {{/each}}
     </div>
+    {{/each}}
     {{/if}}
   </div>
 </body>
