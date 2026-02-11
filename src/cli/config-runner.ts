@@ -33,7 +33,7 @@ import { runAdminTallyWorkflow } from '../automation/admin-tally-workflow.js';
 import { generateProofBallot } from '../ballots/proof-ballot.js';
 
 // Reporting
-import { createArtifactCollector } from '../report/artifacts.js';
+import { createArtifactCollector, PROOF_PREFIX } from '../report/artifacts.js';
 import { generateHtmlReport } from '../report/html-generator.js';
 import { join, dirname } from 'node:path';
 import { sendWebhookUpdate } from '../webhook/client.js';
@@ -203,7 +203,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
 
       await writeFile(pdfPath, ballot.pdfData);
 
-      const proofPdfName = `PROOF-${pdfName}`;
+      const proofPdfName = `${PROOF_PREFIX}${pdfName}`;
       const proofPdfPath = join(ballotsPath, proofPdfName);
       const proofPdfBytes = await generateProofBallot(
         election,

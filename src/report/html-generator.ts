@@ -3,15 +3,14 @@
  */
 
 import Handlebars from 'handlebars';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { logger } from '../utils/logger.js';
 import type { ArtifactCollection, ScreenshotArtifact } from '../config/types.js';
-import { collectFilesInDir, loadCollection, readFileAsBase64 } from './artifacts.js';
+import { collectFilesInDir, loadCollection, PROOF_PREFIX } from './artifacts.js';
 import { generatePdfThumbnail } from './pdf-thumbnail.js';
 import { writeFile } from 'node:fs/promises';
 import { resolvePath } from '../utils/paths.js';
 import { validateTallyResults } from '../automation/admin-tally-workflow.js';
-import assert from 'node:assert';
 
 /**
  * Generate an HTML report from the artifact collection
@@ -73,38 +72,33 @@ async function prepareReportData(
 ): Promise<ReportData> {
   // Collect ballot images, pairing base ballots with their proof counterparts
   const ballotsDir = join(outputDir, 'ballots');
-  const ballotFiles = await collectFilesInDir(ballotsDir, ['.png', '.pdf']);
+  const ballotFiles = await collectFilesInDir(ballotsDir, ['.pdf']);
 
-  async function makeBallotGalleryThumbnail(
-    file: (typeof ballotFiles)[number],
-  ): Promise<string | null> {
-    return file.name.endsWith('.pdf')
-      ? await generatePdfThumbnail(file.path, { scale: 2 })
-      : `data:image/png;base64,${await readFileAsBase64(file.path)}`;
+  async function makeBallotGalleryThumbnail(filePath: string): Promise<string | null> {
+    return await generatePdfThumbnail(filePath, { scale: 2 });
   }
 
   const proofFileNames = new Set(
-    ballotFiles.filter((f) => f.name.startsWith('PROOF-')).map((f) => f.name),
+    ballotFiles.filter((f) => f.name.startsWith(PROOF_PREFIX)).map((f) => f.name),
   );
-  const baseFiles = ballotFiles.filter((f) => proofFileNames.has(`PROOF-${f.name}`));
+  const baseFiles = ballotFiles.filter((f) => proofFileNames.has(`${PROOF_PREFIX}${f.name}`));
 
   const ballotPairs: ReportData['ballotPairs'] = [];
 
   for (const base of baseFiles) {
-    const proofFile = ballotFiles.find((f) => f.name === `PROOF-${base.name}`);
-    assert(proofFile, `No proof PDF found for base PDF: ${base.name}`);
+    const proofFileName = `${PROOF_PREFIX}${base.name}`;
 
     ballotPairs.push({
       name: base.name.replace(/\.pdf$/, '').replace(/^ballot-/, ''),
       base: {
         name: base.name,
         path: `ballots/${base.name}`,
-        thumbnail: await makeBallotGalleryThumbnail(base),
+        thumbnail: await makeBallotGalleryThumbnail(base.path),
       },
       proof: {
-        name: proofFile.name,
-        path: `ballots/${proofFile.name}`,
-        thumbnail: await makeBallotGalleryThumbnail(proofFile),
+        name: proofFileName,
+        path: `ballots/${proofFileName}`,
+        thumbnail: await makeBallotGalleryThumbnail(join(dirname(base.path), proofFileName)),
       },
     });
   }
@@ -117,14 +111,14 @@ async function prepareReportData(
       output.validationResult ??=
         output.type === 'scan-result'
           ? {
-              isValid: output.accepted === output.expected,
-              message:
-                output.accepted !== output.expected
-                  ? output.expected
-                    ? `Ballot sheet was expected to be accepted but was rejected.`
-                    : `Ballot sheet was expected to be rejected but was accepted.`
-                  : '',
-            }
+            isValid: output.accepted === output.expected,
+            message:
+              output.accepted !== output.expected
+                ? output.expected
+                  ? `Ballot sheet was expected to be accepted but was rejected.`
+                  : `Ballot sheet was expected to be rejected but was accepted.`
+                : '',
+          }
           : undefined;
     }
   }
@@ -169,8 +163,8 @@ async function prepareReportData(
                   : 'error',
             thumbnail:
               (output.type === 'print' || output.type === 'report') &&
-              'path' in output &&
-              output.path?.endsWith('.pdf')
+                'path' in output &&
+                output.path?.endsWith('.pdf')
                 ? await generatePdfThumbnail(resolvePath(output.path, outputDir))
                 : null,
           };

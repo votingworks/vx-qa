@@ -20,6 +20,8 @@ import assert from 'node:assert';
 import { Page } from '@playwright/test';
 import { createScreenshotManager } from '../automation/screenshot.js';
 
+export const PROOF_PREFIX = 'PROOF-';
+
 export interface StepCollector {
   /**
    * Add an input to the current step
