@@ -9,10 +9,12 @@ import { logger } from '../utils/logger.js';
  * Generate a thumbnail of the first page of a PDF
  * Returns a data URL containing a base64-encoded PNG, or null if generation fails
  */
-export async function generatePdfThumbnail(pdfPath: string): Promise<string | null> {
+export async function generatePdfThumbnail(
+  pdfPath: string,
+  { scale = 0.5 }: { scale?: number } = {},
+): Promise<string | null> {
   try {
-    // Convert PDF to image with scale 0.5 for thumbnail size
-    const document = await pdf(pdfPath, { scale: 0.5 });
+    const document = await pdf(pdfPath, { scale });
 
     // Get the first page
     for await (const image of document) {

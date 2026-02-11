@@ -3,10 +3,10 @@
  */
 
 import Handlebars from 'handlebars';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { logger } from '../utils/logger.js';
 import type { ArtifactCollection, ScreenshotArtifact } from '../config/types.js';
-import { collectFilesInDir, loadCollection, readFileAsBase64 } from './artifacts.js';
+import { collectFilesInDir, loadCollection, PROOF_PREFIX } from './artifacts.js';
 import { generatePdfThumbnail } from './pdf-thumbnail.js';
 import { writeFile } from 'node:fs/promises';
 import { resolvePath } from '../utils/paths.js';
@@ -70,18 +70,38 @@ async function prepareReportData(
   collection: ArtifactCollection,
   outputDir: string,
 ): Promise<ReportData> {
-  // Collect ballot images
+  // Collect ballot images, pairing base ballots with their proof counterparts
   const ballotsDir = join(outputDir, 'ballots');
-  const ballotFiles = await collectFilesInDir(ballotsDir, ['.png', '.pdf']);
-  const ballots = await Promise.all(
-    ballotFiles.map(async (file) => ({
-      name: file.name,
-      path: `ballots/${file.name}`,
-      thumbnail: file.name.endsWith('.pdf')
-        ? await generatePdfThumbnail(file.path)
-        : `data:image/png;base64,${await readFileAsBase64(file.path)}`,
-    })),
+  const ballotFiles = await collectFilesInDir(ballotsDir, ['.pdf']);
+
+  async function makeBallotGalleryThumbnail(filePath: string): Promise<string | null> {
+    return await generatePdfThumbnail(filePath, { scale: 2 });
+  }
+
+  const proofFileNames = new Set(
+    ballotFiles.filter((f) => f.name.startsWith(PROOF_PREFIX)).map((f) => f.name),
   );
+  const baseFiles = ballotFiles.filter((f) => proofFileNames.has(`${PROOF_PREFIX}${f.name}`));
+
+  const ballotPairs: ReportData['ballotPairs'] = [];
+
+  for (const base of baseFiles) {
+    const proofFileName = `${PROOF_PREFIX}${base.name}`;
+
+    ballotPairs.push({
+      name: base.name.replace(/\.pdf$/, '').replace(/^ballot-/, ''),
+      base: {
+        name: base.name,
+        path: `ballots/${base.name}`,
+        thumbnail: await makeBallotGalleryThumbnail(base.path),
+      },
+      proof: {
+        name: proofFileName,
+        path: `ballots/${proofFileName}`,
+        thumbnail: await makeBallotGalleryThumbnail(join(dirname(base.path), proofFileName)),
+      },
+    });
+  }
 
   const validationResult = await validateTallyResults(collection);
   logger.info(`Tally validation: ${validationResult.message}`);
@@ -231,7 +251,7 @@ async function prepareReportData(
       election: collection.config.election.source,
     },
     steps,
-    ballots,
+    ballotPairs,
     scanResults: scanResults.map((r) => {
       const expected = r.expected;
       const actual = r.accepted;
@@ -296,7 +316,11 @@ interface ReportData {
     hasErrors: boolean;
     errors: { step: string; message: string; timestamp: Date }[];
   }[];
-  ballots: { name: string; path: string; thumbnail: string | null }[];
+  ballotPairs: {
+    name: string;
+    base: { name: string; path: string; thumbnail: string | null };
+    proof: { name: string; path: string; thumbnail: string | null };
+  }[];
   scanResults: {
     ballotStyleId: string;
     ballotMode: string;
@@ -399,6 +423,9 @@ function renderTemplate(data: ReportData): string {
     .status-error { color: var(--error); font-weight: 600; }
     .expected-marker { font-size: 0.75rem; color: var(--gray-700); }
 
+    .ballot-pair { background: white; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1.5rem; padding: 1rem; }
+    .ballot-pair-label { font-weight: 600; margin-bottom: 0.75rem; color: var(--gray-700); font-size: 0.875rem; }
+    .ballot-pair-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
     .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
     .gallery-item { background: var(--gray-100); border-radius: 0.25rem; overflow: hidden; }
     .gallery-item a { display: block; cursor: pointer; }
@@ -645,6 +672,33 @@ function renderTemplate(data: ReportData): string {
       {{/if}}
     </div>
     {{/each}}
+
+    {{#if ballotPairs.length}}
+    <h2>Ballot Proof Gallery</h2>
+    {{#each ballotPairs}}
+    <div class="ballot-pair">
+      <div class="ballot-pair-label">{{name}}</div>
+      <div class="ballot-pair-row">
+        <div class="gallery-item">
+          {{#if base.thumbnail}}
+          <a href="{{base.path}}" target="_blank">
+            <img src="{{base.thumbnail}}" alt="{{base.name}}" loading="lazy">
+          </a>
+          {{/if}}
+          <div class="caption">Unmarked</div>
+        </div>
+        <div class="gallery-item">
+          {{#if proof.thumbnail}}
+          <a href="{{proof.path}}" target="_blank">
+            <img src="{{proof.thumbnail}}" alt="{{proof.name}}" loading="lazy">
+          </a>
+          {{/if}}
+          <div class="caption">Proof</div>
+        </div>
+      </div>
+    </div>
+    {{/each}}
+    {{/if}}
   </div>
 </body>
 </html>`;
