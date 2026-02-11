@@ -111,14 +111,14 @@ async function prepareReportData(
       output.validationResult ??=
         output.type === 'scan-result'
           ? {
-            isValid: output.accepted === output.expected,
-            message:
-              output.accepted !== output.expected
-                ? output.expected
-                  ? `Ballot sheet was expected to be accepted but was rejected.`
-                  : `Ballot sheet was expected to be rejected but was accepted.`
-                : '',
-          }
+              isValid: output.accepted === output.expected,
+              message:
+                output.accepted !== output.expected
+                  ? output.expected
+                    ? `Ballot sheet was expected to be accepted but was rejected.`
+                    : `Ballot sheet was expected to be rejected but was accepted.`
+                  : '',
+            }
           : undefined;
     }
   }
@@ -163,8 +163,8 @@ async function prepareReportData(
                   : 'error',
             thumbnail:
               (output.type === 'print' || output.type === 'report') &&
-                'path' in output &&
-                output.path?.endsWith('.pdf')
+              'path' in output &&
+              output.path?.endsWith('.pdf')
                 ? await generatePdfThumbnail(resolvePath(output.path, outputDir))
                 : null,
           };
