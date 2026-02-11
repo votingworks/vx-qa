@@ -167,45 +167,45 @@ function addProofAnnotationsToPage(
       3.5,
     );
 
-    const lineHeight = 1.2;
-    const optionHeight = optionFit.fontSize * lineHeight;
-    const contestHeight = contestFit.fontSize * lineHeight;
-    const boxHeight = optionHeight + contestHeight + 2 * labelPadding;
-    const boxX = x - labelMaxWidth - 8;
-    const boxY = y - boxHeight / 2;
+    if (gp.type !== 'write-in') {
+      const lineHeight = 1.2;
+      const optionHeight = optionFit.fontSize * lineHeight;
+      const contestHeight = contestFit.fontSize * lineHeight;
+      const boxHeight = optionHeight + contestHeight + 2 * labelPadding;
+      const boxX = x - labelMaxWidth - 8;
+      const boxY = y - boxHeight / 2;
 
-    // Draw label background
-    page.drawRectangle({
-      x: boxX,
-      y: boxY,
-      width: labelMaxWidth,
-      height: boxHeight,
-      color: rgb(0.85, 1, 0.85),
-      opacity: 0.8,
-      borderColor: rgb(0, 0.5, 0),
-      borderWidth: 0.5,
-    });
+      // Draw label background
+      page.drawRectangle({
+        x: boxX,
+        y: boxY,
+        width: labelMaxWidth,
+        height: boxHeight,
+        color: rgb(0.85, 1, 0.85),
+        opacity: 0.8,
+        borderColor: rgb(0, 0.5, 0),
+        borderWidth: 0.5,
+      });
 
-    // Draw option name (bold, top)
-    page.drawText(optionFit.text, {
-      x: boxX + labelPadding,
-      y: boxY + boxHeight - labelPadding - optionFit.fontSize,
-      size: optionFit.fontSize,
-      font: fonts.bold,
-      color: rgb(0, 0, 0),
-    });
+      // Draw option name (bold, top)
+      page.drawText(optionFit.text, {
+        x: boxX + labelPadding,
+        y: boxY + boxHeight - labelPadding - optionFit.fontSize,
+        size: optionFit.fontSize,
+        font: fonts.bold,
+        color: rgb(0, 0, 0),
+      });
 
-    // Draw contest title (regular, bottom)
-    page.drawText(contestFit.text, {
-      x: boxX + labelPadding,
-      y: boxY + labelPadding,
-      size: contestFit.fontSize,
-      font: fonts.regular,
-      color: rgb(0.3, 0.3, 0.3),
-    });
-
-    // Draw write-in area overlay
-    if (gp.type === 'write-in') {
+      // Draw contest title (regular, bottom)
+      page.drawText(contestFit.text, {
+        x: boxX + labelPadding,
+        y: boxY + labelPadding,
+        size: contestFit.fontSize,
+        font: fonts.regular,
+        color: rgb(0.3, 0.3, 0.3),
+      });
+    } else {
+      // Draw write-in area overlay
       const writeInArea = gp.writeInArea;
       const topLeft = gridToPdf(writeInArea.x, writeInArea.y, geometry);
       const bottomRight = gridToPdf(
