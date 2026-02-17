@@ -277,9 +277,11 @@ async function processBallotStyle(
   await ballotCountInput.fill(String(ballotCount));
   await page.waitForTimeout(500);
 
-  // Click "Save & Next" to proceed to first contest
+  // Click "Save & Next" to proceed to first contest.
+  // Wait for the first contest's "No tallies entered" validation message,
+  // which confirms the new contest form mounted.
   await page.getByText('Save & Next').click();
-  await page.waitForTimeout(1000);
+  await page.getByText('No tallies entered').waitFor({ state: 'visible' });
 
   // Loop through each contest
   for (let contestIndex = 0; contestIndex < contests.length; contestIndex++) {
@@ -408,7 +410,25 @@ async function fillContest(
 
   await page.waitForTimeout(500);
 
-  // Capture screenshot after all values are entered but before clicking button
+  // Capture validation message and screenshot while still on the current contest page,
+  // before clicking the button triggers an async save and navigation.
+  const validationMessage = await captureValidationMessage(page);
+  if (validationMessage) {
+    const logMessage = `Contest ${contestId}: ${validationMessage.text}`;
+    if (validationMessage.type === 'error') {
+      logger.error(logMessage);
+    } else if (validationMessage.type === 'warning') {
+      logger.warn(logMessage);
+    } else {
+      logger.info(logMessage);
+    }
+
+    contestResults[contestId].validation = {
+      type: validationMessage.type,
+      message: validationMessage.text,
+    };
+  }
+
   await stepCollector.captureScreenshot(
     `admin-manual-tallies-style-${styleIndex}-contest-${contestIndex}`,
     `Contest ${contest.id} with values entered`,
@@ -417,25 +437,16 @@ async function fillContest(
   // Click appropriate button based on whether this is the last contest
   const buttonText = isLastContest ? 'Finish' : 'Save & Next';
   const button = page.getByText(buttonText);
-  await button.click({ timeout: 120_000 });
-  await page.waitForTimeout(1000);
-
-  // Check for validation message (success or warning)
-  const validationMessage = await captureValidationMessage(page);
-  if (validationMessage) {
-    if (validationMessage.type === 'error') {
-      logger.error(`Contest ${contestId}: ${validationMessage.text}`);
-    } else if (validationMessage.type === 'warning') {
-      logger.warn(`Contest ${contestId}: ${validationMessage.text}`);
-    } else {
-      logger.info(`Contest ${contestId}: ${validationMessage.text}`);
-    }
-
-    // Store validation info in contest results
-    contestResults[contestId].validation = {
-      type: validationMessage.type,
-      message: validationMessage.text,
-    };
+  await button.click();
+  // Wait for the page to confirm the async save completed and navigation happened.
+  // Without this, a slow mutation can cause the automation to start filling the same
+  // contest page again before navigation occurs.
+  if (isLastContest) {
+    // "Finish" navigates back to the manual tallies tab
+    await page.getByText('Enter Tallies').waitFor({ state: 'visible' });
+  } else {
+    // "Save & Next" navigates to the next contest, which mounts fresh with empty inputs
+    await page.getByText('No tallies entered').waitFor({ state: 'visible' });
   }
 }
 
