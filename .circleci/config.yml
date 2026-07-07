@@ -99,7 +99,7 @@ jobs:
       - restore_cache:
           name: Restore VxSuite Repository Cache
           keys:
-            - v1-vxsuite-{{ checksum "/tmp/vxsuite-cache-key.txt" }}
+            - v2-vxsuite-{{ checksum "/tmp/vxsuite-cache-key.txt" }}
       - run:
           name: Run QA Test - << parameters.version >>
           command: |
@@ -108,7 +108,7 @@ jobs:
           no_output_timeout: 30m
       - save_cache:
           name: Save VxSuite Repository Cache
-          key: v1-vxsuite-{{ checksum "/tmp/vxsuite-cache-key.txt" }}
+          key: v2-vxsuite-{{ checksum "/tmp/vxsuite-cache-key.txt" }}
           paths:
             - ~/.vx-qa/vxsuite
           when: always
@@ -147,7 +147,7 @@ jobs:
       - restore_cache:
           name: Restore VxSuite Repository Cache
           keys:
-            - v1-vxsuite-{{ checksum "/tmp/vxsuite-cache-key.txt" }}
+            - v2-vxsuite-{{ checksum "/tmp/vxsuite-cache-key.txt" }}
       - run:
           name: Run QA - VxDesign Export
           command: |
@@ -166,7 +166,7 @@ jobs:
           no_output_timeout: 30m
       - save_cache:
           name: Save VxSuite Repository Cache
-          key: v1-vxsuite-{{ checksum "/tmp/vxsuite-cache-key.txt" }}
+          key: v2-vxsuite-{{ checksum "/tmp/vxsuite-cache-key.txt" }}
           paths:
             - ~/.vx-qa/vxsuite
           when: always

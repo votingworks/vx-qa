@@ -2,8 +2,6 @@
  * Environment configuration for mock hardware
  */
 
-import assert from 'node:assert';
-
 /**
  * Environment variables to enable mock hardware
  */
@@ -53,22 +51,26 @@ export const MACHINE_TYPES = {
 export type MachineType = keyof typeof MACHINE_TYPES;
 
 /**
- * Default ports used by VxSuite apps
+ * Ports used by VxSuite apps in dev mode. The frontend (Vite) serves on
+ * FRONTEND_PORT and each app's backend runs on FRONTEND_PORT + 1 (see
+ * apps/*\/backend/src/globals.ts: `PORT = Number(FRONTEND_PORT || 3000) + 1`).
+ * Only one app runs at a time, so a single frontend/backend pair covers every
+ * machine type.
  */
+export const FRONTEND_PORT = 3000;
+export const BACKEND_PORT = FRONTEND_PORT + 1;
+
+/** Ports to watch/clean up when starting or stopping apps. */
 export const APP_PORTS = {
-  frontend: 3000,
-  mark: 3001,
-  scan: 3002,
-  'mark-scan': 3003,
-  admin: 3004,
-  'central-scan': 3005,
+  frontend: FRONTEND_PORT,
+  backend: BACKEND_PORT,
 } as const;
 
 /**
- * Get backend port for a specific machine type
+ * Get the backend port for a machine type. Every VxSuite app uses
+ * FRONTEND_PORT + 1 for its backend and only one runs at a time, so the machine
+ * type doesn't affect the port.
  */
-export function getBackendPort(machineType: MachineType): number {
-  const port = APP_PORTS[machineType];
-  assert(port !== undefined, `No port for machine type '${machineType}'`);
-  return port;
+export function getBackendPort(_machineType: MachineType): number {
+  return BACKEND_PORT;
 }

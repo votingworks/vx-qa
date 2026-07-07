@@ -1,8 +1,9 @@
 /**
  * HTTP client for communicating with the dev-dock API
  *
- * The dev-dock API runs at e.g. http://localhost:3004/dock when an app is started
- * with mock hardware enabled.
+ * The dev-dock API runs at e.g. http://localhost:3001/dock (the app backend)
+ * when an app is started with mock hardware enabled. It is also reachable
+ * through the Vite frontend proxy at http://localhost:3000/dock.
  */
 
 import { logger } from '../utils/logger.js';
