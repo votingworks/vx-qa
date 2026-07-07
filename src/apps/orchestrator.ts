@@ -80,6 +80,13 @@ export function createAppOrchestrator(repoPath: string, logDir?: string): AppOrc
       const spinner = logger.spinner(`Starting ${app} app...`);
 
       try {
+        // Ensure a clean port slate. A previous app's run-dev process tree
+        // (Vite, backend, watchers) can linger and hold ports 3000/3001,
+        // causing the new app's Vite to bind a different port so navigation to
+        // :3000 is refused. Kill anything on our ports before starting.
+        await ensureNoAppsRunning();
+        await sleep(1000);
+
         // Start the app using pnpm run-dev
         const env = getMockEnvironment();
 

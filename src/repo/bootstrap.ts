@@ -45,6 +45,12 @@ export async function bootstrapRepo(repoPath: string): Promise<void> {
 
   logger.step('Bootstrapping admin and scan apps (this may take several minutes)...');
 
+  // Use the pnpm version VxSuite pins in its `packageManager` field. Different
+  // VxSuite versions pin different pnpm versions (e.g. v4.0 -> 8.15.5, v4.1 ->
+  // 9.15.9), and building under the wrong pnpm can mis-resolve optional native
+  // deps (e.g. v4.1's Vite/rolldown binding fails to install under pnpm 10).
+  await useVxSuitePinnedPnpm(repoPath);
+
   // First, run pnpm install at the root to set up all workspace symlinks
   logger.info('Installing workspace dependencies...');
   const installCode = await execCommandWithOutput('pnpm', ['install'], {
@@ -81,6 +87,36 @@ export async function bootstrapRepo(repoPath: string): Promise<void> {
   }
 
   logger.success('Admin and scan apps bootstrapped successfully');
+}
+
+/**
+ * Install (globally) the pnpm version VxSuite pins in its `packageManager`
+ * field, so the workspace is built with the pnpm it was locked and tested with.
+ * No-op if the field is missing/unparseable.
+ */
+async function useVxSuitePinnedPnpm(repoPath: string): Promise<void> {
+  let packageManager: string | undefined;
+  try {
+    const pkg = JSON.parse(await readFile(join(repoPath, 'package.json'), 'utf-8'));
+    packageManager = pkg.packageManager;
+  } catch {
+    return;
+  }
+
+  // e.g. "pnpm@9.15.9" or "pnpm@9.15.9+sha512.abc..."
+  const match = packageManager?.match(/^pnpm@(\d+\.\d+\.\d+)/);
+  if (!match) {
+    return;
+  }
+
+  const version = match[1];
+  logger.info(`Installing VxSuite's pinned pnpm@${version}...`);
+  const code = await execCommandWithOutput('npm', ['install', '-g', `pnpm@${version}`], {
+    env: { ...process.env },
+  });
+  if (code !== 0) {
+    logger.warn(`Failed to install pnpm@${version} (code ${code}); continuing with current pnpm`);
+  }
 }
 
 /**
