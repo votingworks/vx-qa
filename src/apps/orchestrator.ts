@@ -246,14 +246,16 @@ export function createAppOrchestrator(repoPath: string, logDir?: string): AppOrc
         state.appLogPath = null;
         state.appOutput = [];
 
-        // Wait for ports to be released by checking they're actually free
-        const backendPort = getBackendPort(appName);
-        const maxWaitTime = 5000; // 5 seconds max
+        // Wait for both the frontend and backend ports to be released, so the
+        // next app can bind them cleanly (otherwise its Vite may pick a
+        // different port and navigation to :3000 is refused).
+        const portsToFree = [APP_PORTS.frontend, getBackendPort(appName)];
+        const maxWaitTime = 10000; // 10 seconds max
         const startTime = Date.now();
 
         while (Date.now() - startTime < maxWaitTime) {
-          const portFree = await isPortFree(backendPort);
-          if (portFree) {
+          const free = await Promise.all(portsToFree.map((port) => isPortFree(port)));
+          if (free.every(Boolean)) {
             break;
           }
           await sleep(200);

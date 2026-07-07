@@ -58,12 +58,31 @@ export async function createBrowserSession(options: BrowserOptions = {}): Promis
 }
 
 /**
- * Navigate to the app's main page
+ * Navigate to the app's main page.
+ *
+ * Retries on connection errors: after an app (re)starts, the frontend port can
+ * accept TCP before Vite is actually serving, so the first navigation may be
+ * refused/reset.
  */
-export async function navigateToApp(page: Page): Promise<void> {
+export async function navigateToApp(page: Page, attempts = 10): Promise<void> {
   const url = `http://localhost:${APP_PORTS.frontend}/`;
   logger.debug(`Navigating to ${url}`);
-  await page.goto(url);
+
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await page.goto(url);
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const isConnectionError =
+        /ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_EMPTY_RESPONSE|NS_ERROR/i.test(message);
+      if (!isConnectionError || attempt >= attempts) {
+        throw error;
+      }
+      logger.debug(`Navigation attempt ${attempt} failed (${message}); retrying...`);
+      await page.waitForTimeout(1000);
+    }
+  }
 }
 
 /**
