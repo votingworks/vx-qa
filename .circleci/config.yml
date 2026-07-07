@@ -36,8 +36,10 @@ commands:
             - v1-pnpm-{{ checksum "pnpm-lock.yaml" }}
             - v1-pnpm-
       - run:
-          name: Install Latest pnpm
-          command: npm install -g pnpm@latest
+          name: Install pnpm
+          # Pinned to a Node 20-compatible release: pnpm >= 11 requires
+          # Node >= 22.13 (it uses node:sqlite), but the CI image runs Node 20.
+          command: npm install -g pnpm@10.34.1
       - run:
           name: Install Dependencies
           command: pnpm install --frozen-lockfile
