@@ -31,6 +31,22 @@ index b027b7160..c4c145a66 100644
    try {
      const res =
        nodeEnv === 'production'
+diff --git a/libs/backend/src/system_call/set_audio_volume.ts b/libs/backend/src/system_call/set_audio_volume.ts
+index 09d9dceaf..de05e11a8 100644
+--- a/libs/backend/src/system_call/set_audio_volume.ts
++++ b/libs/backend/src/system_call/set_audio_volume.ts
+@@ -31,6 +31,11 @@ export async function setAudioVolume(params: {
+   volumePct: number;
+ }): Promise<SetAudioVolumeResult> {
+   const { logger, nodeEnv, sinkName, volumePct } = params;
++
++  // vx-qa: no audio hardware in QA/dev environments; skip pactl.
++  if (nodeEnv !== 'production') {
++    return ok();
++  }
+   let errorOutput: string;
+ 
+   // NOTE: We allow apps to overdrive the system volume a bit to account for
 diff --git a/libs/hmpb/src/marking.ts b/libs/hmpb/src/marking.ts
 index 4bcd1f0e8..233163bc4 100644
 --- a/libs/hmpb/src/marking.ts
