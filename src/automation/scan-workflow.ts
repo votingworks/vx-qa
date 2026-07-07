@@ -20,6 +20,7 @@ import type { StepCollector, ArtifactCollector } from '../report/artifacts.js';
 import { basename, join } from 'node:path';
 import { createMockScannerController } from '../mock-hardware/scanner.js';
 import { generateMarkedBallotForPattern } from '../ballots/ballot-marker.js';
+import { MOCK_NODE_ENV } from '../apps/env-config.js';
 import {
   BallotMode,
   BallotType,
@@ -67,8 +68,9 @@ export async function runScanWorkflow(
   const usbController = createMockUsbController({ dataPath });
   const scannerController = createMockScannerController();
 
-  // Track existing thermal printer files to avoid duplicates
-  const printerWorkspace = join(repoPath, 'libs/fujitsu-thermal-printer/dev-workspace');
+  // Track existing thermal printer files to avoid duplicates. VxSuite writes
+  // mock printer output to <repo>/.mock-state/<NODE_ENV>/prints.
+  const printerWorkspace = join(repoPath, '.mock-state', MOCK_NODE_ENV);
   const existingPrinterFiles = new Set<string>();
   try {
     const printsDir = join(printerWorkspace, 'prints');
