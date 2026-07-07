@@ -12,7 +12,6 @@
   "author": "VotingWorks",
   "license": "GPL-3.0",
   "type": "module",
-  "packageManager": "pnpm@10.34.1",
   "main": "dist/index.js",
   "bin": {
     "vx-qa": "./dist/index.js"
@@ -59,6 +58,7 @@
     "oxlint-tsgolint": "^0.9.1",
     "vitest": "^4.0.16"
   },
+  "packageManager": "pnpm@10.34.1",
   "engines": {
     "node": ">=20.0.0"
   }
