@@ -3,6 +3,7 @@
  */
 
 import { existsSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { logger } from '../utils/logger.js';
 import { execCommandWithOutput, execCommand } from '../utils/process.js';
@@ -55,13 +56,13 @@ export async function bootstrapRepo(repoPath: string): Promise<void> {
     throw new Error(`pnpm install failed with code ${installCode}`);
   }
 
-  // Pre-fetch Rust crates for this ref. VxSuite's Rust addons (pdi-scanner,
+  // Allow the Rust addon builds to fetch crates. VxSuite's addons (pdi-scanner,
   // ballot-interpreter) build with `cargo build --offline`, which requires
-  // every crate to already be in the local cargo cache. The CI image only
-  // caches crates for its own VxSuite version, so building a different ref can
-  // hit crates it hasn't seen (e.g. `csv`). Fetching here (online, against this
-  // ref's Cargo.lock) populates the cache so the offline builds resolve.
-  await fetchRustDependencies(repoPath);
+  // every crate to already be in that build's cargo cache. The CI image only
+  // caches crates for its own VxSuite version, so building a different ref hits
+  // crates it hasn't seen (e.g. `csv`) and fails. Drop `--offline` so the build
+  // downloads what it needs.
+  await allowOnlineRustBuilds(repoPath);
 
   // Then build just the admin and scan apps (and their dependencies)
   // Use the "..." filter syntax to include all dependencies
@@ -83,25 +84,34 @@ export async function bootstrapRepo(repoPath: string): Promise<void> {
 }
 
 /**
- * Fetch all Rust crate dependencies for the VxSuite cargo workspace so that the
- * subsequent `cargo build --offline` addon builds can resolve them. Runs online
- * against the checked-out ref's Cargo.lock.
- *
- * A failure here is not fatal on its own: if crates are already cached the
- * offline build still succeeds, and if they are not, the build step will
- * surface the definitive error.
+ * Rust addon build scripts that hard-code `cargo build --offline`, relative to
+ * the VxSuite repo root. Offline builds require all crates to be pre-cached,
+ * which isn't guaranteed when building an arbitrary ref in CI.
  */
-async function fetchRustDependencies(repoPath: string): Promise<void> {
-  logger.info('Fetching Rust crate dependencies (cargo fetch)...');
+const RUST_ADDON_PACKAGE_JSONS = [
+  'libs/pdi-scanner/package.json',
+  'libs/ballot-interpreter/package.json',
+];
 
-  const cargoBin = join(process.env.HOME ?? '', '.cargo/bin');
-  const code = await execCommandWithOutput('cargo', ['fetch'], {
-    cwd: repoPath,
-    env: { ...process.env, PATH: `${cargoBin}:${process.env.PATH ?? ''}` },
-  });
+/**
+ * Strip `--offline` from VxSuite's Rust addon build scripts so cargo can
+ * download any crates missing from the local cache. Idempotent; skips files
+ * that don't exist or don't use `--offline`.
+ */
+async function allowOnlineRustBuilds(repoPath: string): Promise<void> {
+  for (const relPath of RUST_ADDON_PACKAGE_JSONS) {
+    const filePath = join(repoPath, relPath);
+    if (!existsSync(filePath)) {
+      continue;
+    }
 
-  if (code !== 0) {
-    logger.warn(`cargo fetch exited with code ${code}; continuing to build`);
+    const contents = await readFile(filePath, 'utf-8');
+    if (!contents.includes(' --offline')) {
+      continue;
+    }
+
+    await writeFile(filePath, contents.replaceAll(' --offline', ''));
+    logger.info(`Removed --offline from ${relPath}`);
   }
 }
 
