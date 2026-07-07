@@ -23,6 +23,7 @@ import { loadElectionPackage } from '../ballots/election-loader.js';
 
 // App orchestration
 import { createAppOrchestrator, ensureNoAppsRunning } from '../apps/orchestrator.js';
+import { MOCK_NODE_ENV } from '../apps/env-config.js';
 
 // Browser automation
 import { createBrowserSession } from '../automation/browser.js';
@@ -324,7 +325,9 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // FIXME: It'd be nice to not need to hardcode this as the mock USB drive data location.
     // Perhaps the dev dock API could offer a way to add files, or we'd use a mocking approach
     // that happens more at the Linux system level.
-    const dataPath = join(config.vxsuite.repoPath, 'libs/usb-drive/dev-workspace/mock-usb-data');
+    // VxSuite stores mock USB data at <repo>/.mock-state/<NODE_ENV>/usb-drive/mock-usb-data
+    // (see getMockStateRootDir + file_usb_drive.ts).
+    const dataPath = join(repoPath, '.mock-state', MOCK_NODE_ENV, 'usb-drive', 'mock-usb-data');
 
     try {
       await runAdminConfigureWorkflow(

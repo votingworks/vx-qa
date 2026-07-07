@@ -27,13 +27,20 @@ export const MOCK_ENV_VARS: Record<string, string> = {
 };
 
 /**
+ * NODE_ENV the VxSuite apps run under. Also determines the mock-state directory
+ * VxSuite uses: `<repo>/.mock-state/<NODE_ENV>/` (see getMockStateRootDir in
+ * libs/utils). Keep in sync with the value passed in getMockEnvironment.
+ */
+export const MOCK_NODE_ENV = 'development';
+
+/**
  * Get environment variables for running VxSuite apps with mocks
  */
 export function getMockEnvironment(): NodeJS.ProcessEnv {
   return {
     ...process.env,
     ...MOCK_ENV_VARS,
-    NODE_ENV: 'development',
+    NODE_ENV: MOCK_NODE_ENV,
   };
 }
 
