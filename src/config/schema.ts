@@ -5,6 +5,7 @@
 import { z } from 'zod/v4';
 import { resolvePath } from '../utils/paths.js';
 import { dirname } from 'node:path';
+import { SUPPORTED_VERSIONS } from './versions.js';
 
 export const BallotPatternSchema = z.enum([
   'blank',
@@ -16,7 +17,9 @@ export const BallotPatternSchema = z.enum([
 
 export const VxSuiteConfigSchema = z.object({
   repoPath: z.string().min(1, 'Repository path is required'),
-  ref: z.string().min(1, 'Tag/branch/rev is required'),
+  version: z.enum(SUPPORTED_VERSIONS, {
+    message: `VxSuite version must be one of: ${SUPPORTED_VERSIONS.join(', ')}`,
+  }),
   forceClone: z.boolean().optional().default(false),
 });
 

@@ -15,6 +15,7 @@ import { resolvePath, generateTimestampedDir, ensureDir } from '../utils/paths.j
 import { runQAWorkflow } from './config-runner.js';
 import { downloadFile } from '../ballots/election-loader.js';
 import type { QARunConfig } from '../config/types.js';
+import { SUPPORTED_VERSIONS, type VxSuiteVersion } from '../config/versions.js';
 
 export interface ServeOptions {
   port: number;
@@ -54,6 +55,7 @@ export function startServe(options: ServeOptions): void {
             webhook_url?: string;
             qa_run_id?: string;
             election_id?: string;
+            vxsuite_version?: string;
           };
         };
         try {
@@ -67,12 +69,23 @@ export function startServe(options: ServeOptions): void {
         const params = data.parameters ?? {};
         const exportPackageUrl = params.export_package_url;
         const webhookUrl = params.webhook_url;
+        const vxsuiteVersion = params.vxsuite_version;
 
         if (!exportPackageUrl) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(
             JSON.stringify({
               error: 'Missing required parameter: export_package_url',
+            }),
+          );
+          return;
+        }
+
+        if (vxsuiteVersion && !(SUPPORTED_VERSIONS as readonly string[]).includes(vxsuiteVersion)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              error: `Invalid vxsuite_version "${vxsuiteVersion}". Supported: ${SUPPORTED_VERSIONS.join(', ')}`,
             }),
           );
           return;
@@ -86,6 +99,7 @@ export function startServe(options: ServeOptions): void {
         logger.info(`  webhook_url: ${webhookUrl ?? '(none)'}`);
         logger.info(`  qa_run_id: ${params.qa_run_id ?? '(none)'}`);
         logger.info(`  election_id: ${params.election_id ?? '(none)'}`);
+        logger.info(`  vxsuite_version: ${vxsuiteVersion ?? '(config default)'}`);
 
         // Respond immediately with a mock pipeline response
         res.writeHead(201, { 'Content-Type': 'application/json' });
@@ -100,7 +114,12 @@ export function startServe(options: ServeOptions): void {
 
         // Run the QA workflow in the background
         running = true;
-        void runPipeline(options, exportPackageUrl, webhookUrl).finally(() => {
+        void runPipeline(
+          options,
+          exportPackageUrl,
+          webhookUrl,
+          vxsuiteVersion as VxSuiteVersion | undefined,
+        ).finally(() => {
           running = false;
         });
       });
@@ -137,6 +156,7 @@ async function runPipeline(
   options: ServeOptions,
   exportPackageUrl: string,
   webhookUrl: string | undefined,
+  vxsuiteVersion: VxSuiteVersion | undefined,
 ): Promise<void> {
   try {
     // Load the config
@@ -145,6 +165,11 @@ async function runPipeline(
     const parsedConfig = JSON.parse(configData);
     const config: QARunConfig = validateConfig(parsedConfig, configPath);
     config.basePath = dirname(configPath);
+
+    // Override VxSuite version from the request payload, if provided
+    if (vxsuiteVersion) {
+      config.vxsuite.version = vxsuiteVersion;
+    }
 
     // Override election source with the URL from the request
     config.election.source = exportPackageUrl;

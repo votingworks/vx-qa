@@ -12,6 +12,7 @@ import { validateConfig, safeValidateConfig } from './config/schema.js';
 import { resolvePath, generateTimestampedDir, ensureDir } from './utils/paths.js';
 import { runQAWorkflow } from './cli/config-runner.js';
 import type { QARunConfig, WebhookConfig } from './config/types.js';
+import { SUPPORTED_VERSIONS } from './config/versions.js';
 import { dirname, join } from 'node:path';
 import { regenerateHtmlReportFromRawData } from './report/html-generator.js';
 import { revalidateTallyResults } from './automation/admin-tally-workflow.js';
@@ -31,7 +32,7 @@ program
   .description('Run QA automation workflow')
   .option('-c, --config <path>', 'Path to configuration file')
   .option('-o, --output <dir>', 'Override output directory')
-  .option('-r, --ref <ref>', 'Override VxSuite tag/branch/ref')
+  .option('--vxsuite-version <version>', 'Override VxSuite version (e.g. v4.0, v4.1)')
   .option('-e, --election <path>', 'Override election source path')
   .option('--headless', 'Run browser in headless mode (default)')
   .option('--no-headless', 'Run browser in headed mode for debugging')
@@ -70,8 +71,14 @@ program
       if (options.output) {
         config.output.directory = options.output;
       }
-      if (options.tag) {
-        config.vxsuite.ref = options.tag;
+      if (options.vxsuiteVersion) {
+        if (!(SUPPORTED_VERSIONS as readonly string[]).includes(options.vxsuiteVersion)) {
+          logger.error(
+            `Invalid --vxsuite-version "${options.vxsuiteVersion}". Supported: ${SUPPORTED_VERSIONS.join(', ')}`,
+          );
+          process.exit(1);
+        }
+        config.vxsuite.version = options.vxsuiteVersion;
       }
       if (options.election) {
         config.election.source = options.election;
@@ -183,7 +190,7 @@ program
     const sampleConfig: QARunConfig = {
       vxsuite: {
         repoPath: '~/.vx-qa/vxsuite',
-        ref: 'v4.0.4',
+        version: 'v4.0',
       },
       election: {
         source: './election-package-and-ballots.zip',

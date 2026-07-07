@@ -7,6 +7,7 @@ import { existsSync } from 'node:fs';
 import { logger } from '../utils/logger.js';
 import { ensureDir, resolvePath } from '../utils/paths.js';
 import type { VxSuiteConfig } from '../config/types.js';
+import { refForVersion } from '../config/versions.js';
 import { rm, readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 
@@ -29,7 +30,7 @@ export async function cloneOrUpdateRepo(config: VxSuiteConfig): Promise<string> 
     await updateRepo(repoPath);
   }
 
-  await checkoutTag(repoPath, config.ref);
+  await checkoutTag(repoPath, refForVersion(config.version));
 
   return repoPath;
 }

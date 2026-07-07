@@ -5,6 +5,7 @@
 import { logger, formatDuration, printDivider } from '../utils/logger.js';
 import { resolvePath } from '../utils/paths.js';
 import type { QARunConfig, WebhookConfig } from '../config/types.js';
+import { getVersionSpec } from '../config/versions.js';
 import { existsSync } from 'node:fs';
 import { relative } from 'node:path';
 
@@ -65,7 +66,7 @@ function buildResultsUrl(reportPath: string): string | undefined {
 }
 
 /**
- * Get the project root directory (where vxsuite.patch is located)
+ * Get the project root directory (where the vxsuite-*.patch files are located)
  */
 function getProjectRoot(): string {
   // Get the directory of this source file
@@ -135,12 +136,15 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     const commit = await getCurrentCommit(repoPath);
     logger.info(`Repository at ${repoPath} (commit: ${commit.slice(0, 8)})`);
 
-    // Apply patch if it exists (look in project root, not CWD)
+    // Apply the version-specific patch if it exists (look in project root, not CWD)
     const projectRoot = getProjectRoot();
-    const patchPath = join(projectRoot, 'vxsuite.patch');
+    const { patchFile } = getVersionSpec(config.vxsuite.version);
+    const patchPath = join(projectRoot, patchFile);
     if (existsSync(patchPath)) {
       logger.info(`Applying patch from ${patchPath}`);
       await applyPatch(repoPath, patchPath);
+    } else {
+      throw new Error(`Patch file not found for version ${config.vxsuite.version}: ${patchPath}`);
     }
 
     await bootstrapRepo(repoPath);

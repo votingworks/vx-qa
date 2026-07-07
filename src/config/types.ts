@@ -4,6 +4,7 @@
 
 import { BallotToScan } from '../automation/scan-workflow.js';
 import { BallotMode, BallotType, VotesDict } from '../ballots/election-loader.js';
+import type { VxSuiteVersion } from './versions.js';
 
 export type BallotPattern =
   | 'blank'
@@ -15,8 +16,8 @@ export type BallotPattern =
 export interface VxSuiteConfig {
   /** Path where VxSuite repo should be cloned */
   repoPath: string;
-  /** Git tag/branch/rev to checkout (e.g., "v4.0.4") */
-  ref: string;
+  /** VxSuite version to run against; the git ref is derived from this. */
+  version: VxSuiteVersion;
   /** Force a fresh clone even if repo exists */
   forceClone?: boolean;
 }

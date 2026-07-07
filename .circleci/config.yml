@@ -13,6 +13,9 @@ parameters:
   election_id:
     type: string
     default: ''
+  vxsuite_version:
+    type: string
+    default: ''
 
 executors:
   nodejs:
@@ -60,9 +63,15 @@ jobs:
           name: Test
           command: pnpm test --run
 
-  test-qa-e71c80e:
+  # Runs the pinned QA fixture for a single VxSuite version. The VxSuite repo is
+  # cloned/built once per (version, patch) and cached; the cache key includes
+  # the version and a hash of that version's patch file.
+  test-qa:
     executor: nodejs
     resource_class: xlarge
+    parameters:
+      version:
+        type: string
     steps:
       - checkout-and-install
       - run:
@@ -76,26 +85,24 @@ jobs:
       - run:
           name: Compute VxSuite Cache Key
           command: |
-            # Extract the vxsuite ref from the config file
-            VXSUITE_REF=$(node -e "console.log(require('./test-fixtures/vx-qa-config-e71c80e.json').vxsuite.ref)")
-            echo "VxSuite ref: $VXSUITE_REF"
+            VERSION="<< parameters.version >>"
+            echo "VxSuite version: $VERSION"
 
-            # Compute hash of the patch file
-            PATCH_HASH=$(sha256sum vxsuite.patch | cut -d' ' -f1)
+            # Hash the version-specific patch file so cache invalidates on change
+            PATCH_HASH=$(sha256sum "vxsuite-${VERSION}.patch" | cut -d' ' -f1)
             echo "Patch hash: $PATCH_HASH"
 
-            # Create cache key file
-            echo "${VXSUITE_REF}-${PATCH_HASH}" > /tmp/vxsuite-cache-key.txt
+            echo "${VERSION}-${PATCH_HASH}" > /tmp/vxsuite-cache-key.txt
             cat /tmp/vxsuite-cache-key.txt
       - restore_cache:
           name: Restore VxSuite Repository Cache
           keys:
             - v1-vxsuite-{{ checksum "/tmp/vxsuite-cache-key.txt" }}
       - run:
-          name: Run QA Test - e71c80e
+          name: Run QA Test - << parameters.version >>
           command: |
             cd test-fixtures
-            node ../dist/index.js run --config vx-qa-config-e71c80e.json
+            node ../dist/index.js run --config "vx-qa-config-<< parameters.version >>.json"
           no_output_timeout: 30m
       - save_cache:
           name: Save VxSuite Repository Cache
@@ -122,16 +129,18 @@ jobs:
       - run:
           name: Compute VxSuite Cache Key
           command: |
-            # Extract the vxsuite ref from the config file
-            VXSUITE_REF=$(node -e "console.log(require('./test-fixtures/vx-qa-config-vxdesign.json').vxsuite.ref)")
-            echo "VxSuite ref: $VXSUITE_REF"
+            # Version comes from the pipeline parameter when set, otherwise the
+            # config file's default.
+            VERSION="<< pipeline.parameters.vxsuite_version >>"
+            if [ -z "$VERSION" ]; then
+              VERSION=$(node -e "console.log(require('./test-fixtures/vx-qa-config-vxdesign.json').vxsuite.version)")
+            fi
+            echo "VxSuite version: $VERSION"
 
-            # Compute hash of the patch file
-            PATCH_HASH=$(sha256sum vxsuite.patch | cut -d' ' -f1)
+            PATCH_HASH=$(sha256sum "vxsuite-${VERSION}.patch" | cut -d' ' -f1)
             echo "Patch hash: $PATCH_HASH"
 
-            # Create cache key file
-            echo "${VXSUITE_REF}-${PATCH_HASH}" > /tmp/vxsuite-cache-key.txt
+            echo "${VERSION}-${PATCH_HASH}" > /tmp/vxsuite-cache-key.txt
             cat /tmp/vxsuite-cache-key.txt
       - restore_cache:
           name: Restore VxSuite Repository Cache
@@ -140,11 +149,18 @@ jobs:
       - run:
           name: Run QA - VxDesign Export
           command: |
+            # Only pass --vxsuite-version when the pipeline provided one;
+            # otherwise fall back to the config file's version.
+            VERSION_ARG=""
+            if [ -n "<< pipeline.parameters.vxsuite_version >>" ]; then
+              VERSION_ARG="--vxsuite-version << pipeline.parameters.vxsuite_version >>"
+            fi
             node dist/index.js run \
               --config test-fixtures/vx-qa-config-vxdesign.json \
               --election "<< pipeline.parameters.export_package_url >>" \
               --webhook-url "<< pipeline.parameters.webhook_url >>" \
-              --webhook-secret "$CIRCLECI_WEBHOOK_SECRET"
+              --webhook-secret "$CIRCLECI_WEBHOOK_SECRET" \
+              $VERSION_ARG
           no_output_timeout: 30m
       - save_cache:
           name: Save VxSuite Repository Cache
@@ -161,7 +177,12 @@ workflows:
       equal: ['', << pipeline.parameters.export_package_url >>]
     jobs:
       - test-unit
-      - test-qa-e71c80e
+      - test-qa:
+          name: test-qa-v4.0
+          version: 'v4.0'
+      - test-qa:
+          name: test-qa-v4.1
+          version: 'v4.1'
 
   qa-from-vxdesign:
     when:

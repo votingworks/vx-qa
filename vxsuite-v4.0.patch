@@ -1,0 +1,123 @@
+diff --git a/libs/backend/src/system_call/get_audio_card_name.ts b/libs/backend/src/system_call/get_audio_card_name.ts
+index 6cb7772cf..d4a36d399 100644
+--- a/libs/backend/src/system_call/get_audio_card_name.ts
++++ b/libs/backend/src/system_call/get_audio_card_name.ts
+@@ -20,6 +20,11 @@ export interface GetAudioCardNameParams {
+ export async function getAudioCardName(
+   p: GetAudioCardNameParams
+ ): Promise<Result<string, string | z.ZodError>> {
++  // vx-qa: no audio hardware in QA/dev environments; skip pactl detection.
++  if (p.nodeEnv !== 'production') {
++    return ok('mock.audio.card');
++  }
++
+   const maxAttempts = 1 + (p.maxRetries || 0);
+   const baseWaitTimeMs = 1000;
+ 
+diff --git a/libs/backend/src/system_call/pulse_audio.ts b/libs/backend/src/system_call/pulse_audio.ts
+index b027b7160..c4c145a66 100644
+--- a/libs/backend/src/system_call/pulse_audio.ts
++++ b/libs/backend/src/system_call/pulse_audio.ts
+@@ -22,6 +22,12 @@ export async function pactl(
+   logger: Logger,
+   args: string[]
+ ): Promise<Result<string, string>> {
++  // vx-qa: no audio hardware in QA/dev environments; treat pactl as a no-op so
++  // volume/profile calls succeed without a running pulseaudio.
++  if (nodeEnv !== 'production') {
++    return ok('');
++  }
++
+   try {
+     const res =
+       nodeEnv === 'production'
+diff --git a/libs/hmpb/src/marking.ts b/libs/hmpb/src/marking.ts
+index 4bcd1f0e8..233163bc4 100644
+--- a/libs/hmpb/src/marking.ts
++++ b/libs/hmpb/src/marking.ts
+@@ -60,6 +60,18 @@ const markSizeHalf = [markSize[0] * 0.5, markSize[1] * 0.5] as const;
+ const writeInFontSizeDefault = 12;
+ const writeInFontSizeReduced = 10;
+ 
++export type DrawCallbackResult = 'draw' | 'ignore';
++
++/**
++ * Called for each mark before it is drawn. Returning 'ignore' skips drawing
++ * that mark. Used by QA tooling to produce e.g. unmarked write-ins (write-in
++ * name drawn without filling the bubble).
++ */
++export type DrawCallback = (
++  type: 'bubble' | 'write-in-text',
++  position: GridPosition
++) => DrawCallbackResult;
++
+ /**
+  * Generates a PDF with bubble marks in the expected positions for the given
+  * ballot style and corresponding votes.
+@@ -74,7 +86,8 @@ export async function generateMarkOverlay(
+   ballotStyleId: string,
+   votes: VotesDict,
+   calibration: PrintCalibration,
+-  baseBallotPdf?: Uint8Array
++  baseBallotPdf?: Uint8Array,
++  onDraw: DrawCallback = () => 'draw'
+ ): Promise<Uint8Array> {
+   assert(
+     election.gridLayouts,
+@@ -153,10 +166,12 @@ export async function generateMarkOverlay(
+     ];
+ 
+     // Draw bubble mark using pdf-lib
+-    bubbleMark(page, [
+-      bubbleCenter[0] - markSizeHalf[0],
+-      pageSize[1] - bubbleCenter[1] + markSizeHalf[1],
+-    ]);
++    if (onDraw('bubble', pos) === 'draw') {
++      bubbleMark(page, [
++        bubbleCenter[0] - markSizeHalf[0],
++        pageSize[1] - bubbleCenter[1] + markSizeHalf[1],
++      ]);
++    }
+ 
+     if (!mark.writeInName) continue;
+ 
+@@ -178,12 +193,14 @@ export async function generateMarkOverlay(
+ 
+     origin[1] += 0.5 * (areaSize[1] - fontSize);
+ 
+-    page.drawText(name, {
+-      font: fontRobotoBold,
+-      size: fontSize,
+-      x: origin[0],
+-      y: pageSize[1] - origin[1] - fontSize,
+-    });
++    if (onDraw('write-in-text', pos) === 'draw') {
++      page.drawText(name, {
++        font: fontRobotoBold,
++        size: fontSize,
++        x: origin[0],
++        y: pageSize[1] - origin[1] - fontSize,
++      });
++    }
+   }
+ 
+   // Make sure we have an even number of pages, to match print order of the base
+diff --git a/script/bootstrap b/script/bootstrap
+index 8b3adce85..154e95c51 100755
+--- a/script/bootstrap
++++ b/script/bootstrap
+@@ -2,11 +2,9 @@
+ 
+ set -euo pipefail
+ 
+-local_user=`logname`
+-local_user_home_dir=$( getent passwd "${local_user}" | cut -d: -f6 )
+-
+-# Make sure PATH includes cargo and /sbin
+-export PATH="${local_user_home_dir}/.cargo/bin:${PATH}:/sbin/"
++# Make sure PATH includes cargo and /sbin. Use ${HOME} rather than `logname`,
++# which fails in CI containers with no controlling terminal.
++export PATH="${HOME}/.cargo/bin:${PATH}:/sbin/"
+ 
+ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+ 
