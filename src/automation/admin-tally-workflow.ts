@@ -964,7 +964,11 @@ export async function validateTallyResults(
         const selectionId = fields[selectionIdIndex];
         const votes = parseInt(fields[totalVotesColumnIndex] || '0', 10);
 
-        if (!isNaN(votes) && selectionId !== 'overvotes' && selectionId !== 'undervotes') {
+        // Skip non-candidate metric rows. v4.1's tally CSV adds a per-contest
+        // 'ballots-cast' selection alongside 'overvotes'/'undervotes'; none are
+        // candidate votes.
+        const metricSelectionIds = ['overvotes', 'undervotes', 'ballots-cast'];
+        if (!isNaN(votes) && !metricSelectionIds.includes(selectionId)) {
           if (!actualVotes.has(contestId)) {
             actualVotes.set(contestId, new Map());
           }
