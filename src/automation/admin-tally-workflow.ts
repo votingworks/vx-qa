@@ -12,6 +12,7 @@ import {
   clickButtonWithDebug,
   clickTextInApp,
   toggleDevDock,
+  debugPageState,
 } from './browser.js';
 import { loadCollection, type StepCollector, type ArtifactCollector } from '../report/artifacts.js';
 import { ArtifactCollection, StepOutput, ValidationResult } from '../config/types.js';
@@ -550,16 +551,20 @@ async function loadCvrs(
 
     await stepCollector.captureScreenshot('admin-tally-before-load-cvrs', 'Before click Load CVRs');
 
-    // Open the CVR import modal. v4.0 labels the opener "Load CVRs"; v4.1's
-    // rewritten CVR screen labels it "Load" (icon button). Use the v4.0 text
-    // when present (matches the original behavior exactly), otherwise click
-    // v4.1's "Load" button. The tally CVR screen itself has no "Load CVRs"
-    // text in v4.1, so this disambiguates cleanly.
-    const loadCvrsByText = page.getByText('Load CVRs');
-    if ((await loadCvrsByText.count()) > 0) {
-      await loadCvrsByText.first().click();
-    } else {
-      await page.getByRole('button', { name: 'Load', exact: true }).first().click();
+    // Open the CVR import modal. v4.0 labels the opener "Load CVRs" (matched by
+    // text, as originally). v4.1's rewritten CVR screen uses an icon button
+    // labeled "Load" whose icon pollutes the accessible name, so target its
+    // explicit CSS class instead of a role-name.
+    try {
+      const loadCvrsByText = page.getByText('Load CVRs');
+      if ((await loadCvrsByText.count()) > 0) {
+        await loadCvrsByText.first().click({ timeout: 15000 });
+      } else {
+        await page.locator('.LoadButton').first().click({ timeout: 15000 });
+      }
+    } catch (error) {
+      await debugPageState(page, 'Failed to open CVR import modal', outputDir);
+      throw error;
     }
     await page.waitForTimeout(1000);
     await stepCollector.captureScreenshot('admin-tally-load-cvr-dialog', 'Load CVR dialog');
