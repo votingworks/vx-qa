@@ -33,6 +33,11 @@ export interface VersionSpec {
   patchFile: string;
   /** Ballot-geometry data model used by this version's election definition. */
   ballotModel: BallotModel;
+  /**
+   * Mock USB drive data directory, relative to `<repo>/.mock-state/<NODE_ENV>`.
+   * v4.1 nests the drive under a disk name (`sdb`); v4.0 does not.
+   */
+  mockUsbDataDir: string;
 }
 
 export const VERSION_SPECS: Record<VxSuiteVersion, VersionSpec> = {
@@ -40,12 +45,14 @@ export const VERSION_SPECS: Record<VxSuiteVersion, VersionSpec> = {
     ref: 'v4.0.7',
     patchFile: 'vxsuite-v4.0.patch',
     ballotModel: 'gridLayouts',
+    mockUsbDataDir: 'usb-drive/mock-usb-data',
   },
   'v4.1': {
     // v4.1 is not yet tagged for release; the alpha tag is the pinned point.
     ref: 'v4.1.0-alpha',
     patchFile: 'vxsuite-v4.1.patch',
     ballotModel: 'ballotPositions',
+    mockUsbDataDir: 'usb-drive/sdb/mock-usb-data',
   },
 };
 

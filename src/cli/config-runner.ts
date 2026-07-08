@@ -325,9 +325,15 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // FIXME: It'd be nice to not need to hardcode this as the mock USB drive data location.
     // Perhaps the dev dock API could offer a way to add files, or we'd use a mocking approach
     // that happens more at the Linux system level.
-    // VxSuite stores mock USB data at <repo>/.mock-state/<NODE_ENV>/usb-drive/mock-usb-data
-    // (see getMockStateRootDir + file_usb_drive.ts).
-    const dataPath = join(repoPath, '.mock-state', MOCK_NODE_ENV, 'usb-drive', 'mock-usb-data');
+    // VxSuite stores mock USB data under <repo>/.mock-state/<NODE_ENV>/ (see
+    // getMockStateRootDir + file_usb_drive.ts). The subdirectory is version-specific:
+    // v4.1 nests the drive under a disk name (usb-drive/sdb/...), v4.0 does not.
+    const dataPath = join(
+      repoPath,
+      '.mock-state',
+      MOCK_NODE_ENV,
+      getVersionSpec(config.vxsuite.version).mockUsbDataDir,
+    );
 
     try {
       await runAdminConfigureWorkflow(
