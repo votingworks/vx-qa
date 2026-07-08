@@ -550,8 +550,15 @@ async function loadCvrs(
 
     await stepCollector.captureScreenshot('admin-tally-before-load-cvrs', 'Before click Load CVRs');
 
-    // Click the "Load CVRs" button
-    await page.getByText('Load CVRs').click();
+    // Open the CVR import modal. The button that opens it is labeled
+    // "Load CVRs" in v4.0 and "Load" in v4.1 (the tally CVR screen was
+    // rewritten). Prefer the v4.0 label, fall back to the v4.1 one.
+    const loadCvrsButton = page.getByRole('button', { name: 'Load CVRs', exact: true });
+    if ((await loadCvrsButton.count()) > 0) {
+      await loadCvrsButton.first().click();
+    } else {
+      await page.getByRole('button', { name: 'Load', exact: true }).first().click();
+    }
     await page.waitForTimeout(1000);
     await stepCollector.captureScreenshot('admin-tally-load-cvr-dialog', 'Load CVR dialog');
 
