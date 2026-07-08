@@ -550,12 +550,14 @@ async function loadCvrs(
 
     await stepCollector.captureScreenshot('admin-tally-before-load-cvrs', 'Before click Load CVRs');
 
-    // Open the CVR import modal. The button that opens it is labeled
-    // "Load CVRs" in v4.0 and "Load" in v4.1 (the tally CVR screen was
-    // rewritten). Prefer the v4.0 label, fall back to the v4.1 one.
-    const loadCvrsButton = page.getByRole('button', { name: 'Load CVRs', exact: true });
-    if ((await loadCvrsButton.count()) > 0) {
-      await loadCvrsButton.first().click();
+    // Open the CVR import modal. v4.0 labels the opener "Load CVRs"; v4.1's
+    // rewritten CVR screen labels it "Load" (icon button). Use the v4.0 text
+    // when present (matches the original behavior exactly), otherwise click
+    // v4.1's "Load" button. The tally CVR screen itself has no "Load CVRs"
+    // text in v4.1, so this disambiguates cleanly.
+    const loadCvrsByText = page.getByText('Load CVRs');
+    if ((await loadCvrsByText.count()) > 0) {
+      await loadCvrsByText.first().click();
     } else {
       await page.getByRole('button', { name: 'Load', exact: true }).first().click();
     }
