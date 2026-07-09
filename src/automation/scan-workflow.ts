@@ -198,12 +198,34 @@ export async function runScanWorkflow(
     'Close the polls and print results reports',
   );
 
-  const pollWorkerCardForClosingPolls = await insertPollWorkerCard(page, electionPath);
-  await waitForTextInAppWithDebug(page, 'Do you want to close the polls?', {
-    timeout: 10000,
-    outputDir,
-    label: 'Waiting for close polls confirmation prompt',
-  });
+  // Insert the poll worker card to bring up the close-polls prompt. The mock
+  // card insertion can occasionally race with the app settling after the last
+  // scanned ballot, leaving the app on the voter screen, so retry the insertion
+  // a few times before giving up.
+  const closePollsPrompt = 'Do you want to close the polls?';
+  let pollWorkerCardForClosingPolls = await insertPollWorkerCard(page, electionPath);
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await waitForTextInApp(page, closePollsPrompt, { timeout: 10000 });
+      break;
+    } catch {
+      if (attempt >= 3) {
+        // Capture debug state on the final attempt, then fail.
+        await waitForTextInAppWithDebug(page, closePollsPrompt, {
+          timeout: 5000,
+          outputDir,
+          label: 'Waiting for close polls confirmation prompt',
+        });
+        break;
+      }
+      logger.warn(
+        `Close-polls prompt not shown (attempt ${attempt}); re-inserting poll worker card`,
+      );
+      await pollWorkerCardForClosingPolls.removeCard();
+      await page.waitForTimeout(1000);
+      pollWorkerCardForClosingPolls = await insertPollWorkerCard(page, electionPath);
+    }
+  }
 
   await clickButtonWithDebug(page, 'Close Polls', {
     timeout: 10000,
