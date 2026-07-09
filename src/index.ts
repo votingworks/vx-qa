@@ -6,7 +6,7 @@
  * CLI entry point for automating QA testing of VxSuite elections
  */
 
-import { Command } from 'commander';
+import { Command, InvalidArgumentError } from 'commander';
 import { logger, printHeader } from './utils/logger.js';
 import { validateConfig, safeValidateConfig } from './config/schema.js';
 import { resolvePath, generateTimestampedDir, ensureDir } from './utils/paths.js';
@@ -19,6 +19,19 @@ import { revalidateTallyResults } from './automation/admin-tally-workflow.js';
 import { downloadFile } from './ballots/election-loader.js';
 import { startServe } from './cli/serve.js';
 import { readFile, writeFile } from 'node:fs/promises';
+
+/**
+ * Commander option coercion for integer arguments. Passing `parseInt` directly
+ * is a bug: Commander calls it as `parseInt(value, previous)`, so the previous
+ * option value is used as the radix (e.g. `parseInt('9100', 9000)` -> NaN).
+ */
+function parseIntOption(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed)) {
+    throw new InvalidArgumentError('Must be an integer.');
+  }
+  return parsed;
+}
 
 const program = new Command();
 
@@ -36,11 +49,15 @@ program
   .option('-e, --election <path>', 'Override election source path')
   .option('--headless', 'Run browser in headless mode (default)')
   .option('--no-headless', 'Run browser in headed mode for debugging')
-  .option('--limit-ballots <number>', 'Limit the number of ballots to scan (for testing)', parseInt)
+  .option(
+    '--limit-ballots <number>',
+    'Limit the number of ballots to scan (for testing)',
+    parseIntOption,
+  )
   .option(
     '--limit-manual-tallies <number>',
     'Limit the number of ballot styles with manual tallies (for testing)',
-    parseInt,
+    parseIntOption,
   )
   .option('--webhook-url <url>', 'URL for status callbacks')
   .option(
@@ -210,15 +227,19 @@ program
   .command('serve')
   .description('Start a local CircleCI stand-in server for VxDesign')
   .requiredOption('-c, --config <path>', 'Path to configuration file')
-  .option('-p, --port <port>', 'Port to listen on', parseInt, 9000)
+  .option('-p, --port <port>', 'Port to listen on', parseIntOption, 9000)
   .option('--webhook-secret <secret>', 'Secret for webhook callbacks', 'test-secret')
   .option('--headless', 'Run browser in headless mode (default)')
   .option('--no-headless', 'Run browser in headed mode for debugging')
-  .option('--limit-ballots <number>', 'Limit the number of ballots to scan (for testing)', parseInt)
+  .option(
+    '--limit-ballots <number>',
+    'Limit the number of ballots to scan (for testing)',
+    parseIntOption,
+  )
   .option(
     '--limit-manual-tallies <number>',
     'Limit the number of ballot styles with manual tallies (for testing)',
-    parseInt,
+    parseIntOption,
   )
   .action((options) => {
     startServe({
