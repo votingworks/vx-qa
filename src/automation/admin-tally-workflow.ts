@@ -226,6 +226,17 @@ async function processBallotStyle(
     }
   }
 
+  // In primary elections, VxAdmin labels each ballot-style option with the
+  // party appended (e.g. "Bedford - Democratic"). Without this suffix the
+  // dropdown option never matches, the style is never selected, and the
+  // Voting Method dropdown stays disabled.
+  if (ballotStyleInfo?.partyId) {
+    const party = election.parties?.find((p) => p.id === ballotStyleInfo.partyId);
+    if (party) {
+      displayName = `${displayName} - ${party.name}`;
+    }
+  }
+
   logger.debug(`Looking for ballot style option containing "${displayName}"`);
 
   // Click on the text - try multiple strategies

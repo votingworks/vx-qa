@@ -74,6 +74,13 @@ jobs:
     parameters:
       version:
         type: string
+      config:
+        description: >-
+          Config file basename (vx-qa-config-<config>.json). Defaults to the
+          vxsuite version, but can differ so multiple configs (e.g. a primary
+          election) can share one vxsuite version/patch/cache.
+        type: string
+        default: ''
     steps:
       - checkout-and-install
       - run:
@@ -103,8 +110,13 @@ jobs:
       - run:
           name: Run QA Test - << parameters.version >>
           command: |
+            CONFIG="<< parameters.config >>"
+            if [ -z "$CONFIG" ]; then
+              CONFIG="<< parameters.version >>"
+            fi
+            echo "Config: vx-qa-config-${CONFIG}.json"
             cd test-fixtures
-            DEBUG=1 node ../dist/index.js run --config "vx-qa-config-<< parameters.version >>.json"
+            DEBUG=1 node ../dist/index.js run --config "vx-qa-config-${CONFIG}.json"
           no_output_timeout: 30m
       - save_cache:
           name: Save VxSuite Repository Cache
@@ -185,6 +197,10 @@ workflows:
       - test-qa:
           name: test-qa-v4.1
           version: 'v4.1'
+      - test-qa:
+          name: test-qa-v4.0-primary
+          version: 'v4.0'
+          config: 'v4.0-primary'
 
   qa-from-vxdesign:
     when:

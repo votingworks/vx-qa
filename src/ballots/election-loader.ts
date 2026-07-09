@@ -42,6 +42,11 @@ export interface CandidateContest {
   candidates: Candidate[];
   allowWriteIns: boolean;
   districtId: string;
+  /**
+   * Present in primary elections: the contest belongs to this party and only
+   * appears on that party's ballot styles.
+   */
+  partyId?: string;
 }
 
 export interface YesNoOption {
@@ -70,6 +75,17 @@ export interface BallotStyle {
   id: string;
   precincts: string[];
   districts: string[];
+  /**
+   * Present in primary elections: the party this ballot style is for. Used to
+   * restrict contests to that party and to label the style (e.g.
+   * "Bedford - Democratic") in VxAdmin.
+   */
+  partyId?: string;
+  /**
+   * Language-independent grouping of ballot styles (e.g. "1-DEM"). The `id`
+   * additionally encodes the language (e.g. "1-DEM_en").
+   */
+  groupId?: string;
   /**
    * v4.1+ carries ballot geometry per ballot style here instead of in a
    * top-level `gridLayouts`. Normalized into `Election.gridLayouts` on load.
@@ -410,7 +426,19 @@ export function getContestsForBallotStyle(election: Election, ballotStyleId: str
   }
 
   const districts = ballotStyle.districts;
-  return election.contests.filter((c) => districts.includes(c.districtId));
+  return election.contests.filter((c) => {
+    if (!districts.includes(c.districtId)) {
+      return false;
+    }
+    // In primaries, candidate contests carry a partyId and appear only on the
+    // matching party's ballot style. Yes/no contests (ballot measures) have no
+    // party and appear on every ballot style whose districts include them.
+    // General elections have no partyId on the ballot style, so this is a no-op.
+    if (ballotStyle.partyId && c.type === 'candidate' && c.partyId) {
+      return c.partyId === ballotStyle.partyId;
+    }
+    return true;
+  });
 }
 
 export const RawBallotPdfInfo = z.strictObject({
