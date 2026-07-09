@@ -179,10 +179,27 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
 
     const { election } = electionPackage.electionDefinition;
 
+    // Which ballots VxScan returns to the voter for review (vs. counts) depends
+    // on the election's precinct-scan adjudication reasons. Notably, when
+    // 'BlankBallot' is configured (e.g. the primary fixture), blank ballots —
+    // and effectively-blank ballots such as our unmarked-write-in pattern,
+    // which fills no bubbles — are returned rather than accepted.
+    const precinctScanAdjudicationReasons = Array.isArray(
+      electionPackage.systemSettings['precinctScanAdjudicationReasons'],
+    )
+      ? (electionPackage.systemSettings['precinctScanAdjudicationReasons'] as string[])
+      : [];
+    const blankBallotRequiresReview = precinctScanAdjudicationReasons.includes('BlankBallot');
+
     logger.info(`Election: ${election.title}`);
     logger.info(`Ballot styles: ${election.ballotStyles.length}`);
     logger.info(`Contests: ${election.contests.length}`);
     logger.info(`Ballot PDFs loaded: ${electionPackage.ballots.length}`);
+    logger.info(
+      `Precinct-scan adjudication reasons: ${
+        precinctScanAdjudicationReasons.join(', ') || '(none)'
+      }`,
+    );
 
     // Phase 4: Prepare ballots for scanning
     printDivider();
@@ -232,7 +249,10 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
         ballotType: ballot.ballotType,
         pattern: 'blank',
         pdfPath,
-        expectedAccepted: ballot.ballotMode === 'official',
+        // A blank ballot is counted only if the scanner is in official mode
+        // (test ballots are returned) and blank ballots aren't flagged for
+        // review by the election's adjudication settings.
+        expectedAccepted: ballot.ballotMode === 'official' && !blankBallotRequiresReview,
       });
 
       if (ballot.ballotMode === 'official') {
@@ -274,7 +294,11 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
             ballotType: ballot.ballotType,
             pattern: 'unmarked-write-in',
             pdfPath,
-            expectedAccepted: true,
+            // The unmarked-write-in pattern fills no bubbles, so the ballot has
+            // no counted votes and is treated as blank: returned for review
+            // when blank ballots are flagged, otherwise counted (and the
+            // unmarked write-in flagged for later adjudication in VxAdmin).
+            expectedAccepted: !blankBallotRequiresReview,
           },
         );
       }
