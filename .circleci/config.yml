@@ -205,6 +205,14 @@ workflows:
           name: test-qa-v4.0-overvote
           version: 'v4.0'
           config: 'v4.0-overvote'
+      - test-qa:
+          name: test-qa-v4.1-primary
+          version: 'v4.1'
+          config: 'v4.1-primary'
+      - test-qa:
+          name: test-qa-v4.1-overvote
+          version: 'v4.1'
+          config: 'v4.1-overvote'
 
   qa-from-vxdesign:
     when:
