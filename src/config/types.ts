@@ -22,9 +22,19 @@ export interface VxSuiteConfig {
   forceClone?: boolean;
 }
 
+export interface SystemSettingsOverrides {
+  /** Override whether VxScan refuses to cast overvoted ballots. */
+  disallowCastingOvervotes?: boolean;
+}
+
 export interface ElectionConfig {
   /** Path to election package ZIP (election-package-and-ballots-*.zip) */
   source: string;
+  /**
+   * Optional overrides applied to the election package's systemSettings before
+   * loading it into VxAdmin, so one package can exercise multiple behaviors.
+   */
+  systemSettingsOverrides?: SystemSettingsOverrides;
 }
 
 export interface BallotConfig {

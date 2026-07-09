@@ -201,6 +201,10 @@ workflows:
           name: test-qa-v4.0-primary
           version: 'v4.0'
           config: 'v4.0-primary'
+      - test-qa:
+          name: test-qa-v4.0-overvote
+          version: 'v4.0'
+          config: 'v4.0-overvote'
 
   qa-from-vxdesign:
     when:

@@ -23,8 +23,19 @@ export const VxSuiteConfigSchema = z.object({
   forceClone: z.boolean().optional().default(false),
 });
 
+/**
+ * Overrides applied to the election package's systemSettings.json before it is
+ * loaded into VxAdmin (and re-exported to VxScan). Lets a single election
+ * package exercise different behaviors — e.g. flipping `disallowCastingOvervotes`
+ * to test the cast-overvote path — without maintaining a separate package.
+ */
+export const SystemSettingsOverridesSchema = z.object({
+  disallowCastingOvervotes: z.boolean().optional(),
+});
+
 export const ElectionConfigSchema = z.object({
   source: z.string().min(1, 'Election source path is required'),
+  systemSettingsOverrides: SystemSettingsOverridesSchema.optional(),
 });
 
 export const OutputConfigSchema = z.object({

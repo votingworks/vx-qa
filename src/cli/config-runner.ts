@@ -19,7 +19,7 @@ import {
 } from '../repo/bootstrap.js';
 
 // Election package loading
-import { loadElectionPackage } from '../ballots/election-loader.js';
+import { applySystemSettingsOverrides, loadElectionPackage } from '../ballots/election-loader.js';
 
 // App orchestration
 import { createAppOrchestrator, ensureNoAppsRunning } from '../apps/orchestrator.js';
@@ -172,10 +172,17 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
       electionSourcePath,
       collector.getBallotsDir(),
     );
-    assert(
-      electionPackage.systemSettings['disallowCastingOvervotes'],
-      `System setting 'disallowCastingOvervotes' must be true`,
-    );
+
+    // Apply any systemSettings overrides to the package VxAdmin will load (and
+    // re-export to VxScan), so a single package can exercise different behaviors.
+    const systemSettingsOverrides = config.election.systemSettingsOverrides;
+    if (systemSettingsOverrides && Object.keys(systemSettingsOverrides).length > 0) {
+      logger.info(`Applying systemSettings overrides: ${JSON.stringify(systemSettingsOverrides)}`);
+      electionPackage.systemSettings = await applySystemSettingsOverrides(
+        electionPackagePath,
+        systemSettingsOverrides as Record<string, unknown>,
+      );
+    }
 
     const { election } = electionPackage.electionDefinition;
 
@@ -191,6 +198,12 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
       : [];
     const blankBallotRequiresReview = precinctScanAdjudicationReasons.includes('BlankBallot');
 
+    // When overvotes may not be cast, an overvoted ballot can only be returned;
+    // when they may be cast, the voter can choose to cast it anyway. This drives
+    // how many overvote ballots we scan and what outcome we expect for each.
+    const disallowCastingOvervotes =
+      electionPackage.systemSettings['disallowCastingOvervotes'] === true;
+
     logger.info(`Election: ${election.title}`);
     logger.info(`Ballot styles: ${election.ballotStyles.length}`);
     logger.info(`Contests: ${election.contests.length}`);
@@ -200,6 +213,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
         precinctScanAdjudicationReasons.join(', ') || '(none)'
       }`,
     );
+    logger.info(`Casting overvotes: ${disallowCastingOvervotes ? 'disallowed' : 'allowed'}`);
 
     // Phase 4: Prepare ballots for scanning
     printDivider();
@@ -256,26 +270,36 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
       });
 
       if (ballot.ballotMode === 'official') {
-        ballotsToScan.push(
-          {
-            ballotStyleId: ballot.ballotStyleId,
-            precinctId: ballot.precinctId,
-            ballotMode: ballot.ballotMode,
-            ballotType: ballot.ballotType,
-            pattern: 'valid',
-            pdfPath,
-            expectedAccepted: true,
-          },
-          {
-            ballotStyleId: ballot.ballotStyleId,
-            precinctId: ballot.precinctId,
-            ballotMode: ballot.ballotMode,
-            ballotType: ballot.ballotType,
-            pattern: 'overvote',
-            pdfPath,
-            expectedAccepted: false,
-          },
-        );
+        ballotsToScan.push({
+          ballotStyleId: ballot.ballotStyleId,
+          precinctId: ballot.precinctId,
+          ballotMode: ballot.ballotMode,
+          ballotType: ballot.ballotType,
+          pattern: 'valid',
+          pdfPath,
+          expectedAccepted: true,
+        });
+
+        const overvoteBase = {
+          ballotStyleId: ballot.ballotStyleId,
+          precinctId: ballot.precinctId,
+          ballotMode: ballot.ballotMode,
+          ballotType: ballot.ballotType,
+          pattern: 'overvote' as const,
+          pdfPath,
+        };
+        if (disallowCastingOvervotes) {
+          // Overvotes cannot be cast: verify the ballot is returned, not counted.
+          ballotsToScan.push({ ...overvoteBase, expectedAccepted: false });
+        } else {
+          // Overvotes may be cast: exercise both voter choices — cast one
+          // (counted) and return one (rejected) — so tallies and reports
+          // reflect a cast overvote.
+          ballotsToScan.push(
+            { ...overvoteBase, expectedAccepted: true },
+            { ...overvoteBase, expectedAccepted: false },
+          );
+        }
 
         ballotsToScan.push(
           {

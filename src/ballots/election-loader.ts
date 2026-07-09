@@ -568,6 +568,38 @@ export async function loadElectionPackage(
 }
 
 /**
+ * Overwrite selected keys in an election package's systemSettings.json, in
+ * place, at `electionPackagePath`. Returns the merged settings.
+ *
+ * VxAdmin loads this package and re-exports it to VxScan, so the override
+ * reaches both apps. The dev/test election packages are unsigned, so rewriting
+ * a file inside the ZIP does not break any signature check. `undefined` values
+ * in `overrides` are ignored so partial overrides only touch the keys set.
+ */
+export async function applySystemSettingsOverrides(
+  electionPackagePath: string,
+  overrides: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const definedOverrides = Object.fromEntries(
+    Object.entries(overrides).filter(([, value]) => value !== undefined),
+  );
+
+  const zipData = await readFile(electionPackagePath);
+  const zip = await JSZip.loadAsync(zipData);
+  const systemSettingsFile = zip.file('systemSettings.json');
+  assert(systemSettingsFile, `systemSettings.json missing in ${electionPackagePath}`);
+
+  const current = JSON.parse(await systemSettingsFile.async('string')) as Record<string, unknown>;
+  const merged = { ...current, ...definedOverrides };
+
+  zip.file('systemSettings.json', JSON.stringify(merged, null, 2));
+  const updated = await zip.generateAsync({ type: 'nodebuffer' });
+  await writeFile(electionPackagePath, updated);
+
+  return merged;
+}
+
+/**
  * Download an election package from a URL and load it.
  */
 export async function loadElectionPackageFromUrl(
