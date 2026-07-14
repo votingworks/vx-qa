@@ -48,8 +48,7 @@ export const VERSION_SPECS: Record<VxSuiteVersion, VersionSpec> = {
     mockUsbDataDir: 'usb-drive/mock-usb-data',
   },
   'v4.1': {
-    // v4.1 is not yet tagged for release; the alpha tag is the pinned point.
-    ref: 'v4.1.0-alpha',
+    ref: 'v4.1.0',
     patchFile: 'vxsuite-v4.1.patch',
     ballotModel: 'ballotPositions',
     mockUsbDataDir: 'usb-drive/sdb/mock-usb-data',
