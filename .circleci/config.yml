@@ -202,6 +202,10 @@ workflows:
           version: 'v4.0'
           config: 'v4.0-primary'
       - test-qa:
+          name: test-qa-v4.0-nh-city
+          version: 'v4.0'
+          config: 'v4.0-nh-city'
+      - test-qa:
           name: test-qa-v4.0-overvote
           version: 'v4.0'
           config: 'v4.0-overvote'

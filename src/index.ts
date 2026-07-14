@@ -11,7 +11,7 @@ import { logger, printHeader } from './utils/logger.js';
 import { validateConfig, safeValidateConfig } from './config/schema.js';
 import { resolvePath, generateTimestampedDir, ensureDir } from './utils/paths.js';
 import { runQAWorkflow } from './cli/config-runner.js';
-import type { QARunConfig, WebhookConfig } from './config/types.js';
+import { TALLY_MODES, type QARunConfig, type WebhookConfig } from './config/types.js';
 import { SUPPORTED_VERSIONS } from './config/versions.js';
 import { dirname, join } from 'node:path';
 import { regenerateHtmlReportFromRawData } from './report/html-generator.js';
@@ -46,6 +46,10 @@ program
   .option('-c, --config <path>', 'Path to configuration file')
   .option('-o, --output <dir>', 'Override output directory')
   .option('--vxsuite-version <version>', 'Override VxSuite version (e.g. v4.0, v4.1)')
+  .option(
+    '--tally-mode <mode>',
+    'Override tally mode (consolidated or per-precinct); auto-detected from the election when omitted',
+  )
   .option('-e, --election <path>', 'Override election source path')
   .option('--headless', 'Run browser in headless mode (default)')
   .option('--no-headless', 'Run browser in headed mode for debugging')
@@ -96,6 +100,15 @@ program
           process.exit(1);
         }
         config.vxsuite.version = options.vxsuiteVersion;
+      }
+      if (options.tallyMode) {
+        if (!(TALLY_MODES as readonly string[]).includes(options.tallyMode)) {
+          logger.error(
+            `Invalid --tally-mode "${options.tallyMode}". Supported: ${TALLY_MODES.join(', ')}`,
+          );
+          process.exit(1);
+        }
+        config.tallyMode = options.tallyMode;
       }
       if (options.election) {
         config.election.source = options.election;

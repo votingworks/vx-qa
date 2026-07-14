@@ -47,10 +47,28 @@ export interface OutputConfig {
   directory: string;
 }
 
+/**
+ * How VxAdmin tallies CVRs relative to precincts:
+ * - 'consolidated': one VxAdmin session imports and tallies CVRs from every
+ *   precinct together (current/default behavior).
+ * - 'per-precinct': each precinct gets its own configure→scan→import→tally→
+ *   report→unconfigure cycle, run sequentially. Used for NH "city" elections
+ *   where each ward is its own legal reporting unit. Combining per-ward
+ *   results into one city-wide report is out of scope.
+ */
+export type TallyMode = 'consolidated' | 'per-precinct';
+
+export const TALLY_MODES = ['consolidated', 'per-precinct'] as const satisfies readonly TallyMode[];
+
 export interface QARunConfig {
   vxsuite: VxSuiteConfig;
   election: ElectionConfig;
   output: OutputConfig;
+  /**
+   * Left unset to auto-detect from the loaded election (see
+   * config/tally-mode.ts's determineTallyMode); set explicitly to override.
+   */
+  tallyMode?: TallyMode;
   basePath?: string;
 }
 

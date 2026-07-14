@@ -6,6 +6,7 @@ import { z } from 'zod/v4';
 import { resolvePath } from '../utils/paths.js';
 import { dirname } from 'node:path';
 import { SUPPORTED_VERSIONS } from './versions.js';
+import { TALLY_MODES } from './types.js';
 
 export const BallotPatternSchema = z.enum([
   'blank',
@@ -14,6 +15,8 @@ export const BallotPatternSchema = z.enum([
   'marked-write-in',
   'unmarked-write-in',
 ]);
+
+export const TallyModeSchema = z.enum(TALLY_MODES);
 
 export const VxSuiteConfigSchema = z.object({
   repoPath: z.string().min(1, 'Repository path is required'),
@@ -46,6 +49,7 @@ export const QARunConfigSchema = z.object({
   vxsuite: VxSuiteConfigSchema,
   election: ElectionConfigSchema,
   output: OutputConfigSchema,
+  tallyMode: TallyModeSchema.optional(),
 });
 
 export type QARunConfigOutput = z.output<typeof QARunConfigSchema>;

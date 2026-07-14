@@ -68,13 +68,21 @@ Example `vx-qa-config.json`:
 `vxsuite.version` selects which VxSuite release to run against. Values match
 VxSuite's own `SoftwareVersion` identifiers:
 
-| version  | git ref        | patch                |
-| -------- | -------------- | -------------------- |
-| `"v4.0"` | `v4.0.7`       | `vxsuite-v4.0.patch` |
-| `"v4.1"` | `v4.1.0-alpha` | `vxsuite-v4.1.patch` |
+| version  | git ref  | patch                |
+| -------- | -------- | -------------------- |
+| `"v4.0"` | `v4.0.7` | `vxsuite-v4.0.patch` |
+| `"v4.1"` | `v4.1.0` | `vxsuite-v4.1.patch` |
 
 The git ref and patch file are derived from the version; you don't set them
 directly. Older versions (≤ v4.0.4) are not supported.
+
+`tallyMode` (optional, defaults to `"consolidated"`) controls how VxAdmin
+tallies CVRs relative to precincts:
+
+| mode             | behavior                                                                                                                                        |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"consolidated"` | One VxAdmin session imports and tallies CVRs from every precinct together.                                                                      |
+| `"per-precinct"` | Each precinct gets its own configure → scan → import → tally → report → unconfigure cycle, run sequentially (e.g. NH "city" elections by ward). |
 
 ## Output
 
