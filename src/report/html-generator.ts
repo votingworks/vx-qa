@@ -6,6 +6,7 @@ import Handlebars from 'handlebars';
 import { dirname, join, relative } from 'node:path';
 import { logger } from '../utils/logger.js';
 import type { ArtifactCollection, ScreenshotArtifact } from '../config/types.js';
+import { refForVersion } from '../config/versions.js';
 import { collectFilesInDir, loadCollection, PROOF_PREFIX } from './artifacts.js';
 import { generatePdfThumbnail } from './pdf-thumbnail.js';
 import { writeFile } from 'node:fs/promises';
@@ -247,7 +248,7 @@ async function prepareReportData(
     duration: duration ? formatDuration(duration) : 'N/A',
     pass,
     config: {
-      tag: collection.config.vxsuite.ref,
+      tag: `${collection.config.vxsuite.version} (${refForVersion(collection.config.vxsuite.version)})`,
       election: collection.config.election.source,
     },
     steps,
@@ -489,7 +490,7 @@ function renderTemplate(data: ReportData): string {
           <div class="meta-value">{{duration}}</div>
         </div>
         <div class="meta-item">
-          <div class="meta-label">VxSuite Tag</div>
+          <div class="meta-label">VxSuite Version</div>
           <div class="meta-value">{{config.tag}}</div>
         </div>
         <div class="meta-item">

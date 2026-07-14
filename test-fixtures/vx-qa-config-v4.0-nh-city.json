@@ -4,7 +4,7 @@
     "version": "v4.0"
   },
   "election": {
-    "source": "./placeholder.zip"
+    "source": "./election-package-2ff9cd7-0daefca.zip"
   },
   "output": {
     "directory": "./output"

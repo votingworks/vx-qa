@@ -20,6 +20,7 @@ import type { StepCollector, ArtifactCollector } from '../report/artifacts.js';
 import { basename, join } from 'node:path';
 import { createMockScannerController } from '../mock-hardware/scanner.js';
 import { generateMarkedBallotForPattern } from '../ballots/ballot-marker.js';
+import { MOCK_NODE_ENV } from '../apps/env-config.js';
 import {
   BallotMode,
   BallotType,
@@ -67,8 +68,9 @@ export async function runScanWorkflow(
   const usbController = createMockUsbController({ dataPath });
   const scannerController = createMockScannerController();
 
-  // Track existing thermal printer files to avoid duplicates
-  const printerWorkspace = join(repoPath, 'libs/fujitsu-thermal-printer/dev-workspace');
+  // Track existing thermal printer files to avoid duplicates. VxSuite writes
+  // mock printer output to <repo>/.mock-state/<NODE_ENV>/prints.
+  const printerWorkspace = join(repoPath, '.mock-state', MOCK_NODE_ENV);
   const existingPrinterFiles = new Set<string>();
   try {
     const printsDir = join(printerWorkspace, 'prints');
@@ -196,12 +198,34 @@ export async function runScanWorkflow(
     'Close the polls and print results reports',
   );
 
-  const pollWorkerCardForClosingPolls = await insertPollWorkerCard(page, electionPath);
-  await waitForTextInAppWithDebug(page, 'Do you want to close the polls?', {
-    timeout: 10000,
-    outputDir,
-    label: 'Waiting for close polls confirmation prompt',
-  });
+  // Insert the poll worker card to bring up the close-polls prompt. The mock
+  // card insertion can occasionally race with the app settling after the last
+  // scanned ballot, leaving the app on the voter screen, so retry the insertion
+  // a few times before giving up.
+  const closePollsPrompt = 'Do you want to close the polls?';
+  let pollWorkerCardForClosingPolls = await insertPollWorkerCard(page, electionPath);
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await waitForTextInApp(page, closePollsPrompt, { timeout: 10000 });
+      break;
+    } catch {
+      if (attempt >= 3) {
+        // Capture debug state on the final attempt, then fail.
+        await waitForTextInAppWithDebug(page, closePollsPrompt, {
+          timeout: 5000,
+          outputDir,
+          label: 'Waiting for close polls confirmation prompt',
+        });
+        break;
+      }
+      logger.warn(
+        `Close-polls prompt not shown (attempt ${attempt}); re-inserting poll worker card`,
+      );
+      await pollWorkerCardForClosingPolls.removeCard();
+      await page.waitForTimeout(1000);
+      pollWorkerCardForClosingPolls = await insertPollWorkerCard(page, electionPath);
+    }
+  }
 
   await clickButtonWithDebug(page, 'Close Polls', {
     timeout: 10000,
@@ -367,6 +391,18 @@ async function scanBallot(
         .filter(([, votes]) => votes.length > 0),
     );
 
+    // A contest marked beyond its seat count is an overvote: the scanner counts
+    // no selections for it (only an overvote). Drop such contests so the
+    // recorded votes reflect what is actually counted — this matters when an
+    // overvoted ballot is cast (accepted) rather than returned.
+    for (const [contestId, contestVotes] of Object.entries(votesForSheet)) {
+      const contest = election.contests.find((c) => c.id === contestId);
+      const seats = contest?.type === 'candidate' ? contest.seats : 1;
+      if (contestVotes.length > seats) {
+        delete votesForSheet[contestId];
+      }
+    }
+
     // Convert votes to IDs for validation (handles both Candidate objects and string IDs)
     const votesAsIds = votesWithOnlyIds(votesForSheet);
 
@@ -435,8 +471,53 @@ async function scanBallot(
     const messageText = await message.innerText();
     logger.debug(`Message after sheet ${sheetIndex + 1}: ${messageText}`);
 
-    // If rejected, handle immediately and stop scanning more sheets
-    if (messageText !== 'Your ballot was counted!' && /ballot|wrong/i.test(messageText)) {
+    // A ballot the scanner won't count outright presents a review screen
+    // ("Review Your Ballot") or a wrong-election/precinct rejection.
+    const needsReview =
+      messageText !== 'Your ballot was counted!' && /ballot|wrong/i.test(messageText);
+
+    if (needsReview && ballot.expectedAccepted) {
+      // A castable warning we choose to cast anyway, e.g. an overvote when the
+      // election allows casting overvotes. Click "Cast Ballot" and confirm the
+      // ballot is counted.
+      logger.info(
+        `Ballot needs review after sheet ${sheetIndex + 1}/${sheetCount}: ${messageText}; casting anyway`,
+      );
+      await stepCollector.captureScreenshot(
+        `scan-${ballotStyleId}-${markPattern}-sheet-${sheetIndex + 1}-review`,
+        `Ballot needs review (casting anyway): ${ballotStyleId} ${markPattern}`,
+      );
+
+      await page.waitForTimeout(1000);
+      await page.getByRole('button', { name: 'Cast Ballot' }).click();
+      try {
+        await waitForTextInApp(page, 'Your ballot was counted!');
+      } catch (error) {
+        await stepCollector.captureScreenshot(
+          'timeout-cast-ballot',
+          'Timeout waiting for ballot to be counted after casting',
+        );
+        throw error;
+      }
+
+      const screenshot = await stepCollector.captureScreenshot(
+        `scan-${ballotStyleId}-${markPattern}-sheet-${sheetIndex + 1}`,
+        `Ballot cast after review: ${ballotStyleId} ${markPattern} (${sheetIndex + 1}/${sheetCount})`,
+      );
+
+      await stepCollector.addOutput({
+        type: 'scan-result',
+        label: `Scan Result ${sheetIndex + 1} of ${sheetCount}`,
+        description: 'Ballot cast after review',
+        accepted: true,
+        expected: ballot.expectedAccepted,
+        screenshotPath: screenshot.path,
+        ballotStyleId,
+        ballotMode: ballot.ballotMode,
+        markPattern,
+        votes: votesForSheet,
+      });
+    } else if (needsReview) {
       logger.info(`Ballot rejected after sheet ${sheetIndex + 1}/${sheetCount}: ${messageText}`);
 
       const screenshot = await stepCollector.captureScreenshot(

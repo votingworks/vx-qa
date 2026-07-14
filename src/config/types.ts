@@ -4,6 +4,7 @@
 
 import { BallotToScan } from '../automation/scan-workflow.js';
 import { BallotMode, BallotType, VotesDict } from '../ballots/election-loader.js';
+import type { VxSuiteVersion } from './versions.js';
 
 export type BallotPattern =
   | 'blank'
@@ -15,15 +16,25 @@ export type BallotPattern =
 export interface VxSuiteConfig {
   /** Path where VxSuite repo should be cloned */
   repoPath: string;
-  /** Git tag/branch/rev to checkout (e.g., "v4.0.4") */
-  ref: string;
+  /** VxSuite version to run against; the git ref is derived from this. */
+  version: VxSuiteVersion;
   /** Force a fresh clone even if repo exists */
   forceClone?: boolean;
+}
+
+export interface SystemSettingsOverrides {
+  /** Override whether VxScan refuses to cast overvoted ballots. */
+  disallowCastingOvervotes?: boolean;
 }
 
 export interface ElectionConfig {
   /** Path to election package ZIP (election-package-and-ballots-*.zip) */
   source: string;
+  /**
+   * Optional overrides applied to the election package's systemSettings before
+   * loading it into VxAdmin, so one package can exercise multiple behaviors.
+   */
+  systemSettingsOverrides?: SystemSettingsOverrides;
 }
 
 export interface BallotConfig {
@@ -36,10 +47,28 @@ export interface OutputConfig {
   directory: string;
 }
 
+/**
+ * How VxAdmin tallies CVRs relative to precincts:
+ * - 'consolidated': one VxAdmin session imports and tallies CVRs from every
+ *   precinct together (current/default behavior).
+ * - 'per-precinct': each precinct gets its own configure→scan→import→tally→
+ *   report→unconfigure cycle, run sequentially. Used for NH "city" elections
+ *   where each ward is its own legal reporting unit. Combining per-ward
+ *   results into one city-wide report is out of scope.
+ */
+export type TallyMode = 'consolidated' | 'per-precinct';
+
+export const TALLY_MODES = ['consolidated', 'per-precinct'] as const satisfies readonly TallyMode[];
+
 export interface QARunConfig {
   vxsuite: VxSuiteConfig;
   election: ElectionConfig;
   output: OutputConfig;
+  /**
+   * Left unset to auto-detect from the loaded election (see
+   * config/tally-mode.ts's determineTallyMode); set explicitly to override.
+   */
+  tallyMode?: TallyMode;
   basePath?: string;
 }
 

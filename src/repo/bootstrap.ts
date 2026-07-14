@@ -2,15 +2,38 @@
  * Bootstrap and setup VxSuite repository
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { logger } from '../utils/logger.js';
 import { execCommandWithOutput, execCommand } from '../utils/process.js';
 
 /**
- * Check if the repository needs bootstrapping
+ * Marker file recording the commit that was last successfully bootstrapped in
+ * a given repoPath. A repoPath is reused across VxSuite versions (see
+ * cloneOrUpdateRepo checking out different tags in place), and node_modules /
+ * build output from one version's dependencies (e.g. a different Vite major)
+ * silently persists across a checkout switch unless something forces a
+ * reinstall.
  */
-export function needsBootstrap(repoPath: string): boolean {
+const BOOTSTRAP_COMMIT_MARKER = '.vx-qa-bootstrap-commit';
+
+function readBootstrappedCommit(repoPath: string): string | undefined {
+  try {
+    return readFileSync(join(repoPath, BOOTSTRAP_COMMIT_MARKER), 'utf-8').trim();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Check if the repository needs bootstrapping. Returns true if node_modules
+ * or the app builds are missing, or if the currently checked-out `commit`
+ * doesn't match the one recorded by the last successful bootstrap of this
+ * repoPath -- otherwise switching versions in a shared repoPath would reuse
+ * stale, wrong-version node_modules instead of reinstalling.
+ */
+export function needsBootstrap(repoPath: string, commit: string): boolean {
   // Check if node_modules exists in the root
   const nodeModulesPath = join(repoPath, 'node_modules');
   if (!existsSync(nodeModulesPath)) {
@@ -29,20 +52,30 @@ export function needsBootstrap(repoPath: string): boolean {
     existsSync(scanFrontendBuild) &&
     existsSync(scanBackendBuild);
 
-  return !allBuildsExist;
+  if (!allBuildsExist) {
+    return true;
+  }
+
+  return readBootstrappedCommit(repoPath) !== commit;
 }
 
 /**
  * Run the bootstrap script to set up the repository
  * Only bootstraps admin and scan apps to save time
  */
-export async function bootstrapRepo(repoPath: string): Promise<void> {
-  if (!needsBootstrap(repoPath)) {
+export async function bootstrapRepo(repoPath: string, commit: string): Promise<void> {
+  if (!needsBootstrap(repoPath, commit)) {
     logger.info('Repository already bootstrapped, skipping...');
     return;
   }
 
   logger.step('Bootstrapping admin and scan apps (this may take several minutes)...');
+
+  // Use the pnpm version VxSuite pins in its `packageManager` field. Different
+  // VxSuite versions pin different pnpm versions (e.g. v4.0 -> 8.15.5, v4.1 ->
+  // 9.15.9), and building under the wrong pnpm can mis-resolve optional native
+  // deps (e.g. v4.1's Vite/rolldown binding fails to install under pnpm 10).
+  await useVxSuitePinnedPnpm(repoPath);
 
   // First, run pnpm install at the root to set up all workspace symlinks
   logger.info('Installing workspace dependencies...');
@@ -54,6 +87,14 @@ export async function bootstrapRepo(repoPath: string): Promise<void> {
   if (installCode !== 0) {
     throw new Error(`pnpm install failed with code ${installCode}`);
   }
+
+  // Allow the Rust addon builds to fetch crates. VxSuite's addons (pdi-scanner,
+  // ballot-interpreter) build with `cargo build --offline`, which requires
+  // every crate to already be in that build's cargo cache. The CI image only
+  // caches crates for its own VxSuite version, so building a different ref hits
+  // crates it hasn't seen (e.g. `csv`) and fails. Drop `--offline` so the build
+  // downloads what it needs.
+  await allowOnlineRustBuilds(repoPath);
 
   // Then build just the admin and scan apps (and their dependencies)
   // Use the "..." filter syntax to include all dependencies
@@ -71,7 +112,71 @@ export async function bootstrapRepo(repoPath: string): Promise<void> {
     throw new Error(`Build failed with code ${bootstrapCode}`);
   }
 
+  await writeFile(join(repoPath, BOOTSTRAP_COMMIT_MARKER), commit);
+
   logger.success('Admin and scan apps bootstrapped successfully');
+}
+
+/**
+ * Install (globally) the pnpm version VxSuite pins in its `packageManager`
+ * field, so the workspace is built with the pnpm it was locked and tested with.
+ * No-op if the field is missing/unparseable.
+ */
+async function useVxSuitePinnedPnpm(repoPath: string): Promise<void> {
+  let packageManager: string | undefined;
+  try {
+    const pkg = JSON.parse(await readFile(join(repoPath, 'package.json'), 'utf-8'));
+    packageManager = pkg.packageManager;
+  } catch {
+    return;
+  }
+
+  // e.g. "pnpm@9.15.9" or "pnpm@9.15.9+sha512.abc..."
+  const match = packageManager?.match(/^pnpm@(\d+\.\d+\.\d+)/);
+  if (!match) {
+    return;
+  }
+
+  const version = match[1];
+  logger.info(`Installing VxSuite's pinned pnpm@${version}...`);
+  const code = await execCommandWithOutput('npm', ['install', '-g', `pnpm@${version}`], {
+    env: { ...process.env },
+  });
+  if (code !== 0) {
+    logger.warn(`Failed to install pnpm@${version} (code ${code}); continuing with current pnpm`);
+  }
+}
+
+/**
+ * Rust addon build scripts that hard-code `cargo build --offline`, relative to
+ * the VxSuite repo root. Offline builds require all crates to be pre-cached,
+ * which isn't guaranteed when building an arbitrary ref in CI.
+ */
+const RUST_ADDON_PACKAGE_JSONS = [
+  'libs/pdi-scanner/package.json',
+  'libs/ballot-interpreter/package.json',
+];
+
+/**
+ * Strip `--offline` from VxSuite's Rust addon build scripts so cargo can
+ * download any crates missing from the local cache. Idempotent; skips files
+ * that don't exist or don't use `--offline`.
+ */
+async function allowOnlineRustBuilds(repoPath: string): Promise<void> {
+  for (const relPath of RUST_ADDON_PACKAGE_JSONS) {
+    const filePath = join(repoPath, relPath);
+    if (!existsSync(filePath)) {
+      continue;
+    }
+
+    const contents = await readFile(filePath, 'utf-8');
+    if (!contents.includes(' --offline')) {
+      continue;
+    }
+
+    await writeFile(filePath, contents.replaceAll(' --offline', ''));
+    logger.info(`Removed --offline from ${relPath}`);
+  }
 }
 
 /**

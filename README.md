@@ -38,13 +38,12 @@ pnpm start run --config my-config.json
 pnpm start run [options]
 
 Options:
-  -c, --config <path>      Path to configuration file
-  -s, --save-config <path> Save interactive selections to config file
-  -o, --output <dir>       Override output directory
-  -r, --ref <ref>          Override VxSuite tag/branch/rev
-  -e, --election <path>    Override election source path
-  --headless               Run browser in headless mode (default)
-  --no-headless            Run browser in headed mode for debugging
+  -c, --config <path>          Path to configuration file
+  -o, --output <dir>           Override output directory
+  --vxsuite-version <version>  Override VxSuite version (e.g. v4.0, v4.1)
+  -e, --election <path>        Override election source path
+  --headless                   Run browser in headless mode (default)
+  --no-headless                Run browser in headed mode for debugging
 ```
 
 ## Configuration
@@ -55,7 +54,7 @@ Example `vx-qa-config.json`:
 {
   "vxsuite": {
     "repoPath": "~/.vx-qa/vxsuite",
-    "ref": "v4.0.4"
+    "version": "v4.0"
   },
   "election": {
     "source": "./election-package-and-ballots.zip"
@@ -65,6 +64,25 @@ Example `vx-qa-config.json`:
   }
 }
 ```
+
+`vxsuite.version` selects which VxSuite release to run against. Values match
+VxSuite's own `SoftwareVersion` identifiers:
+
+| version  | git ref  | patch                |
+| -------- | -------- | -------------------- |
+| `"v4.0"` | `v4.0.7` | `vxsuite-v4.0.patch` |
+| `"v4.1"` | `v4.1.0` | `vxsuite-v4.1.patch` |
+
+The git ref and patch file are derived from the version; you don't set them
+directly. Older versions (≤ v4.0.4) are not supported.
+
+`tallyMode` (optional, defaults to `"consolidated"`) controls how VxAdmin
+tallies CVRs relative to precincts:
+
+| mode             | behavior                                                                                                                                        |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"consolidated"` | One VxAdmin session imports and tallies CVRs from every precinct together.                                                                      |
+| `"per-precinct"` | Each precinct gets its own configure → scan → import → tally → report → unconfigure cycle, run sequentially (e.g. NH "city" elections by ward). |
 
 ## Output
 
@@ -98,10 +116,15 @@ pnpm test
 The project runs automated QA tests in CircleCI using test fixtures in the `test-fixtures/` directory. The CI workflow:
 
 1. Runs unit tests with `pnpm test`
-2. Executes a full QA test run using the `vx-qa-config-e71c80e.json` configuration
+2. Executes a full QA test run per supported VxSuite version, using the
+   `vx-qa-config-<version>.json` fixtures (e.g. `vx-qa-config-v4.0.json`,
+   `vx-qa-config-v4.1.json`). Each version clones/builds its own pinned
+   VxSuite ref and applies that version's patch.
 3. Stores output artifacts for review
 
-Test configurations and election packages can be added to `test-fixtures/` to expand CI coverage.
+Each version's fixture references an election package exported from that same
+VxSuite version (v4.1's package must carry the newer `ballotPositions` ballot
+model). Add configurations and packages to `test-fixtures/` to expand coverage.
 
 ## Architecture
 

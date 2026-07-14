@@ -5,13 +5,15 @@
 import { Page, Locator } from '@playwright/test';
 import { logger } from '../utils/logger.js';
 import { createMockUsbController } from '../mock-hardware/usb.js';
-import { dipElectionManagerCardAndLogin } from './auth-helpers.js';
+import { dipElectionManagerCardAndLogin, logOut } from './auth-helpers.js';
 import {
   navigateToApp,
   waitForTextWithDebug,
   clickButtonWithDebug,
   clickTextInApp,
   toggleDevDock,
+  debugPageState,
+  getMainContent,
 } from './browser.js';
 import { loadCollection, type StepCollector, type ArtifactCollector } from '../report/artifacts.js';
 import { ArtifactCollection, StepOutput, ValidationResult } from '../config/types.js';
@@ -87,16 +89,25 @@ async function addManualTally(
   election: Election,
   collector: ArtifactCollector,
   limitManualTallies?: number,
+  precinctId?: string,
 ): Promise<void> {
   logger.step('Adding manual tallies for all ballot styles');
 
-  logger.info(`Found ${election.ballotStyles.length} ballot styles`);
+  // In per-precinct mode, only enter manual tallies for ballot styles that
+  // apply to this precinct — VxAdmin is still configured with the full
+  // multi-precinct election, but this cycle only imported this precinct's CVRs.
+  const ballotStyles =
+    precinctId !== undefined
+      ? election.ballotStyles.filter((bs) => bs.precincts.includes(precinctId))
+      : election.ballotStyles;
+
+  logger.info(`Found ${ballotStyles.length} ballot styles`);
 
   // Navigate to Manual Tallies tab
   await clickTextInApp(page, 'Manual Tallies');
   await page.waitForTimeout(1000);
 
-  if (election.ballotStyles.length === 0) {
+  if (ballotStyles.length === 0) {
     logger.info('No ballot styles in election - skipping manual tallies');
     return;
   }
@@ -104,18 +115,18 @@ async function addManualTally(
   // Determine how many ballot styles to process
   const ballotStylesToProcess =
     limitManualTallies !== undefined && limitManualTallies >= 0
-      ? Math.min(limitManualTallies, election.ballotStyles.length)
-      : election.ballotStyles.length;
+      ? Math.min(limitManualTallies, ballotStyles.length)
+      : ballotStyles.length;
 
   if (limitManualTallies !== undefined && limitManualTallies >= 0) {
     logger.info(
-      `Limited manual tallies to ${ballotStylesToProcess} ballot styles (from ${election.ballotStyles.length})`,
+      `Limited manual tallies to ${ballotStylesToProcess} ballot styles (from ${ballotStyles.length})`,
     );
   }
 
   // Loop through each ballot style
   for (let styleIndex = 0; styleIndex < ballotStylesToProcess; styleIndex++) {
-    const ballotStyle = election.ballotStyles[styleIndex];
+    const ballotStyle = ballotStyles[styleIndex];
     const ballotStyleGroupId = ballotStyle.id;
     const precinctId = ballotStyle.precincts[0]; // Use first precinct
     const contests = getContestsForBallotStyle(election, ballotStyleGroupId);
@@ -222,6 +233,17 @@ async function processBallotStyle(
 
     if (matchingSplit) {
       displayName = matchingSplit.name;
+    }
+  }
+
+  // In primary elections, VxAdmin labels each ballot-style option with the
+  // party appended (e.g. "Bedford - Democratic"). Without this suffix the
+  // dropdown option never matches, the style is never selected, and the
+  // Voting Method dropdown stays disabled.
+  if (ballotStyleInfo?.partyId) {
+    const party = election.parties?.find((p) => p.id === ballotStyleInfo.partyId);
+    if (party) {
+      displayName = `${displayName} - ${party.name}`;
     }
   }
 
@@ -509,6 +531,7 @@ async function loadCvrs(
   election: Election,
   outputDir: string,
   stepCollector: StepCollector,
+  precinctId?: string,
 ): Promise<void> {
   await stepCollector.captureScreenshot('admin-tally-locked', 'VxAdmin locked (before tally)');
   await stepCollector.captureScreenshot('admin-tally-logged-in', 'Logged in as Election Manager');
@@ -540,51 +563,126 @@ async function loadCvrs(
   await page.waitForTimeout(1000);
   await stepCollector.captureScreenshot('admin-tally-page', 'Tally page');
 
-  // Look for CVR files on USB and import them
+  // Look for CVR files on USB and import them. In per-precinct mode, only
+  // this precinct's VxScan export is expected to be on the USB (the prior
+  // precinct's has been cleared); otherwise every precinct's export is.
   logger.debug('Looking for CVR files to import');
 
-  for (let i = 0; i <= election.precincts.length + 1; i += 1) {
-    if (i === election.precincts.length + 1) {
-      throw new Error('Expected 1 VxScan per precinct, but found more than that');
+  const expectedCvrFileCount = precinctId !== undefined ? 1 : election.precincts.length;
+
+  // v4.0 labels the CVR-import opener "Load CVRs" (matched by text) and uses
+  // a modal (role="alertdialog") with a "Load" button per row, closed via
+  // "Cancel"/"Close". v4.1's rewritten CVR screen uses an icon button
+  // labeled "Load" (class `LoadButton`, since its icon pollutes the
+  // accessible name) that swaps the view panel for an inline import panel --
+  // not a modal -- with one card per export (icon label "Load"/"Loading"/
+  // "Loaded"), closed via a "Done" button. Detect which UI this build has
+  // once, up front, and use the matching flow throughout.
+  const usesModalCvrImport = (await page.getByText('Load CVRs').count()) > 0;
+
+  await stepCollector.captureScreenshot('admin-tally-before-load-cvrs', 'Before click Load CVRs');
+
+  try {
+    if (usesModalCvrImport) {
+      await page.getByText('Load CVRs').first().click({ timeout: 15000 });
+    } else {
+      await page.locator('.LoadButton').first().click({ timeout: 15000 });
+    }
+  } catch (error) {
+    await debugPageState(page, 'Failed to open CVR import screen', outputDir);
+    throw error;
+  }
+  await page.waitForTimeout(1000);
+  await stepCollector.captureScreenshot('admin-tally-load-cvr-dialog', 'Load CVR dialog');
+
+  if (usesModalCvrImport) {
+    for (let i = 0; i <= expectedCvrFileCount + 1; i += 1) {
+      if (i === expectedCvrFileCount + 1) {
+        throw new Error(
+          `Expected ${expectedCvrFileCount} VxScan CVR file(s), but found more than that`,
+        );
+      }
+
+      // Find and click the Load button in the modal table for the first CVR
+      // file. Each row in the table has a "Load" button (or "Loaded" if
+      // already imported).
+      const modal = page.locator('[role="alertdialog"]');
+      const loadButtons = modal.getByRole('button', { name: 'Load', exact: true });
+
+      const loadButtonCount = await loadButtons.count();
+      logger.debug(`Found ${loadButtonCount} Load buttons in CVR modal`);
+
+      if (loadButtonCount === 0) {
+        // No more to load, close the modal
+        await modal.getByText('Cancel').click();
+        break;
+      }
+
+      await loadButtons.first().click();
+
+      // Wait for success message "X New CVR Loaded" or "X New CVRs Loaded"
+      await waitForTextWithDebug(page, 'New CVR', {
+        timeout: 30000,
+        outputDir,
+        label: 'Waiting for CVRs to be loaded',
+      });
+
+      await stepCollector.captureScreenshot(
+        'admin-tally-cvrs-loaded-success',
+        'CVRs loaded successfully',
+      );
+
+      // Close the success dialog
+      await page.getByRole('button', { name: 'Close' }).click();
+
+      // Re-open the modal for the next file, if any remain.
+      if (i < expectedCvrFileCount) {
+        await page.getByText('Load CVRs').first().click({ timeout: 15000 });
+        await page.waitForTimeout(1000);
+      }
+    }
+  } else {
+    const mainContent = getMainContent(page);
+
+    for (let i = 0; i <= expectedCvrFileCount + 1; i += 1) {
+      if (i === expectedCvrFileCount + 1) {
+        throw new Error(
+          `Expected ${expectedCvrFileCount} VxScan CVR file(s), but found more than that`,
+        );
+      }
+
+      // Each not-yet-imported export renders as a card whose icon label is
+      // exactly "Load" (in-progress/imported cards read "Loading"/"Loaded"
+      // instead); clicking anywhere inside the card (including this label)
+      // registers as a click on its enclosing button.
+      const readyToLoad = mainContent.getByText('Load', { exact: true });
+      const readyCount = await readyToLoad.count();
+      logger.debug(`Found ${readyCount} ready-to-load CVR export(s)`);
+
+      if (readyCount === 0) {
+        break;
+      }
+
+      await readyToLoad.first().click();
+
+      // The import is near-instant for a small mock CVR file; no modal
+      // appears for a normal first-time import; it only appears if the
+      // export partially overlaps one already loaded (not expected here),
+      // so dismiss it defensively if present rather than waiting for it.
+      await page.waitForTimeout(2000);
+      const closeAlertButton = mainContent.getByText('Close', { exact: true });
+      if ((await closeAlertButton.count()) > 0) {
+        await closeAlertButton.first().click();
+      }
+
+      await stepCollector.captureScreenshot(
+        `admin-tally-cvrs-loaded-success-${i}`,
+        'CVRs loaded successfully',
+      );
     }
 
-    await stepCollector.captureScreenshot('admin-tally-before-load-cvrs', 'Before click Load CVRs');
-
-    // Click the "Load CVRs" button
-    await page.getByText('Load CVRs').click();
-    await page.waitForTimeout(1000);
-    await stepCollector.captureScreenshot('admin-tally-load-cvr-dialog', 'Load CVR dialog');
-
-    // Find and click the Load button in the modal table for the first CVR file
-    // Each row in the table has a "Load" button (or "Loaded" if already imported)
-    const modal = page.locator('[role="alertdialog"]');
-    const loadButtons = modal.getByRole('button', { name: 'Load', exact: true });
-
-    const loadButtonCount = await loadButtons.count();
-    logger.debug(`Found ${loadButtonCount} Load buttons in CVR modal`);
-
-    if (loadButtonCount === 0) {
-      // No more to load, close the modal
-      await modal.getByText('Cancel').click();
-      break;
-    }
-
-    await loadButtons.first().click();
-
-    // Wait for success message "X New CVR Loaded" or "X New CVRs Loaded"
-    await waitForTextWithDebug(page, 'New CVR', {
-      timeout: 30000,
-      outputDir,
-      label: 'Waiting for CVRs to be loaded',
-    });
-
-    await stepCollector.captureScreenshot(
-      'admin-tally-cvrs-loaded-success',
-      'CVRs loaded successfully',
-    );
-
-    // Close the success dialog
-    await page.getByRole('button', { name: 'Close' }).click();
+    // Close the import panel
+    await mainContent.getByText('Done', { exact: true }).click();
   }
 
   await page.waitForTimeout(1000);
@@ -600,6 +698,7 @@ async function generateReports(
   page: Page,
   usbController: ReturnType<typeof createMockUsbController>,
   stepCollector: StepCollector,
+  precinct?: Precinct,
 ): Promise<void> {
   // Navigate to Reports section
   logger.debug('Navigating to Reports section');
@@ -609,10 +708,24 @@ async function generateReports(
   await page.waitForTimeout(1000);
   await stepCollector.captureScreenshot('admin-reports-page', 'Reports page');
 
-  // Generate tally report by clicking the link
+  // Generate tally report by clicking the link. In per-precinct mode,
+  // VxAdmin is still configured with the full multi-precinct election (only
+  // the imported CVRs are scoped to this precinct), so "Full Election"/"All
+  // Precincts" reports would show every precinct's row. The single-precinct
+  // report scopes the output to just this precinct's own results.
   logger.debug('Generating tally report');
 
-  await clickTextInApp(page, 'Full Election Tally Report');
+  if (precinct) {
+    await clickTextInApp(page, 'Single Precinct Tally Report');
+    await page.waitForTimeout(1000);
+
+    const precinctSelect = page.getByLabel('Select Precinct');
+    await precinctSelect.click();
+    await page.waitForTimeout(500);
+    await page.getByText(precinct.name, { exact: true }).last().click();
+  } else {
+    await clickTextInApp(page, 'Full Election Tally Report');
+  }
 
   await page.waitForTimeout(2000);
   await stepCollector.captureScreenshot('admin-tally-report-preview', 'Tally report preview');
@@ -658,11 +771,13 @@ async function generateReports(
   const exportedPdfPath = await findExportedTallyReport(usbDataPath);
   const exportedCsvPath = await findExportedTallyCsv(usbDataPath);
 
+  const reportScope = precinct ? `Single Precinct (${precinct.name}) Tally` : 'Full Election Tally';
+
   if (exportedPdfPath) {
     await stepCollector.addOutput({
       type: 'report',
       label: 'Tally Report PDF',
-      description: 'Exported Full Election Tally Report',
+      description: `Exported ${reportScope} Report`,
       path: exportedPdfPath,
     });
   }
@@ -671,7 +786,7 @@ async function generateReports(
     await stepCollector.addOutput({
       type: 'report',
       label: 'Tally Report CSV',
-      description: 'Exported Full Election Tally CSV',
+      description: `Exported ${reportScope} CSV`,
       path: exportedCsvPath,
     });
   }
@@ -687,8 +802,14 @@ export async function runAdminTallyWorkflow(
   dataPath: string,
   collector: ArtifactCollector,
   limitManualTallies?: number,
+  precinctId?: string,
 ): Promise<void> {
   logger.step('Running VxAdmin tally workflow');
+
+  const precinct = precinctId ? election.precincts.find((p) => p.id === precinctId) : undefined;
+  if (precinctId && !precinct) {
+    throw new Error(`Precinct ${precinctId} not found in election`);
+  }
 
   await page.setViewportSize({
     width: 1920,
@@ -716,11 +837,11 @@ export async function runAdminTallyWorkflow(
     'Import CVR files from VxScan USB drives',
   );
 
-  await loadCvrs(page, election, outputDir, loadCvrsStep);
+  await loadCvrs(page, election, outputDir, loadCvrsStep, precinctId);
   loadCvrsStep.complete();
 
   // Step 2: Add manual tallies (creates individual steps for each ballot style)
-  await addManualTally(page, election, collector, limitManualTallies);
+  await addManualTally(page, election, collector, limitManualTallies, precinctId);
 
   // Step 3: Generate reports
   const reportsStep = await collector.startStep(
@@ -730,15 +851,18 @@ export async function runAdminTallyWorkflow(
     'Generate and export tally reports as PDF and CSV',
   );
 
-  await generateReports(page, usbController, reportsStep);
+  await generateReports(page, usbController, reportsStep, precinct);
   reportsStep.complete();
 
-  // Lock machine before logging out
+  // Lock machine before logging out. Uses the shared logOut helper (rather
+  // than a bare click + fixed timeout) so it waits for the machine to
+  // actually reach the locked state -- in consolidated mode nothing touches
+  // the page afterward so this was previously inconsequential, but in
+  // per-precinct mode the next precinct's unconfigure step immediately
+  // inserts a new card, which can race an unconfirmed lock transition.
   logger.debug('Locking machine');
 
-  await clickTextInApp(page, 'Lock Machine');
-
-  await page.waitForTimeout(500);
+  await logOut(page);
 
   await reportsStep.captureScreenshot('admin-tally-logged-out', 'Logged out after tally');
 
@@ -832,16 +956,150 @@ export interface Adjudications {
 }
 
 /**
- * Validate tally results against scanned ballots and manual tallies
+ * Compare accumulated expected votes (from scan results + manual tallies)
+ * against a single tally report CSV, and record the result on that output.
+ */
+async function validateTallyCsv(
+  tallyCsvOutput: Extract<StepOutput, { type: 'report' }>,
+  expectedVotes: Map<string, Map<string, number>>,
+): Promise<ValidationResult> {
+  // Parse CSV to get actual vote counts by selection ID
+  // CSV format varies based on whether manual tallies exist:
+  // - With manual tallies: Contest,Contest ID,Selection,Selection ID,Manual Votes,Scanned Votes,Total Votes
+  // - Without manual tallies: Contest,Contest ID,Selection,Selection ID,Total Votes
+  const csvContent = await readFile(tallyCsvOutput.path, 'utf-8');
+  const lines = csvContent.trim().split('\n');
+
+  // Determine CSV format by checking the header row
+  const headerLine = parseCsvLine(lines[1]);
+  const columnMap = new Map<string, number>();
+  for (let i = 0; i < headerLine.length; i++) {
+    columnMap.set(headerLine[i], i);
+  }
+
+  const hasManualResults = columnMap.has('Manual Votes');
+  const totalVotesColumnIndex = columnMap.get('Total Votes');
+
+  if (totalVotesColumnIndex === undefined) {
+    throw new Error('CSV header does not contain "Total Votes" column');
+  }
+
+  logger.debug(
+    `CSV format: ${hasManualResults ? 'with manual tallies (7 columns)' : 'scanned only (5 columns)'}`,
+  );
+
+  const actualVotes = new Map<string, Map<string, number>>(); // contestId -> selectionId -> count
+  let totalExpectedVotes = 0;
+  let totalActualVotes = 0;
+
+  for (let i = 2; i < lines.length; i += 1) {
+    // Skip header row at index 1
+    const line = lines[i];
+    if (!line.trim()) continue;
+
+    const fields = parseCsvLine(line);
+    const contestIdIndex = columnMap.get('Contest ID');
+    const selectionIdIndex = columnMap.get('Selection ID');
+
+    if (contestIdIndex !== undefined && selectionIdIndex !== undefined && hasManualResults) {
+      const contestId = fields[contestIdIndex];
+      const selectionId = fields[selectionIdIndex];
+      const votes = parseInt(fields[totalVotesColumnIndex] || '0', 10);
+
+      // Skip non-candidate metric rows. v4.1's tally CSV adds a per-contest
+      // 'ballots-cast' selection alongside 'overvotes'/'undervotes'; none are
+      // candidate votes.
+      const metricSelectionIds = ['overvotes', 'undervotes', 'ballots-cast'];
+      if (!isNaN(votes) && !metricSelectionIds.includes(selectionId)) {
+        if (!actualVotes.has(contestId)) {
+          actualVotes.set(contestId, new Map());
+        }
+        const contestMap = actualVotes.get(contestId) as Map<string, number>;
+        contestMap.set(selectionId, (contestMap.get(selectionId) ?? 0) + votes);
+
+        if (votes > 0) {
+          totalActualVotes += votes;
+        }
+      }
+    }
+  }
+
+  // Count expected votes
+  for (const contest of expectedVotes.values()) {
+    for (const count of contest.values()) {
+      totalExpectedVotes += count;
+    }
+  }
+
+  // Compare expected vs actual votes by candidate
+  const mismatches: string[] = [];
+
+  for (const [contestId, candidates] of expectedVotes) {
+    for (const [candidateId, expectedCount] of candidates) {
+      const actualCount = actualVotes.get(contestId)?.get(candidateId) ?? 0;
+      if (actualCount !== expectedCount) {
+        mismatches.push(
+          `Contest ${contestId}, Candidate ${candidateId}: expected ${expectedCount} based on marked ballots, got ${actualCount} from tally CSV`,
+        );
+      }
+    }
+  }
+
+  // Check for votes in CSV that weren't expected
+  for (const [contestId, candidates] of actualVotes) {
+    for (const [selectionId, actualCount] of candidates) {
+      if (actualCount > 0) {
+        let found = false;
+        for (const candidates of expectedVotes.values()) {
+          if (candidates.get(selectionId)) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          mismatches.push(
+            `Unexpected votes in CSV for ${contestId}/${selectionId}: ${actualCount}`,
+          );
+        }
+      }
+    }
+  }
+
+  logger.debug(
+    `Validation - Expected votes: ${totalExpectedVotes}, Actual votes: ${totalActualVotes}`,
+  );
+
+  tallyCsvOutput.validationResult =
+    mismatches.length > 0
+      ? {
+          isValid: false,
+          message: `Tally mismatch: ${mismatches.join('; ')}`,
+        }
+      : {
+          isValid: true,
+          message: `Tally validated: ${totalExpectedVotes} vote(s) match CSV exactly`,
+        };
+  return tallyCsvOutput.validationResult;
+}
+
+/**
+ * Validate tally results against scanned ballots and manual tallies.
+ *
+ * In consolidated mode there's exactly one tally report CSV, covering every
+ * precinct's scan-results/manual-tallies. In per-precinct mode there's one
+ * CSV per precinct cycle; each is validated against only the scan-results/
+ * manual-tallies that preceded it (steps are processed in chronological
+ * order, and the expected-votes accumulator resets after each CSV), so one
+ * precinct's tally never gets checked against another's votes.
  */
 export async function validateTallyResults(
   collection: ArtifactCollection,
 ): Promise<ValidationResult> {
   try {
-    let tallyCsvOutput: Extract<StepOutput, { type: 'report' }> | undefined;
+    const reportResults: ValidationResult[] = [];
 
     // Get votes from accepted scan results stored in step outputs
-    const expectedVotes = new Map<string, Map<string, number>>(); // contestId -> optionId -> count
+    let expectedVotes = new Map<string, Map<string, number>>(); // contestId -> optionId -> count
     let totalOutputs = 0;
     let manualTallyCount = 0;
 
@@ -894,132 +1152,31 @@ export async function validateTallyResults(
           output.path.includes('tally-report') &&
           output.path.endsWith('.csv')
         ) {
-          tallyCsvOutput = output;
+          logger.debug(
+            `Validation: processed ${totalOutputs} scanned sheets and ${manualTallyCount} manual tally entries for this report`,
+          );
+          reportResults.push(await validateTallyCsv(output, expectedVotes));
+
+          // Reset the accumulator so the next report (if any, in per-precinct
+          // mode) is only compared against votes recorded after this one.
+          expectedVotes = new Map();
+          totalOutputs = 0;
+          manualTallyCount = 0;
         }
       }
     }
 
-    if (!tallyCsvOutput) {
+    if (reportResults.length === 0) {
       throw new Error('No tally report CSV output found');
     }
 
-    logger.debug(
-      `Validation: processed ${totalOutputs} scanned sheets and ${manualTallyCount} manual tally entries`,
-    );
+    const isValid = reportResults.every((result) => result.isValid);
+    const message =
+      reportResults.length === 1
+        ? reportResults[0].message
+        : reportResults.map((result, i) => `Report ${i + 1}: ${result.message}`).join(' | ');
 
-    // Parse CSV to get actual vote counts by selection ID
-    // CSV format varies based on whether manual tallies exist:
-    // - With manual tallies: Contest,Contest ID,Selection,Selection ID,Manual Votes,Scanned Votes,Total Votes
-    // - Without manual tallies: Contest,Contest ID,Selection,Selection ID,Total Votes
-    const csvContent = await readFile(tallyCsvOutput.path, 'utf-8');
-    const lines = csvContent.trim().split('\n');
-
-    // Determine CSV format by checking the header row
-    const headerLine = parseCsvLine(lines[1]);
-    const columnMap = new Map<string, number>();
-    for (let i = 0; i < headerLine.length; i++) {
-      columnMap.set(headerLine[i], i);
-    }
-
-    const hasManualResults = columnMap.has('Manual Votes');
-    const totalVotesColumnIndex = columnMap.get('Total Votes');
-
-    if (totalVotesColumnIndex === undefined) {
-      throw new Error('CSV header does not contain "Total Votes" column');
-    }
-
-    logger.debug(
-      `CSV format: ${hasManualResults ? 'with manual tallies (7 columns)' : 'scanned only (5 columns)'}`,
-    );
-
-    const actualVotes = new Map<string, Map<string, number>>(); // contestId -> selectionId -> count
-    let totalExpectedVotes = 0;
-    let totalActualVotes = 0;
-
-    for (let i = 2; i < lines.length; i += 1) {
-      // Skip header row at index 1
-      const line = lines[i];
-      if (!line.trim()) continue;
-
-      const fields = parseCsvLine(line);
-      const contestIdIndex = columnMap.get('Contest ID');
-      const selectionIdIndex = columnMap.get('Selection ID');
-
-      if (contestIdIndex !== undefined && selectionIdIndex !== undefined && hasManualResults) {
-        const contestId = fields[contestIdIndex];
-        const selectionId = fields[selectionIdIndex];
-        const votes = parseInt(fields[totalVotesColumnIndex] || '0', 10);
-
-        if (!isNaN(votes) && selectionId !== 'overvotes' && selectionId !== 'undervotes') {
-          if (!actualVotes.has(contestId)) {
-            actualVotes.set(contestId, new Map());
-          }
-          const contestMap = actualVotes.get(contestId) as Map<string, number>;
-          contestMap.set(selectionId, (contestMap.get(selectionId) ?? 0) + votes);
-
-          if (votes > 0) {
-            totalActualVotes += votes;
-          }
-        }
-      }
-    }
-
-    // Count expected votes
-    for (const contest of expectedVotes.values()) {
-      for (const count of contest.values()) {
-        totalExpectedVotes += count;
-      }
-    }
-
-    // Compare expected vs actual votes by candidate
-    const mismatches: string[] = [];
-
-    for (const [contestId, candidates] of expectedVotes) {
-      for (const [candidateId, expectedCount] of candidates) {
-        const actualCount = actualVotes.get(contestId)?.get(candidateId) ?? 0;
-        if (actualCount !== expectedCount) {
-          mismatches.push(
-            `Contest ${contestId}, Candidate ${candidateId}: expected ${expectedCount} based on marked ballots, got ${actualCount} from tally CSV`,
-          );
-        }
-      }
-    }
-
-    // Check for votes in CSV that weren't expected
-    for (const [contestId, candidates] of actualVotes) {
-      for (const [selectionId, actualCount] of candidates) {
-        if (actualCount > 0) {
-          let found = false;
-          for (const candidates of expectedVotes.values()) {
-            if (candidates.get(selectionId)) {
-              found = true;
-              break;
-            }
-          }
-          if (!found) {
-            mismatches.push(
-              `Unexpected votes in CSV for ${contestId}/${selectionId}: ${actualCount}`,
-            );
-          }
-        }
-      }
-    }
-
-    logger.debug(
-      `Validation - Expected votes: ${totalExpectedVotes}, Actual votes: ${totalActualVotes}`,
-    );
-
-    tallyCsvOutput.validationResult =
-      mismatches.length > 0
-        ? {
-            isValid: false,
-            message: `Tally mismatch: ${mismatches.join('; ')}`,
-          }
-        : {
-            isValid: true,
-            message: `Tally validated: ${totalExpectedVotes} vote(s) match CSV exactly`,
-          };
-    return tallyCsvOutput.validationResult;
+    return { isValid, message };
   } catch (error) {
     throw new Error(
       `Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,

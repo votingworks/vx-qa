@@ -5,6 +5,8 @@
 import { logger, formatDuration, printDivider } from '../utils/logger.js';
 import { resolvePath } from '../utils/paths.js';
 import type { QARunConfig, WebhookConfig } from '../config/types.js';
+import { getVersionSpec } from '../config/versions.js';
+import { determineTallyMode } from '../config/tally-mode.js';
 import { existsSync } from 'node:fs';
 import { relative } from 'node:path';
 
@@ -18,16 +20,21 @@ import {
 } from '../repo/bootstrap.js';
 
 // Election package loading
-import { loadElectionPackage } from '../ballots/election-loader.js';
+import { applySystemSettingsOverrides, loadElectionPackage } from '../ballots/election-loader.js';
 
 // App orchestration
 import { createAppOrchestrator, ensureNoAppsRunning } from '../apps/orchestrator.js';
+import { MOCK_NODE_ENV } from '../apps/env-config.js';
 
 // Browser automation
 import { createBrowserSession } from '../automation/browser.js';
-import { runAdminConfigureWorkflow } from '../automation/admin-workflow.js';
+import {
+  runAdminConfigureWorkflow,
+  runAdminUnconfigureWorkflow,
+} from '../automation/admin-workflow.js';
 import { runScanWorkflow, type BallotToScan } from '../automation/scan-workflow.js';
 import { runAdminTallyWorkflow } from '../automation/admin-tally-workflow.js';
+import { createMockUsbController } from '../mock-hardware/usb.js';
 
 // Proof ballot generation
 import { generateProofBallot } from '../ballots/proof-ballot.js';
@@ -65,7 +72,7 @@ function buildResultsUrl(reportPath: string): string | undefined {
 }
 
 /**
- * Get the project root directory (where vxsuite.patch is located)
+ * Get the project root directory (where the vxsuite-*.patch files are located)
  */
 function getProjectRoot(): string {
   // Get the directory of this source file
@@ -135,15 +142,18 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     const commit = await getCurrentCommit(repoPath);
     logger.info(`Repository at ${repoPath} (commit: ${commit.slice(0, 8)})`);
 
-    // Apply patch if it exists (look in project root, not CWD)
+    // Apply the version-specific patch if it exists (look in project root, not CWD)
     const projectRoot = getProjectRoot();
-    const patchPath = join(projectRoot, 'vxsuite.patch');
+    const { patchFile } = getVersionSpec(config.vxsuite.version);
+    const patchPath = join(projectRoot, patchFile);
     if (existsSync(patchPath)) {
       logger.info(`Applying patch from ${patchPath}`);
       await applyPatch(repoPath, patchPath);
+    } else {
+      throw new Error(`Patch file not found for version ${config.vxsuite.version}: ${patchPath}`);
     }
 
-    await bootstrapRepo(repoPath);
+    await bootstrapRepo(repoPath, commit);
     await installPlaywrightBrowsers(repoPath);
 
     // Phase 2: Clear state
@@ -167,17 +177,55 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
       electionSourcePath,
       collector.getBallotsDir(),
     );
-    assert(
-      electionPackage.systemSettings['disallowCastingOvervotes'],
-      `System setting 'disallowCastingOvervotes' must be true`,
-    );
+
+    // Apply any systemSettings overrides to the package VxAdmin will load (and
+    // re-export to VxScan), so a single package can exercise different behaviors.
+    const systemSettingsOverrides = config.election.systemSettingsOverrides;
+    if (systemSettingsOverrides && Object.keys(systemSettingsOverrides).length > 0) {
+      logger.info(`Applying systemSettings overrides: ${JSON.stringify(systemSettingsOverrides)}`);
+      electionPackage.systemSettings = await applySystemSettingsOverrides(
+        electionPackagePath,
+        systemSettingsOverrides as Record<string, unknown>,
+      );
+    }
 
     const { election } = electionPackage.electionDefinition;
+
+    // Which ballots VxScan returns to the voter for review (vs. counts) depends
+    // on the election's precinct-scan adjudication reasons. Notably, when
+    // 'BlankBallot' is configured (e.g. the primary fixture), blank ballots —
+    // and effectively-blank ballots such as our unmarked-write-in pattern,
+    // which fills no bubbles — are returned rather than accepted.
+    const precinctScanAdjudicationReasons = Array.isArray(
+      electionPackage.systemSettings['precinctScanAdjudicationReasons'],
+    )
+      ? (electionPackage.systemSettings['precinctScanAdjudicationReasons'] as string[])
+      : [];
+    const blankBallotRequiresReview = precinctScanAdjudicationReasons.includes('BlankBallot');
+
+    // When overvotes may not be cast, an overvoted ballot can only be returned;
+    // when they may be cast, the voter can choose to cast it anyway. This drives
+    // how many overvote ballots we scan and what outcome we expect for each.
+    const disallowCastingOvervotes =
+      electionPackage.systemSettings['disallowCastingOvervotes'] === true;
 
     logger.info(`Election: ${election.title}`);
     logger.info(`Ballot styles: ${election.ballotStyles.length}`);
     logger.info(`Contests: ${election.contests.length}`);
     logger.info(`Ballot PDFs loaded: ${electionPackage.ballots.length}`);
+    logger.info(
+      `Precinct-scan adjudication reasons: ${
+        precinctScanAdjudicationReasons.join(', ') || '(none)'
+      }`,
+    );
+    logger.info(`Casting overvotes: ${disallowCastingOvervotes ? 'disallowed' : 'allowed'}`);
+
+    // tallyMode controls whether VxAdmin tallies every precinct's CVRs
+    // together ('consolidated') or cycles through each precinct separately
+    // ('per-precinct', for NH "city" elections). Auto-detected from the
+    // loaded election when not set explicitly in config.
+    const tallyMode = config.tallyMode ?? determineTallyMode(election);
+    logger.info(`Tally mode: ${tallyMode}${config.tallyMode ? '' : ' (auto-detected)'}`);
 
     // Phase 4: Prepare ballots for scanning
     printDivider();
@@ -227,30 +275,43 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
         ballotType: ballot.ballotType,
         pattern: 'blank',
         pdfPath,
-        expectedAccepted: ballot.ballotMode === 'official',
+        // A blank ballot is counted only if the scanner is in official mode
+        // (test ballots are returned) and blank ballots aren't flagged for
+        // review by the election's adjudication settings.
+        expectedAccepted: ballot.ballotMode === 'official' && !blankBallotRequiresReview,
       });
 
       if (ballot.ballotMode === 'official') {
-        ballotsToScan.push(
-          {
-            ballotStyleId: ballot.ballotStyleId,
-            precinctId: ballot.precinctId,
-            ballotMode: ballot.ballotMode,
-            ballotType: ballot.ballotType,
-            pattern: 'valid',
-            pdfPath,
-            expectedAccepted: true,
-          },
-          {
-            ballotStyleId: ballot.ballotStyleId,
-            precinctId: ballot.precinctId,
-            ballotMode: ballot.ballotMode,
-            ballotType: ballot.ballotType,
-            pattern: 'overvote',
-            pdfPath,
-            expectedAccepted: false,
-          },
-        );
+        ballotsToScan.push({
+          ballotStyleId: ballot.ballotStyleId,
+          precinctId: ballot.precinctId,
+          ballotMode: ballot.ballotMode,
+          ballotType: ballot.ballotType,
+          pattern: 'valid',
+          pdfPath,
+          expectedAccepted: true,
+        });
+
+        const overvoteBase = {
+          ballotStyleId: ballot.ballotStyleId,
+          precinctId: ballot.precinctId,
+          ballotMode: ballot.ballotMode,
+          ballotType: ballot.ballotType,
+          pattern: 'overvote' as const,
+          pdfPath,
+        };
+        if (disallowCastingOvervotes) {
+          // Overvotes cannot be cast: verify the ballot is returned, not counted.
+          ballotsToScan.push({ ...overvoteBase, expectedAccepted: false });
+        } else {
+          // Overvotes may be cast: exercise both voter choices — cast one
+          // (counted) and return one (rejected) — so tallies and reports
+          // reflect a cast overvote.
+          ballotsToScan.push(
+            { ...overvoteBase, expectedAccepted: true },
+            { ...overvoteBase, expectedAccepted: false },
+          );
+        }
 
         ballotsToScan.push(
           {
@@ -269,7 +330,11 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
             ballotType: ballot.ballotType,
             pattern: 'unmarked-write-in',
             pdfPath,
-            expectedAccepted: true,
+            // The unmarked-write-in pattern fills no bubbles, so the ballot has
+            // no counted votes and is treated as blank: returned for review
+            // when blank ballots are flagged, otherwise counted (and the
+            // unmarked write-in flagged for later adjudication in VxAdmin).
+            expectedAccepted: !blankBallotRequiresReview,
           },
         );
       }
@@ -284,159 +349,331 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
 
     logger.success(`Prepared ${ballotsToScan.length} ballots for scanning`);
 
-    // Phase 5: Run VxAdmin workflow
-    printDivider();
-    logger.step('Phase 5: VxAdmin Configuration');
-    if (options.webhook) {
-      await sendWebhookUpdate(
-        options.webhook,
-        'in_progress',
-        'Configuring VxAdmin with election package',
-      );
-    }
-
+    // Phase 5-7: Run VxAdmin + VxScan workflows, either as one consolidated
+    // tally (default) or as a separate cycle per precinct (NH "city" elections).
     const browserSession = await createBrowserSession({
       headless: options.headless ?? true,
     });
     browser = browserSession.browser;
     const { page } = browserSession;
-    const adminStep = await collector.startStep(
-      page,
-      'programming-vxadmin',
-      'Programming VxAdmin',
-      'Configure VxAdmin with the election package and export election package for VxScan',
-    );
-
-    adminStep.addInput({
-      type: 'election-package',
-      label: 'Election Package',
-      description: `${election.title}`,
-      path: electionPackagePath,
-    });
-
-    orchestrator = createAppOrchestrator(repoPath, config.output.directory);
-    await orchestrator.startApp('admin');
 
     // FIXME: It'd be nice to not need to hardcode this as the mock USB drive data location.
     // Perhaps the dev dock API could offer a way to add files, or we'd use a mocking approach
     // that happens more at the Linux system level.
-    const dataPath = join(config.vxsuite.repoPath, 'libs/usb-drive/dev-workspace/mock-usb-data');
-
-    try {
-      await runAdminConfigureWorkflow(
-        page,
-        electionPackagePath, // Use the extracted election package ZIP
-        config.output.directory,
-        dataPath,
-        adminStep,
-      );
-      adminStep.complete();
-    } finally {
-      await orchestrator.stopApp();
-    }
-
-    // Phase 6: Run VxScan workflow
-    printDivider();
-    logger.step('Phase 6: VxScan Scanning');
-    if (options.webhook) {
-      await sendWebhookUpdate(options.webhook, 'in_progress', 'Scanning ballots with VxScan');
-    }
-
-    await orchestrator.startApp('scan');
-
-    const ballotsToScanByPrecinct = new Map(
-      election.precincts.map((precinct) => [
-        precinct,
-        ballotsToScan.filter((ballot) => ballot.precinctId === precinct.id),
-      ]),
+    // VxSuite stores mock USB data under <repo>/.mock-state/<NODE_ENV>/ (see
+    // getMockStateRootDir + file_usb_drive.ts). The subdirectory is version-specific:
+    // v4.1 nests the drive under a disk name (usb-drive/sdb/...), v4.0 does not.
+    const dataPath = join(
+      repoPath,
+      '.mock-state',
+      MOCK_NODE_ENV,
+      getVersionSpec(config.vxsuite.version).mockUsbDataDir,
     );
 
     try {
-      for (const [precinct, precinctBallotsToScan] of ballotsToScanByPrecinct) {
-        // Create step for opening polls
-        const openingPollsStep = await collector.startStep(
-          page,
-          'opening-polls',
-          'Opening Polls',
-          `Configure VxScan and open the polls for voting in precinct "${precinct.name}"`,
-        );
-
-        const adminExportedPackage = adminStep
-          .getOutputs()
-          .find((output) => output.type === 'election-package');
-
-        if (!adminExportedPackage) {
-          throw new Error('VxAdmin did not export an election package');
+      if (tallyMode === 'consolidated') {
+        // Phase 5: VxAdmin Configuration
+        printDivider();
+        logger.step('Phase 5: VxAdmin Configuration');
+        if (options.webhook) {
+          await sendWebhookUpdate(
+            options.webhook,
+            'in_progress',
+            'Configuring VxAdmin with election package',
+          );
         }
 
-        openingPollsStep.addInput({
+        const adminStep = await collector.startStep(
+          page,
+          'programming-vxadmin',
+          'Programming VxAdmin',
+          'Configure VxAdmin with the election package and export election package for VxScan',
+        );
+
+        adminStep.addInput({
           type: 'election-package',
           label: 'Election Package',
           description: `${election.title}`,
-          path: adminExportedPackage.path,
+          path: electionPackagePath,
         });
 
-        const otherPrecinctAndBallotsToScan = [...ballotsToScanByPrecinct].find(
-          ([otherPrecinct]) => otherPrecinct.id !== precinct.id,
-        );
+        orchestrator = createAppOrchestrator(repoPath, config.output.directory);
+        await orchestrator.startApp('admin');
 
-        if (otherPrecinctAndBallotsToScan) {
-          // Add a ballot from another precinct to ensure it's rejected.
-          const ballotToScan = otherPrecinctAndBallotsToScan[1].find((b) => b.expectedAccepted);
-
-          if (ballotToScan) {
-            precinctBallotsToScan.push({
-              ...ballotToScan,
-              expectedAccepted: false,
-            });
-          }
-        } else {
-          assert(election.precincts.length === 1);
+        try {
+          await runAdminConfigureWorkflow(
+            page,
+            electionPackagePath, // Use the extracted election package ZIP
+            config.output.directory,
+            dataPath,
+            adminStep,
+          );
+          adminStep.complete();
+        } finally {
+          await orchestrator.stopApp();
         }
 
-        await runScanWorkflow(
-          repoPath,
-          page,
-          electionPackage,
-          adminExportedPackage.path,
-          electionPackagePath, // Use the extracted election package ZIP
-          { kind: 'SinglePrecinct', precinctId: precinct.id },
-          precinctBallotsToScan,
-          config.output.directory,
-          dataPath,
-          openingPollsStep,
-          collector, // Pass the collector so steps can be created on-demand
+        // Phase 6: Run VxScan workflow
+        printDivider();
+        logger.step('Phase 6: VxScan Scanning');
+        if (options.webhook) {
+          await sendWebhookUpdate(options.webhook, 'in_progress', 'Scanning ballots with VxScan');
+        }
+
+        await orchestrator.startApp('scan');
+
+        const ballotsToScanByPrecinct = new Map(
+          election.precincts.map((precinct) => [
+            precinct,
+            ballotsToScan.filter((ballot) => ballot.precinctId === precinct.id),
+          ]),
         );
+
+        try {
+          for (const [precinct, precinctBallotsToScan] of ballotsToScanByPrecinct) {
+            // Create step for opening polls
+            const openingPollsStep = await collector.startStep(
+              page,
+              'opening-polls',
+              'Opening Polls',
+              `Configure VxScan and open the polls for voting in precinct "${precinct.name}"`,
+            );
+
+            const adminExportedPackage = adminStep
+              .getOutputs()
+              .find((output) => output.type === 'election-package');
+
+            if (!adminExportedPackage) {
+              throw new Error('VxAdmin did not export an election package');
+            }
+
+            openingPollsStep.addInput({
+              type: 'election-package',
+              label: 'Election Package',
+              description: `${election.title}`,
+              path: adminExportedPackage.path,
+            });
+
+            const otherPrecinctAndBallotsToScan = [...ballotsToScanByPrecinct].find(
+              ([otherPrecinct]) => otherPrecinct.id !== precinct.id,
+            );
+
+            if (otherPrecinctAndBallotsToScan) {
+              // Add a ballot from another precinct to ensure it's rejected.
+              const ballotToScan = otherPrecinctAndBallotsToScan[1].find((b) => b.expectedAccepted);
+
+              if (ballotToScan) {
+                precinctBallotsToScan.push({
+                  ...ballotToScan,
+                  expectedAccepted: false,
+                });
+              }
+            } else {
+              assert(election.precincts.length === 1);
+            }
+
+            await runScanWorkflow(
+              repoPath,
+              page,
+              electionPackage,
+              adminExportedPackage.path,
+              electionPackagePath, // Use the extracted election package ZIP
+              { kind: 'SinglePrecinct', precinctId: precinct.id },
+              precinctBallotsToScan,
+              config.output.directory,
+              dataPath,
+              openingPollsStep,
+              collector, // Pass the collector so steps can be created on-demand
+            );
+          }
+        } finally {
+          await orchestrator.stopApp();
+        }
+
+        // Phase 7: Run VxAdmin Tally Workflow
+        printDivider();
+        logger.step('Phase 7: VxAdmin Tally');
+        if (options.webhook) {
+          await sendWebhookUpdate(
+            options.webhook,
+            'in_progress',
+            'Importing CVRs and validating tallies',
+          );
+        }
+
+        await orchestrator.startApp('admin');
+
+        try {
+          await runAdminTallyWorkflow(
+            page,
+            election,
+            electionPackagePath,
+            config.output.directory,
+            dataPath,
+            collector,
+            options.limitManualTallies,
+          );
+        } finally {
+          await orchestrator.stopApp();
+        }
+      } else {
+        // Phase 5-7: Per-Precinct VxAdmin/VxScan Cycles. Each precinct gets its
+        // own configure -> scan -> import -> tally -> report -> unconfigure
+        // cycle, run sequentially, for elections where each precinct (e.g. an
+        // NH city's ward) is its own reporting unit.
+        printDivider();
+        logger.step('Phase 5-7: Per-Precinct VxAdmin/VxScan Cycles');
+        if (options.webhook) {
+          await sendWebhookUpdate(
+            options.webhook,
+            'in_progress',
+            'Running per-precinct VxAdmin/VxScan cycles',
+          );
+        }
+
+        orchestrator = createAppOrchestrator(repoPath, config.output.directory);
+
+        const ballotsToScanByPrecinct = new Map(
+          election.precincts.map((precinct) => [
+            precinct,
+            ballotsToScan.filter((ballot) => ballot.precinctId === precinct.id),
+          ]),
+        );
+
+        for (const [precinct, precinctBallotsToScan] of ballotsToScanByPrecinct) {
+          logger.step(`Precinct: ${precinct.name}`);
+
+          // Configure VxAdmin
+          const adminStep = await collector.startStep(
+            page,
+            `programming-vxadmin-${precinct.id}`,
+            `Programming VxAdmin (${precinct.name})`,
+            'Configure VxAdmin with the election package and export election package for VxScan',
+          );
+
+          adminStep.addInput({
+            type: 'election-package',
+            label: 'Election Package',
+            description: `${election.title}`,
+            path: electionPackagePath,
+          });
+
+          await orchestrator.startApp('admin');
+          try {
+            await runAdminConfigureWorkflow(
+              page,
+              electionPackagePath,
+              config.output.directory,
+              dataPath,
+              adminStep,
+            );
+            adminStep.complete();
+          } finally {
+            await orchestrator.stopApp();
+          }
+
+          // Scan this precinct's ballots
+          const openingPollsStep = await collector.startStep(
+            page,
+            `opening-polls-${precinct.id}`,
+            'Opening Polls',
+            `Configure VxScan and open the polls for voting in precinct "${precinct.name}"`,
+          );
+
+          const adminExportedPackage = adminStep
+            .getOutputs()
+            .find((output) => output.type === 'election-package');
+
+          if (!adminExportedPackage) {
+            throw new Error('VxAdmin did not export an election package');
+          }
+
+          openingPollsStep.addInput({
+            type: 'election-package',
+            label: 'Election Package',
+            description: `${election.title}`,
+            path: adminExportedPackage.path,
+          });
+
+          const otherPrecinctAndBallotsToScan = [...ballotsToScanByPrecinct].find(
+            ([otherPrecinct]) => otherPrecinct.id !== precinct.id,
+          );
+
+          if (otherPrecinctAndBallotsToScan) {
+            // Add a ballot from another precinct to ensure it's rejected.
+            const ballotToScan = otherPrecinctAndBallotsToScan[1].find((b) => b.expectedAccepted);
+
+            if (ballotToScan) {
+              precinctBallotsToScan.push({
+                ...ballotToScan,
+                expectedAccepted: false,
+              });
+            }
+          } else {
+            assert(election.precincts.length === 1);
+          }
+
+          await orchestrator.startApp('scan');
+          try {
+            await runScanWorkflow(
+              repoPath,
+              page,
+              electionPackage,
+              adminExportedPackage.path,
+              electionPackagePath,
+              { kind: 'SinglePrecinct', precinctId: precinct.id },
+              precinctBallotsToScan,
+              config.output.directory,
+              dataPath,
+              openingPollsStep,
+              collector,
+            );
+          } finally {
+            await orchestrator.stopApp();
+          }
+
+          // Import this precinct's CVRs, tally, generate its own report, then
+          // unconfigure VxAdmin so the next precinct starts from a clean slate
+          // (restarting the process alone does not reset VxAdmin's state).
+          await orchestrator.startApp('admin');
+          try {
+            await runAdminTallyWorkflow(
+              page,
+              election,
+              electionPackagePath,
+              config.output.directory,
+              dataPath,
+              collector,
+              options.limitManualTallies,
+              precinct.id,
+            );
+
+            const unconfiguringStep = await collector.startStep(
+              page,
+              `unconfiguring-vxadmin-${precinct.id}`,
+              'Unconfiguring VxAdmin',
+              `Unconfigure VxAdmin to prepare for the next precinct after "${precinct.name}"`,
+            );
+            await runAdminUnconfigureWorkflow(
+              page,
+              electionPackagePath,
+              config.output.directory,
+              unconfiguringStep,
+            );
+            unconfiguringStep.complete();
+
+            // Clear the shared mock USB so the next precinct's VxAdmin
+            // doesn't see this precinct's already-imported CVR export. Done
+            // here, before stopApp: the mock USB is served by the currently
+            // running app's dev-dock, so this call has nothing to reach once
+            // the admin app has been stopped.
+            await createMockUsbController({ dataPath }).clear();
+          } finally {
+            await orchestrator.stopApp();
+          }
+        }
       }
     } finally {
-      await orchestrator.stopApp();
-    }
-
-    // Phase 7: Run VxAdmin Tally Workflow
-    printDivider();
-    logger.step('Phase 7: VxAdmin Tally');
-    if (options.webhook) {
-      await sendWebhookUpdate(
-        options.webhook,
-        'in_progress',
-        'Importing CVRs and validating tallies',
-      );
-    }
-
-    await orchestrator.startApp('admin');
-
-    try {
-      await runAdminTallyWorkflow(
-        page,
-        election,
-        electionPackagePath,
-        config.output.directory,
-        dataPath,
-        collector,
-        options.limitManualTallies,
-      );
-    } finally {
-      await orchestrator.stopApp();
       await browser.close();
     }
 

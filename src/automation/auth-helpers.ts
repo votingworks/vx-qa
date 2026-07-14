@@ -11,7 +11,13 @@ import {
   DEFAULT_PIN,
   MockCardController,
 } from '../mock-hardware/cards.js';
-import { clickTextInApp, waitForTextWithDebug, waitForTextInApp } from './browser.js';
+import {
+  clickTextInApp,
+  waitForTextInAppWithDebug,
+  waitForTextInApp,
+  getMainContent,
+  debugPageState,
+} from './browser.js';
 
 /**
  * Enter the PIN on the PIN pad screen
@@ -19,14 +25,26 @@ import { clickTextInApp, waitForTextWithDebug, waitForTextInApp } from './browse
 export async function enterPin(page: Page, pin = DEFAULT_PIN, outputDir?: string): Promise<void> {
   logger.debug('Entering PIN');
 
-  await waitForTextWithDebug(page, 'Enter Card PIN', {
+  await waitForTextInAppWithDebug(page, 'Enter Card PIN', {
     timeout: 10000,
     outputDir,
     label: 'Waiting for PIN entry screen',
   });
 
+  // Scoped to the app's main content (excluding the dev-dock panel used to
+  // drive mock hardware). Matched by rendered text rather than role="button":
+  // confirmed via a live run that the PIN pad's digit tiles aren't exposed
+  // with an accessible button role (getByRole('button') found zero elements
+  // anywhere on the page even though the tiles were visibly rendered), so a
+  // role-based lookup can never find them.
+  const mainContent = getMainContent(page);
   for (const digit of pin) {
-    await page.getByRole('button', { name: digit }).click();
+    try {
+      await mainContent.getByText(digit, { exact: true }).click();
+    } catch (error) {
+      await debugPageState(page, `Failed to click PIN digit "${digit}"`, outputDir);
+      throw error;
+    }
   }
 }
 

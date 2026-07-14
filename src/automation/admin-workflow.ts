@@ -14,8 +14,8 @@ import {
   clickButtonWithDebug,
   toggleDevDock,
 } from './browser.js';
-import { basename, join } from 'node:path';
 import type { StepCollector } from '../report/artifacts.js';
+import { basename, join } from 'node:path';
 import { readdir, readFile, stat } from 'node:fs/promises';
 
 /**
@@ -151,6 +151,54 @@ export async function runAdminConfigureWorkflow(
 
   // Remove USB
   await usbController.remove();
+}
+
+/**
+ * Unconfigure VxAdmin so it can be reconfigured for the next precinct.
+ * Restarting the app process does not reset its state (only a full
+ * `state.clear()` does), so this in-app unconfigure is what actually clears
+ * the configured election, imported CVRs, and tallies between precincts.
+ */
+export async function runAdminUnconfigureWorkflow(
+  page: Page,
+  electionPackagePath: string,
+  outputDir: string,
+  stepCollector: StepCollector,
+): Promise<void> {
+  logger.step('Unconfiguring VxAdmin');
+
+  // Log in as system administrator
+  await dipSystemAdministratorCardAndLogin(page, electionPackagePath, outputDir);
+
+  await page.getByText('Unconfigure Machine').click();
+
+  const confirmUnconfigureButton = page.getByText('Delete All Election Data');
+  try {
+    await confirmUnconfigureButton.waitFor({
+      state: 'visible',
+      timeout: 10000,
+    });
+  } catch (error) {
+    await stepCollector.captureScreenshot(
+      'timeout-unconfigure-button',
+      'Timeout waiting for unconfigure button',
+    );
+    throw error;
+  }
+
+  await stepCollector.captureScreenshot('admin-confirm-unconfigure', 'Confirming unconfigure');
+  await confirmUnconfigureButton.click();
+
+  await waitForTextInAppWithDebug(page, 'Insert a USB drive containing an election package', {
+    timeout: 10000,
+    outputDir,
+    label: 'Waiting for unconfigured state after unconfigure',
+  });
+  await stepCollector.captureScreenshot('admin-unconfigured', 'VxAdmin unconfigured');
+
+  // Log out
+  await logOut(page);
+  await stepCollector.captureScreenshot('admin-unconfigure-logged-out', 'Logged out');
 }
 
 /**

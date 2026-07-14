@@ -2,8 +2,8 @@
  * Mock USB drive control via dev-dock API
  */
 
-import { basename, join } from 'node:path';
-import { cp, writeFile } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
+import { cp, mkdir, writeFile } from 'node:fs/promises';
 import { createDevDockClient, type DevDockClient } from './client.js';
 import { logger } from '../utils/logger.js';
 
@@ -57,6 +57,25 @@ export interface MockUsbController {
 export function createMockUsbController({ dataPath }: { dataPath: string }): MockUsbController {
   const client: DevDockClient = createDevDockClient();
 
+  // v4.1's simulated USB platform tracks drives in a manifest and only
+  // allocates a disk's backing storage directory the first time it's
+  // inserted (dev-dock's insertUsbDrive -> createDrive -> reinitStorage,
+  // which wipes-and-recreates the directory). Since files are written here
+  // directly to `dataPath` on disk rather than through the dev-dock API, a
+  // write that happens before that disk has ever been inserted gets erased
+  // the moment insert() is next called. Priming with an insert+remove pair
+  // (idempotent if the drive already exists) guarantees the drive -- and its
+  // storage directory -- exists before anything is written to it.
+  let drivePrimed = false;
+  async function ensureDriveExists(): Promise<void> {
+    if (drivePrimed) {
+      return;
+    }
+    await client.call('insertUsbDrive', {});
+    await client.call('removeUsbDrive', {});
+    drivePrimed = true;
+  }
+
   return {
     async insert(): Promise<void> {
       logger.debug('Inserting USB drive');
@@ -82,23 +101,29 @@ export function createMockUsbController({ dataPath }: { dataPath: string }): Moc
     },
 
     async copyFile(sourcePath: string, destName?: string): Promise<string> {
+      await ensureDriveExists();
       const fileName = destName || basename(sourcePath);
       const destPath = join(dataPath, fileName);
+      await mkdir(dirname(destPath), { recursive: true });
       await cp(sourcePath, destPath);
       logger.debug(`Copied ${sourcePath} to USB as ${fileName}`);
       return destPath;
     },
 
     async copyDirectory(sourcePath: string, destName?: string): Promise<string> {
+      await ensureDriveExists();
       const dirName = destName || basename(sourcePath);
       const destPath = join(dataPath, dirName);
+      await mkdir(dirname(destPath), { recursive: true });
       await cp(sourcePath, destPath, { recursive: true });
       logger.debug(`Copied directory ${sourcePath} to USB as ${dirName}`);
       return destPath;
     },
 
     async writeFile(fileName: string, content: Buffer | string): Promise<string> {
+      await ensureDriveExists();
       const filePath = join(dataPath, fileName);
+      await mkdir(dirname(filePath), { recursive: true });
       await writeFile(filePath, content);
       logger.debug(`Wrote ${fileName} to USB`);
       return filePath;

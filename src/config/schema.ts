@@ -5,6 +5,8 @@
 import { z } from 'zod/v4';
 import { resolvePath } from '../utils/paths.js';
 import { dirname } from 'node:path';
+import { SUPPORTED_VERSIONS } from './versions.js';
+import { TALLY_MODES } from './types.js';
 
 export const BallotPatternSchema = z.enum([
   'blank',
@@ -14,14 +16,29 @@ export const BallotPatternSchema = z.enum([
   'unmarked-write-in',
 ]);
 
+export const TallyModeSchema = z.enum(TALLY_MODES);
+
 export const VxSuiteConfigSchema = z.object({
   repoPath: z.string().min(1, 'Repository path is required'),
-  ref: z.string().min(1, 'Tag/branch/rev is required'),
+  version: z.enum(SUPPORTED_VERSIONS, {
+    message: `VxSuite version must be one of: ${SUPPORTED_VERSIONS.join(', ')}`,
+  }),
   forceClone: z.boolean().optional().default(false),
+});
+
+/**
+ * Overrides applied to the election package's systemSettings.json before it is
+ * loaded into VxAdmin (and re-exported to VxScan). Lets a single election
+ * package exercise different behaviors — e.g. flipping `disallowCastingOvervotes`
+ * to test the cast-overvote path — without maintaining a separate package.
+ */
+export const SystemSettingsOverridesSchema = z.object({
+  disallowCastingOvervotes: z.boolean().optional(),
 });
 
 export const ElectionConfigSchema = z.object({
   source: z.string().min(1, 'Election source path is required'),
+  systemSettingsOverrides: SystemSettingsOverridesSchema.optional(),
 });
 
 export const OutputConfigSchema = z.object({
@@ -32,6 +49,7 @@ export const QARunConfigSchema = z.object({
   vxsuite: VxSuiteConfigSchema,
   election: ElectionConfigSchema,
   output: OutputConfigSchema,
+  tallyMode: TallyModeSchema.optional(),
 });
 
 export type QARunConfigOutput = z.output<typeof QARunConfigSchema>;

@@ -11,19 +11,41 @@ import { waitForDevDock } from '../mock-hardware/client.js';
 import { promisify } from 'node:util';
 import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
+import net from 'node:net';
 
 /**
- * Check if a port is free (not in use)
+ * Check if a port is free (not in use). Uses a TCP connection attempt rather
+ * than `lsof`, which isn't guaranteed to be installed in CI images (and whose
+ * absence previously made this always report "free").
  */
-async function isPortFree(port: number): Promise<boolean> {
-  const execFileAsync = promisify(execFile);
-  try {
-    const { stdout } = await execFileAsync('lsof', [`-ti:${port}`]);
-    return stdout.trim().length === 0;
-  } catch {
-    // If lsof errors (e.g., no process found), port is free
-    return true;
+async function isPortFree(port: number, host = '127.0.0.1'): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    const finish = (free: boolean) => {
+      socket.destroy();
+      resolve(free);
+    };
+    socket.setTimeout(1000);
+    socket.once('connect', () => finish(false)); // something is listening
+    socket.once('timeout', () => finish(true));
+    socket.once('error', () => finish(true)); // connection refused => free
+    socket.connect(port, host);
+  });
+}
+
+/**
+ * Wait until all the given ports are free (up to `timeout` ms).
+ */
+async function waitForPortsFree(ports: number[], timeout = 15000): Promise<boolean> {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const free = await Promise.all(ports.map((port) => isPortFree(port)));
+    if (free.every(Boolean)) {
+      return true;
+    }
+    await sleep(500);
   }
+  return false;
 }
 
 export interface AppOrchestrator {
@@ -80,6 +102,19 @@ export function createAppOrchestrator(repoPath: string, logDir?: string): AppOrc
       const spinner = logger.spinner(`Starting ${app} app...`);
 
       try {
+        // Ensure a clean port slate. A previous app's run-dev process tree
+        // (Vite, backend, watchers) can linger and hold ports 3000/3001,
+        // causing the new app's Vite to bind a different port so navigation to
+        // :3000 is refused. Kill anything on our ports and wait until they are
+        // actually free before starting.
+        await ensureNoAppsRunning();
+        const portsFree = await waitForPortsFree([APP_PORTS.frontend, getBackendPort(app)]);
+        if (!portsFree) {
+          logger.warn(
+            `Ports ${APP_PORTS.frontend}/${getBackendPort(app)} still busy before starting ${app}; continuing anyway`,
+          );
+        }
+
         // Start the app using pnpm run-dev
         const env = getMockEnvironment();
 
@@ -246,14 +281,16 @@ export function createAppOrchestrator(repoPath: string, logDir?: string): AppOrc
         state.appLogPath = null;
         state.appOutput = [];
 
-        // Wait for ports to be released by checking they're actually free
-        const backendPort = getBackendPort(appName);
-        const maxWaitTime = 5000; // 5 seconds max
+        // Wait for both the frontend and backend ports to be released, so the
+        // next app can bind them cleanly (otherwise its Vite may pick a
+        // different port and navigation to :3000 is refused).
+        const portsToFree = [APP_PORTS.frontend, getBackendPort(appName)];
+        const maxWaitTime = 10000; // 10 seconds max
         const startTime = Date.now();
 
         while (Date.now() - startTime < maxWaitTime) {
-          const portFree = await isPortFree(backendPort);
-          if (portFree) {
+          const free = await Promise.all(portsToFree.map((port) => isPortFree(port)));
+          if (free.every(Boolean)) {
             break;
           }
           await sleep(200);

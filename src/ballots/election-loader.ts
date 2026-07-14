@@ -42,15 +42,31 @@ export interface CandidateContest {
   candidates: Candidate[];
   allowWriteIns: boolean;
   districtId: string;
+  /**
+   * Present in primary elections: the contest belongs to this party and only
+   * appears on that party's ballot styles.
+   */
+  partyId?: string;
+}
+
+export interface YesNoOption {
+  id: string;
+  label: string;
 }
 
 export interface YesNoContest {
   type: 'yesno';
   id: string;
   title: string;
-  yesOption: { id: string; label: string };
-  noOption: { id: string; label: string };
+  yesOption: YesNoOption;
+  noOption: YesNoOption;
   districtId: string;
+  /**
+   * v4.1+ represents yes/no options as an ordered `options` array
+   * ([yes, no, ...additional]) rather than `yesOption`/`noOption`. Normalized
+   * into `yesOption`/`noOption` on load.
+   */
+  options?: YesNoOption[];
 }
 
 export type Contest = CandidateContest | YesNoContest;
@@ -59,7 +75,68 @@ export interface BallotStyle {
   id: string;
   precincts: string[];
   districts: string[];
+  /**
+   * Present in primary elections: the party this ballot style is for. Used to
+   * restrict contests to that party and to label the style (e.g.
+   * "Bedford - Democratic") in VxAdmin.
+   */
+  partyId?: string;
+  /**
+   * Language-independent grouping of ballot styles (e.g. "1-DEM"). The `id`
+   * additionally encodes the language (e.g. "1-DEM_en").
+   */
+  groupId?: string;
+  /**
+   * v4.1+ carries ballot geometry per ballot style here instead of in a
+   * top-level `gridLayouts`. Normalized into `Election.gridLayouts` on load.
+   */
+  ballotPositions?: SheetPositions[];
 }
+
+/**
+ * Ballot-position model used by v4.1+ election definitions
+ * (`ballotStyles[].ballotPositions`). Mirrors the shapes in
+ * libs/types/src/election.ts so we can normalize them into the flat
+ * grid-position model the rest of the tool uses.
+ */
+export interface GridPoint {
+  row: number;
+  column: number;
+}
+
+export interface GridRect {
+  row: number;
+  column: number;
+  width: number;
+  height: number;
+}
+
+export interface OptionPosition {
+  type: 'option';
+  bubbleCenter: GridPoint;
+  bounds: GridRect;
+  optionId: string;
+  partyIds?: string[];
+}
+
+export interface WriteInPosition {
+  type: 'write-in';
+  bubbleCenter: GridPoint;
+  bounds: GridRect;
+  writeInIndex: number;
+  writeInArea: GridRect;
+}
+
+export type ContestOptionPosition = OptionPosition | WriteInPosition;
+
+export interface ContestPosition {
+  contestId: string;
+  bounds: GridRect;
+  options: ContestOptionPosition[];
+}
+
+/** Per-sheet positions: a [front, back] tuple of contest positions. */
+export type SheetPositions = [front: ContestPosition[], back: ContestPosition[]];
 
 export interface Precinct {
   id: string;
@@ -164,6 +241,13 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
   const election = JSON.parse(electionData) as Election;
   const ballotHash = await calculateHash(electionData);
 
+  // v4.1+ elections differ from v4.0 in a few shapes the tool reads. Normalize
+  // them so downstream code can rely on the v4.0-style model regardless of
+  // version: ballot geometry (`ballotPositions` -> `gridLayouts`) and yes/no
+  // contests (`options[]` -> `yesOption`/`noOption`).
+  normalizeGridLayouts(election);
+  normalizeYesNoContests(election);
+
   // Load metadata if present
   let metadata: ElectionPackage['metadata'];
   const metadataFile = zip.file('metadata.json');
@@ -224,6 +308,100 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
   };
 }
 
+/** Convert a (column, row) grid rect into the tool's (x, y) Rect. */
+function gridRectToRect(gridRect: GridRect): Rect {
+  return {
+    x: gridRect.column,
+    y: gridRect.row,
+    width: gridRect.width,
+    height: gridRect.height,
+  };
+}
+
+/**
+ * Derive top-level `gridLayouts` from `ballotStyles[].ballotPositions` (v4.1+
+ * format). No-op when the election already has `gridLayouts` (v4.0.x format) or
+ * when no ballot positions are present.
+ */
+export function normalizeGridLayouts(election: Election): void {
+  if (election.gridLayouts && election.gridLayouts.length > 0) {
+    return;
+  }
+
+  const gridLayouts: GridLayout[] = [];
+  const sides: BallotSide[] = ['front', 'back'];
+
+  for (const ballotStyle of election.ballotStyles) {
+    if (!ballotStyle.ballotPositions) {
+      continue;
+    }
+
+    const gridPositions: GridPosition[] = [];
+
+    ballotStyle.ballotPositions.forEach((sheet, sheetIndex) => {
+      const sheetNumber = sheetIndex + 1;
+
+      sides.forEach((side, sideIndex) => {
+        for (const contest of sheet[sideIndex] ?? []) {
+          for (const option of contest.options) {
+            const base = {
+              sheetNumber,
+              side,
+              contestId: contest.contestId,
+              column: option.bubbleCenter.column,
+              row: option.bubbleCenter.row,
+            } as const;
+
+            if (option.type === 'write-in') {
+              gridPositions.push({
+                ...base,
+                type: 'write-in',
+                writeInIndex: option.writeInIndex,
+                writeInArea: gridRectToRect(option.writeInArea),
+              });
+            } else {
+              gridPositions.push({ ...base, type: 'option', optionId: option.optionId });
+            }
+          }
+        }
+      });
+    });
+
+    gridLayouts.push({
+      ballotStyleId: ballotStyle.id,
+      // Unused by the QA tool (proof ballots derive bounds from write-in areas);
+      // vxsuite's marking reads ballotPositions directly.
+      optionBoundsFromTargetMark: { x: 0, y: 0, width: 0, height: 0 },
+      gridPositions,
+    });
+  }
+
+  if (gridLayouts.length > 0) {
+    election.gridLayouts = gridLayouts;
+    logger.debug(`Derived ${gridLayouts.length} gridLayouts from ballotPositions`);
+  }
+}
+
+/**
+ * Derive `yesOption`/`noOption` from a v4.1+ `options` array on yes/no
+ * contests. No-op for v4.0 contests that already have `yesOption`/`noOption`.
+ * Additional options beyond the first two (multi-option ballot measures) are
+ * left in `options` for callers that need them.
+ */
+export function normalizeYesNoContests(election: Election): void {
+  for (const contest of election.contests) {
+    if (contest.type !== 'yesno') {
+      continue;
+    }
+
+    if ((!contest.yesOption || !contest.noOption) && contest.options) {
+      assert(contest.options.length >= 2, `yes/no contest ${contest.id} has fewer than 2 options`);
+      contest.yesOption = contest.options[0];
+      contest.noOption = contest.options[1];
+    }
+  }
+}
+
 /**
  * Calculate a simple hash for the election data
  */
@@ -248,7 +426,19 @@ export function getContestsForBallotStyle(election: Election, ballotStyleId: str
   }
 
   const districts = ballotStyle.districts;
-  return election.contests.filter((c) => districts.includes(c.districtId));
+  return election.contests.filter((c) => {
+    if (!districts.includes(c.districtId)) {
+      return false;
+    }
+    // In primaries, candidate contests carry a partyId and appear only on the
+    // matching party's ballot style. Yes/no contests (ballot measures) have no
+    // party and appear on every ballot style whose districts include them.
+    // General elections have no partyId on the ballot style, so this is a no-op.
+    if (ballotStyle.partyId && c.type === 'candidate' && c.partyId) {
+      return c.partyId === ballotStyle.partyId;
+    }
+    return true;
+  });
 }
 
 export const RawBallotPdfInfo = z.strictObject({
@@ -375,6 +565,38 @@ export async function loadElectionPackage(
     electionPackage,
     electionPackagePath,
   };
+}
+
+/**
+ * Overwrite selected keys in an election package's systemSettings.json, in
+ * place, at `electionPackagePath`. Returns the merged settings.
+ *
+ * VxAdmin loads this package and re-exports it to VxScan, so the override
+ * reaches both apps. The dev/test election packages are unsigned, so rewriting
+ * a file inside the ZIP does not break any signature check. `undefined` values
+ * in `overrides` are ignored so partial overrides only touch the keys set.
+ */
+export async function applySystemSettingsOverrides(
+  electionPackagePath: string,
+  overrides: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const definedOverrides = Object.fromEntries(
+    Object.entries(overrides).filter(([, value]) => value !== undefined),
+  );
+
+  const zipData = await readFile(electionPackagePath);
+  const zip = await JSZip.loadAsync(zipData);
+  const systemSettingsFile = zip.file('systemSettings.json');
+  assert(systemSettingsFile, `systemSettings.json missing in ${electionPackagePath}`);
+
+  const current = JSON.parse(await systemSettingsFile.async('string')) as Record<string, unknown>;
+  const merged = { ...current, ...definedOverrides };
+
+  zip.file('systemSettings.json', JSON.stringify(merged, null, 2));
+  const updated = await zip.generateAsync({ type: 'nodebuffer' });
+  await writeFile(electionPackagePath, updated);
+
+  return merged;
 }
 
 /**

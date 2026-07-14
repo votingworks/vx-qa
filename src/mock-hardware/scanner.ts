@@ -5,11 +5,25 @@
 import { createDevDockClient, type DevDockClient } from './client.js';
 import { logger } from '../utils/logger.js';
 
-export type SheetStatus = 'noSheet' | 'sheetInserted' | 'sheetHeldInFront' | 'sheetHeldInBack';
+/**
+ * Mock sheet status reported by VxSuite's mock PDI scanner
+ * (libs/pdi-scanner/src/ts/mock_scanner.ts).
+ */
+export type SheetStatus =
+  | 'noSheetEnabled'
+  | 'noSheetDisabled'
+  | 'sheetInserted'
+  | 'sheetHeldInFront';
+
+interface PdiScannerStatus {
+  sheetStatus: SheetStatus;
+  queue?: { total: number; inserted: number };
+}
 
 export interface MockScannerController {
   /**
-   * Insert a ballot sheet (PDF) into the scanner
+   * Insert a ballot sheet (PDF) into the scanner. The PDF may contain one sheet
+   * (one or two pages); the mock feeds its sheets into the scanner via a queue.
    */
   insertSheet(pdfPath: string): Promise<void>;
 
@@ -41,7 +55,10 @@ export function createMockScannerController(): MockScannerController {
   return {
     async insertSheet(pdfPath: string): Promise<void> {
       logger.debug(`Inserting sheet: ${pdfPath}`);
-      await client.call('pdiScannerInsertSheet', { path: pdfPath });
+      // Clear any leftover queue from a previous insert so the new one is
+      // accepted (insertSheets refuses to run while a queue is active).
+      await client.call('pdiScannerClearSheetQueue', {});
+      await client.call('pdiScannerInsertSheets', { path: pdfPath });
     },
 
     async removeSheet(): Promise<void> {
@@ -50,7 +67,8 @@ export function createMockScannerController(): MockScannerController {
     },
 
     async getSheetStatus(): Promise<SheetStatus> {
-      return await client.call<SheetStatus>('pdiScannerGetSheetStatus', {});
+      const status = await client.call<PdiScannerStatus>('pdiScannerGetStatus', {});
+      return status.sheetStatus;
     },
 
     async waitForStatus(

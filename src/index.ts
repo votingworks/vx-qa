@@ -6,18 +6,32 @@
  * CLI entry point for automating QA testing of VxSuite elections
  */
 
-import { Command } from 'commander';
+import { Command, InvalidArgumentError } from 'commander';
 import { logger, printHeader } from './utils/logger.js';
 import { validateConfig, safeValidateConfig } from './config/schema.js';
 import { resolvePath, generateTimestampedDir, ensureDir } from './utils/paths.js';
 import { runQAWorkflow } from './cli/config-runner.js';
-import type { QARunConfig, WebhookConfig } from './config/types.js';
+import { TALLY_MODES, type QARunConfig, type WebhookConfig } from './config/types.js';
+import { SUPPORTED_VERSIONS } from './config/versions.js';
 import { dirname, join } from 'node:path';
 import { regenerateHtmlReportFromRawData } from './report/html-generator.js';
 import { revalidateTallyResults } from './automation/admin-tally-workflow.js';
 import { downloadFile } from './ballots/election-loader.js';
 import { startServe } from './cli/serve.js';
 import { readFile, writeFile } from 'node:fs/promises';
+
+/**
+ * Commander option coercion for integer arguments. Passing `parseInt` directly
+ * is a bug: Commander calls it as `parseInt(value, previous)`, so the previous
+ * option value is used as the radix (e.g. `parseInt('9100', 9000)` -> NaN).
+ */
+function parseIntOption(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed)) {
+    throw new InvalidArgumentError('Must be an integer.');
+  }
+  return parsed;
+}
 
 const program = new Command();
 
@@ -31,15 +45,23 @@ program
   .description('Run QA automation workflow')
   .option('-c, --config <path>', 'Path to configuration file')
   .option('-o, --output <dir>', 'Override output directory')
-  .option('-r, --ref <ref>', 'Override VxSuite tag/branch/ref')
+  .option('--vxsuite-version <version>', 'Override VxSuite version (e.g. v4.0, v4.1)')
+  .option(
+    '--tally-mode <mode>',
+    'Override tally mode (consolidated or per-precinct); auto-detected from the election when omitted',
+  )
   .option('-e, --election <path>', 'Override election source path')
   .option('--headless', 'Run browser in headless mode (default)')
   .option('--no-headless', 'Run browser in headed mode for debugging')
-  .option('--limit-ballots <number>', 'Limit the number of ballots to scan (for testing)', parseInt)
+  .option(
+    '--limit-ballots <number>',
+    'Limit the number of ballots to scan (for testing)',
+    parseIntOption,
+  )
   .option(
     '--limit-manual-tallies <number>',
     'Limit the number of ballot styles with manual tallies (for testing)',
-    parseInt,
+    parseIntOption,
   )
   .option('--webhook-url <url>', 'URL for status callbacks')
   .option(
@@ -70,8 +92,23 @@ program
       if (options.output) {
         config.output.directory = options.output;
       }
-      if (options.tag) {
-        config.vxsuite.ref = options.tag;
+      if (options.vxsuiteVersion) {
+        if (!(SUPPORTED_VERSIONS as readonly string[]).includes(options.vxsuiteVersion)) {
+          logger.error(
+            `Invalid --vxsuite-version "${options.vxsuiteVersion}". Supported: ${SUPPORTED_VERSIONS.join(', ')}`,
+          );
+          process.exit(1);
+        }
+        config.vxsuite.version = options.vxsuiteVersion;
+      }
+      if (options.tallyMode) {
+        if (!(TALLY_MODES as readonly string[]).includes(options.tallyMode)) {
+          logger.error(
+            `Invalid --tally-mode "${options.tallyMode}". Supported: ${TALLY_MODES.join(', ')}`,
+          );
+          process.exit(1);
+        }
+        config.tallyMode = options.tallyMode;
       }
       if (options.election) {
         config.election.source = options.election;
@@ -183,7 +220,7 @@ program
     const sampleConfig: QARunConfig = {
       vxsuite: {
         repoPath: '~/.vx-qa/vxsuite',
-        ref: 'v4.0.4',
+        version: 'v4.0',
       },
       election: {
         source: './election-package-and-ballots.zip',
@@ -203,15 +240,19 @@ program
   .command('serve')
   .description('Start a local CircleCI stand-in server for VxDesign')
   .requiredOption('-c, --config <path>', 'Path to configuration file')
-  .option('-p, --port <port>', 'Port to listen on', parseInt, 9000)
+  .option('-p, --port <port>', 'Port to listen on', parseIntOption, 9000)
   .option('--webhook-secret <secret>', 'Secret for webhook callbacks', 'test-secret')
   .option('--headless', 'Run browser in headless mode (default)')
   .option('--no-headless', 'Run browser in headed mode for debugging')
-  .option('--limit-ballots <number>', 'Limit the number of ballots to scan (for testing)', parseInt)
+  .option(
+    '--limit-ballots <number>',
+    'Limit the number of ballots to scan (for testing)',
+    parseIntOption,
+  )
   .option(
     '--limit-manual-tallies <number>',
     'Limit the number of ballot styles with manual tallies (for testing)',
-    parseInt,
+    parseIntOption,
   )
   .action((options) => {
     startServe({

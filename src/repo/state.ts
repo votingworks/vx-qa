@@ -3,25 +3,21 @@
  */
 
 import { rm, readdir, cp, mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { logger } from '../utils/logger.js';
-import { expandHome, resolvePath } from '../utils/paths.js';
+import { resolvePath } from '../utils/paths.js';
 
 export class State {
   static defaultFor(repoPath: string): State {
-    return new State(
-      repoPath,
-      join(repoPath, 'libs/usb-drive/dev-workspace'),
-      join(repoPath, 'libs/fujitsu-thermal-printer/dev-workspace'),
-      expandHome('~/.vx-dev-dock'),
-    );
+    // VxSuite keeps all device mock state (USB drive, printers, smart card) under
+    // <repo>/.mock-state/<NODE_ENV>/ (see getMockStateRootDir in libs/utils).
+    return new State(repoPath, join(repoPath, '.mock-state'));
   }
 
   private constructor(
     private readonly repoPath: string,
-    private readonly usbDrivePath: string,
-    private readonly printerPath: string,
-    private readonly devDockPath: string,
+    private readonly mockStatePath: string,
   ) {}
 
   async clear(): Promise<void> {
@@ -35,9 +31,7 @@ export class State {
     const spinner = logger.spinner('Clearing mock state...');
 
     try {
-      await clearDirectory(this.usbDrivePath);
-      await clearDirectory(this.printerPath);
-      await clearDirectory(this.devDockPath);
+      await clearDirectory(this.mockStatePath);
       await this.clearAppWorkspaces();
 
       spinner.succeed('Mock state cleared');
@@ -68,9 +62,11 @@ export class State {
         [
           ['admin', join(this.repoPath, 'apps/admin/backend/dev-workspace')],
           ['scan', join(this.repoPath, 'apps/scan/backend/dev-workspace')],
-          ['usb-drive', this.usbDrivePath],
-          ['fujitsu-thermal-printer', this.printerPath],
+          ['mock-state', this.mockStatePath],
         ].map(async ([name, path]) => {
+          if (!existsSync(path)) {
+            return;
+          }
           const workspacePath = join(outputPath, name);
           await mkdir(workspacePath, { recursive: true });
           await cp(path, workspacePath, { recursive: true });

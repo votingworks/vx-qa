@@ -81,7 +81,10 @@ export function spawnBackground(
 ): ChildProcess {
   const proc = spawn(command, args, {
     ...options,
-    detached: false,
+    // Start in a new process group so we can kill the whole group (Vite,
+    // backend, esbuild, tsc watchers) reliably, even when `ps`/`pgrep`/`lsof`
+    // aren't available for tree-kill to walk the tree.
+    detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -89,22 +92,27 @@ export function spawnBackground(
 }
 
 /**
- * Kill a process and all its children
+ * Kill a process and all its children.
+ *
+ * Sends SIGKILL to the process group (works because we spawn detached, making
+ * the child a group leader) and also runs tree-kill as a fallback for any
+ * processes that escaped the group.
  */
 export function killProcessTree(pid: number): Promise<void> {
+  // Kill the entire process group. The negative pid targets the group led by
+  // the detached child.
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch {
+    // Group may already be gone, or not a group leader; fall back to tree-kill.
+  }
+
   return new Promise((resolve) => {
-    treeKill(pid, 'SIGTERM', (err) => {
-      if (err) {
-        // Try SIGKILL if SIGTERM fails
-        treeKill(pid, 'SIGKILL', (killErr) => {
-          if (killErr) {
-            logger.warn(`Failed to kill process ${pid}: ${killErr.message}`);
-          }
-          resolve();
-        });
-      } else {
-        resolve();
+    treeKill(pid, 'SIGKILL', (killErr) => {
+      if (killErr) {
+        logger.debug(`tree-kill fallback for ${pid}: ${killErr.message}`);
       }
+      resolve();
     });
   });
 }

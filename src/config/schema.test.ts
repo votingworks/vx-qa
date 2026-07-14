@@ -10,7 +10,7 @@ describe('validateConfig', () => {
     const config = {
       vxsuite: {
         repoPath: './vxsuite',
-        ref: 'v4.0.4',
+        version: 'v4.0',
       },
       election: {
         source: './election.json',
@@ -30,7 +30,7 @@ describe('validateConfig', () => {
     const config = {
       vxsuite: {
         repoPath: '~/.vx-qa/vxsuite',
-        ref: 'v4.0.4',
+        version: 'v4.0',
       },
       election: {
         source: './election.json',
@@ -50,7 +50,7 @@ describe('validateConfig', () => {
     const config = {
       vxsuite: {
         repoPath: '~/.vx-qa/vxsuite',
-        ref: 'v4.0.4',
+        version: 'v4.0',
       },
       election: {
         source: './election.json',
@@ -70,7 +70,7 @@ describe('validateConfig', () => {
     const config = {
       vxsuite: {
         repoPath: '/absolute/path/vxsuite',
-        ref: 'v4.0.4',
+        version: 'v4.0',
       },
       election: {
         source: '/absolute/path/election.json',
@@ -92,7 +92,7 @@ describe('validateConfig', () => {
     const config = {
       vxsuite: {
         repoPath: '../shared/vxsuite',
-        ref: 'v4.0.4',
+        version: 'v4.0',
       },
       election: {
         source: '../elections/election.json',
@@ -114,7 +114,7 @@ describe('validateConfig', () => {
     const config = {
       vxsuite: {
         repoPath: './vxsuite',
-        ref: 'v4.0.4',
+        version: 'v4.0',
       },
       election: {
         source: './election.json',
@@ -134,7 +134,7 @@ describe('validateConfig', () => {
     const config = {
       vxsuite: {
         repoPath: '',
-        ref: 'v4.0.4',
+        version: 'v4.0',
       },
       election: {
         source: './election.json',
@@ -157,7 +157,7 @@ describe('safeValidateConfig', () => {
     const config = {
       vxsuite: {
         repoPath: './vxsuite',
-        ref: 'v4.0.4',
+        version: 'v4.0',
       },
       election: {
         source: './election.json',
@@ -178,7 +178,7 @@ describe('safeValidateConfig', () => {
     const config = {
       vxsuite: {
         repoPath: '',
-        ref: 'v4.0.4',
+        version: 'v4.0',
       },
       election: {
         source: './election.json',

@@ -1,10 +1,10 @@
 {
   "vxsuite": {
     "repoPath": "~/.vx-qa/vxsuite",
-    "ref": "v4.0.4"
+    "version": "v4.1"
   },
   "election": {
-    "source": "./election-package-and-ballots-e71c80e-c4446e7.zip"
+    "source": "./election-package-primary-v4.1.zip"
   },
   "output": {
     "directory": "./output"
