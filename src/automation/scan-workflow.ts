@@ -471,12 +471,53 @@ async function scanBallot(
     const messageText = await message.innerText();
     logger.debug(`Message after sheet ${sheetIndex + 1}: ${messageText}`);
 
+    // A hard technical failure ("There was a problem scanning your ballot.
+    // Please scan it again.") has no Cast/Return choice -- unlike a genuine
+    // review screen, its heading also happens to match /ballot|wrong/i, so it
+    // must be checked and handled before the needsReview branches below.
+    const isScanFailure = messageText === 'Ballot Scan Failed';
+
     // A ballot the scanner won't count outright presents a review screen
     // ("Review Your Ballot") or a wrong-election/precinct rejection.
     const needsReview =
-      messageText !== 'Your ballot was counted!' && /ballot|wrong/i.test(messageText);
+      !isScanFailure &&
+      messageText !== 'Your ballot was counted!' &&
+      /ballot|wrong/i.test(messageText);
 
-    if (needsReview && ballot.expectedAccepted) {
+    if (isScanFailure) {
+      logger.warn(`Ballot scan failed after sheet ${sheetIndex + 1}/${sheetCount}: ${messageText}`);
+
+      const screenshot = await stepCollector.captureScreenshot(
+        `scan-${ballotStyleId}-${markPattern}-sheet-${sheetIndex + 1}`,
+        `Ballot scan failed: ${ballotStyleId} ${markPattern}`,
+      );
+
+      // No Cast/Return choice on this screen -- just remove the sheet so the
+      // run can continue with the next ballot. "Remove Your Ballot" may or
+      // may not appear first depending on the scan-failure reason, so don't
+      // treat its absence as fatal.
+      await page.waitForTimeout(1000);
+      try {
+        await waitForTextInApp(page, 'Remove Your Ballot', { timeout: 5000 });
+      } catch {
+        // Proceed regardless; the sheet still needs to be removed.
+      }
+      await scannerController.removeSheet();
+
+      await stepCollector.addOutput({
+        type: 'scan-result',
+        label: `Scan Result ${sheetIndex + 1} of ${sheetCount}`,
+        description: 'Ballot scan failed',
+        accepted: false,
+        expected: ballot.expectedAccepted,
+        screenshotPath: screenshot.path,
+        ballotStyleId,
+        ballotMode: ballot.ballotMode,
+        rejectedReason: 'scan-failed',
+        markPattern,
+        votes: votesForSheet,
+      });
+    } else if (needsReview && ballot.expectedAccepted) {
       // A castable warning we choose to cast anyway, e.g. an overvote when the
       // election allows casting overvotes. Click "Cast Ballot" and confirm the
       // ballot is counted.
