@@ -251,25 +251,33 @@ async function processBallotStyle(
 
   // Click on the text - try multiple strategies
   try {
-    // First try exact text match
+    // The option list depends on a data fetch (existing manual tallies /
+    // CVR-derived metadata) that can take longer to resolve than a fixed
+    // delay for a large real-world election with many contests and already-
+    // imported CVRs, so poll for the option rather than doing a single
+    // immediate count check right after a fixed wait.
     const optionElement = page.getByText(displayName, { exact: true });
+    await optionElement.first().waitFor({ state: 'visible', timeout: 10000 });
     const count = await optionElement.count();
     logger.debug(`Found ${count} elements with text "${displayName}"`);
 
-    if (count > 0) {
-      // Click the last one (dropdown options are typically later in the DOM than labels)
-      await optionElement.last().click({ timeout: 5000, force: true });
-      logger.debug(`Selected ballot style option "${displayName}"`);
-    } else {
-      throw new Error(`No elements found with text "${displayName}"`);
-    }
+    // Click the last one (dropdown options are typically later in the DOM than labels)
+    await optionElement.last().click({ timeout: 5000, force: true });
+    logger.debug(`Selected ballot style option "${displayName}"`);
   } catch (error) {
-    logger.error(`Failed to click ballot style option "${displayName}": ${String(error)}`);
+    // Every ballot style should be selectable here -- if it's missing from the
+    // dropdown, that means its precinct/district data doesn't match the other
+    // ballot style(s) for this precinct (e.g. from a bad election conversion).
+    // Fail loudly rather than silently skipping the ballot style.
     await stepCollector.captureScreenshot(
       `admin-manual-tallies-style-${styleIndex}-no-options`,
-      'Failed to select option',
+      'Ballot style not available for manual tally',
     );
-    return;
+    throw new Error(
+      `Ballot style option "${displayName}" not available to manually tally -- its ` +
+        `precinct/district data likely doesn't match the other ballot style(s) for this ` +
+        `precinct (as with a bad election conversion). Check the election definition: ${String(error)}`,
+    );
   }
 
   await page.waitForTimeout(500);
@@ -1001,7 +1009,7 @@ async function validateTallyCsv(
     const contestIdIndex = columnMap.get('Contest ID');
     const selectionIdIndex = columnMap.get('Selection ID');
 
-    if (contestIdIndex !== undefined && selectionIdIndex !== undefined && hasManualResults) {
+    if (contestIdIndex !== undefined && selectionIdIndex !== undefined) {
       const contestId = fields[contestIdIndex];
       const selectionId = fields[selectionIdIndex];
       const votes = parseInt(fields[totalVotesColumnIndex] || '0', 10);
