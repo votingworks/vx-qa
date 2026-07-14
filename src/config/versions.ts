@@ -35,7 +35,10 @@ export interface VersionSpec {
   ballotModel: BallotModel;
   /**
    * Mock USB drive data directory, relative to `<repo>/.mock-state/<NODE_ENV>`.
-   * v4.1 nests the drive under a disk name (`sdb`); v4.0 does not.
+   * v4.1's simulated USB platform (libs/usb-drive/src/mocks/simulated_usb_platform.ts)
+   * stores each drive's files directly under `storage/<diskname>` (no extra
+   * subfolder); v4.0's older mock implementation uses a flatter path with no
+   * per-disk nesting at all.
    */
   mockUsbDataDir: string;
 }
@@ -51,7 +54,7 @@ export const VERSION_SPECS: Record<VxSuiteVersion, VersionSpec> = {
     ref: 'v4.1.0',
     patchFile: 'vxsuite-v4.1.patch',
     ballotModel: 'ballotPositions',
-    mockUsbDataDir: 'usb-drive/sdb/mock-usb-data',
+    mockUsbDataDir: 'usb-drive/storage/sdb',
   },
 };
 

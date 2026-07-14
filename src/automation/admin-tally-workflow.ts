@@ -13,6 +13,7 @@ import {
   clickTextInApp,
   toggleDevDock,
   debugPageState,
+  getMainContent,
 } from './browser.js';
 import { loadCollection, type StepCollector, type ArtifactCollector } from '../report/artifacts.js';
 import { ArtifactCollection, StepOutput, ValidationResult } from '../config/types.js';
@@ -569,63 +570,119 @@ async function loadCvrs(
 
   const expectedCvrFileCount = precinctId !== undefined ? 1 : election.precincts.length;
 
-  for (let i = 0; i <= expectedCvrFileCount + 1; i += 1) {
-    if (i === expectedCvrFileCount + 1) {
-      throw new Error(
-        `Expected ${expectedCvrFileCount} VxScan CVR file(s), but found more than that`,
+  // v4.0 labels the CVR-import opener "Load CVRs" (matched by text) and uses
+  // a modal (role="alertdialog") with a "Load" button per row, closed via
+  // "Cancel"/"Close". v4.1's rewritten CVR screen uses an icon button
+  // labeled "Load" (class `LoadButton`, since its icon pollutes the
+  // accessible name) that swaps the view panel for an inline import panel --
+  // not a modal -- with one card per export (icon label "Load"/"Loading"/
+  // "Loaded"), closed via a "Done" button. Detect which UI this build has
+  // once, up front, and use the matching flow throughout.
+  const usesModalCvrImport = (await page.getByText('Load CVRs').count()) > 0;
+
+  await stepCollector.captureScreenshot('admin-tally-before-load-cvrs', 'Before click Load CVRs');
+
+  try {
+    if (usesModalCvrImport) {
+      await page.getByText('Load CVRs').first().click({ timeout: 15000 });
+    } else {
+      await page.locator('.LoadButton').first().click({ timeout: 15000 });
+    }
+  } catch (error) {
+    await debugPageState(page, 'Failed to open CVR import screen', outputDir);
+    throw error;
+  }
+  await page.waitForTimeout(1000);
+  await stepCollector.captureScreenshot('admin-tally-load-cvr-dialog', 'Load CVR dialog');
+
+  if (usesModalCvrImport) {
+    for (let i = 0; i <= expectedCvrFileCount + 1; i += 1) {
+      if (i === expectedCvrFileCount + 1) {
+        throw new Error(
+          `Expected ${expectedCvrFileCount} VxScan CVR file(s), but found more than that`,
+        );
+      }
+
+      // Find and click the Load button in the modal table for the first CVR
+      // file. Each row in the table has a "Load" button (or "Loaded" if
+      // already imported).
+      const modal = page.locator('[role="alertdialog"]');
+      const loadButtons = modal.getByRole('button', { name: 'Load', exact: true });
+
+      const loadButtonCount = await loadButtons.count();
+      logger.debug(`Found ${loadButtonCount} Load buttons in CVR modal`);
+
+      if (loadButtonCount === 0) {
+        // No more to load, close the modal
+        await modal.getByText('Cancel').click();
+        break;
+      }
+
+      await loadButtons.first().click();
+
+      // Wait for success message "X New CVR Loaded" or "X New CVRs Loaded"
+      await waitForTextWithDebug(page, 'New CVR', {
+        timeout: 30000,
+        outputDir,
+        label: 'Waiting for CVRs to be loaded',
+      });
+
+      await stepCollector.captureScreenshot(
+        'admin-tally-cvrs-loaded-success',
+        'CVRs loaded successfully',
+      );
+
+      // Close the success dialog
+      await page.getByRole('button', { name: 'Close' }).click();
+
+      // Re-open the modal for the next file, if any remain.
+      if (i < expectedCvrFileCount) {
+        await page.getByText('Load CVRs').first().click({ timeout: 15000 });
+        await page.waitForTimeout(1000);
+      }
+    }
+  } else {
+    const mainContent = getMainContent(page);
+
+    for (let i = 0; i <= expectedCvrFileCount + 1; i += 1) {
+      if (i === expectedCvrFileCount + 1) {
+        throw new Error(
+          `Expected ${expectedCvrFileCount} VxScan CVR file(s), but found more than that`,
+        );
+      }
+
+      // Each not-yet-imported export renders as a card whose icon label is
+      // exactly "Load" (in-progress/imported cards read "Loading"/"Loaded"
+      // instead); clicking anywhere inside the card (including this label)
+      // registers as a click on its enclosing button.
+      const readyToLoad = mainContent.getByText('Load', { exact: true });
+      const readyCount = await readyToLoad.count();
+      logger.debug(`Found ${readyCount} ready-to-load CVR export(s)`);
+
+      if (readyCount === 0) {
+        break;
+      }
+
+      await readyToLoad.first().click();
+
+      // The import is near-instant for a small mock CVR file; no modal
+      // appears for a normal first-time import; it only appears if the
+      // export partially overlaps one already loaded (not expected here),
+      // so dismiss it defensively if present rather than waiting for it.
+      await page.waitForTimeout(2000);
+      const closeAlertButton = mainContent.getByText('Close', { exact: true });
+      if ((await closeAlertButton.count()) > 0) {
+        await closeAlertButton.first().click();
+      }
+
+      await stepCollector.captureScreenshot(
+        `admin-tally-cvrs-loaded-success-${i}`,
+        'CVRs loaded successfully',
       );
     }
 
-    await stepCollector.captureScreenshot('admin-tally-before-load-cvrs', 'Before click Load CVRs');
-
-    // Open the CVR import modal. v4.0 labels the opener "Load CVRs" (matched by
-    // text, as originally). v4.1's rewritten CVR screen uses an icon button
-    // labeled "Load" whose icon pollutes the accessible name, so target its
-    // explicit CSS class instead of a role-name.
-    try {
-      const loadCvrsByText = page.getByText('Load CVRs');
-      if ((await loadCvrsByText.count()) > 0) {
-        await loadCvrsByText.first().click({ timeout: 15000 });
-      } else {
-        await page.locator('.LoadButton').first().click({ timeout: 15000 });
-      }
-    } catch (error) {
-      await debugPageState(page, 'Failed to open CVR import modal', outputDir);
-      throw error;
-    }
-    await page.waitForTimeout(1000);
-    await stepCollector.captureScreenshot('admin-tally-load-cvr-dialog', 'Load CVR dialog');
-
-    // Find and click the Load button in the modal table for the first CVR file
-    // Each row in the table has a "Load" button (or "Loaded" if already imported)
-    const modal = page.locator('[role="alertdialog"]');
-    const loadButtons = modal.getByRole('button', { name: 'Load', exact: true });
-
-    const loadButtonCount = await loadButtons.count();
-    logger.debug(`Found ${loadButtonCount} Load buttons in CVR modal`);
-
-    if (loadButtonCount === 0) {
-      // No more to load, close the modal
-      await modal.getByText('Cancel').click();
-      break;
-    }
-
-    await loadButtons.first().click();
-
-    // Wait for success message "X New CVR Loaded" or "X New CVRs Loaded"
-    await waitForTextWithDebug(page, 'New CVR', {
-      timeout: 30000,
-      outputDir,
-      label: 'Waiting for CVRs to be loaded',
-    });
-
-    await stepCollector.captureScreenshot(
-      'admin-tally-cvrs-loaded-success',
-      'CVRs loaded successfully',
-    );
-
-    // Close the success dialog
-    await page.getByRole('button', { name: 'Close' }).click();
+    // Close the import panel
+    await mainContent.getByText('Done', { exact: true }).click();
   }
 
   await page.waitForTimeout(1000);
