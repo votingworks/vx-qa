@@ -148,7 +148,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
       throw new Error(`Patch file not found for version ${config.vxsuite.version}: ${patchPath}`);
     }
 
-    await bootstrapRepo(repoPath);
+    await bootstrapRepo(repoPath, commit);
     await installPlaywrightBrowsers(repoPath);
 
     // Phase 2: Clear state

@@ -2,16 +2,38 @@
  * Bootstrap and setup VxSuite repository
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { logger } from '../utils/logger.js';
 import { execCommandWithOutput, execCommand } from '../utils/process.js';
 
 /**
- * Check if the repository needs bootstrapping
+ * Marker file recording the commit that was last successfully bootstrapped in
+ * a given repoPath. A repoPath is reused across VxSuite versions (see
+ * cloneOrUpdateRepo checking out different tags in place), and node_modules /
+ * build output from one version's dependencies (e.g. a different Vite major)
+ * silently persists across a checkout switch unless something forces a
+ * reinstall.
  */
-export function needsBootstrap(repoPath: string): boolean {
+const BOOTSTRAP_COMMIT_MARKER = '.vx-qa-bootstrap-commit';
+
+function readBootstrappedCommit(repoPath: string): string | undefined {
+  try {
+    return readFileSync(join(repoPath, BOOTSTRAP_COMMIT_MARKER), 'utf-8').trim();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Check if the repository needs bootstrapping. Returns true if node_modules
+ * or the app builds are missing, or if the currently checked-out `commit`
+ * doesn't match the one recorded by the last successful bootstrap of this
+ * repoPath -- otherwise switching versions in a shared repoPath would reuse
+ * stale, wrong-version node_modules instead of reinstalling.
+ */
+export function needsBootstrap(repoPath: string, commit: string): boolean {
   // Check if node_modules exists in the root
   const nodeModulesPath = join(repoPath, 'node_modules');
   if (!existsSync(nodeModulesPath)) {
@@ -30,15 +52,19 @@ export function needsBootstrap(repoPath: string): boolean {
     existsSync(scanFrontendBuild) &&
     existsSync(scanBackendBuild);
 
-  return !allBuildsExist;
+  if (!allBuildsExist) {
+    return true;
+  }
+
+  return readBootstrappedCommit(repoPath) !== commit;
 }
 
 /**
  * Run the bootstrap script to set up the repository
  * Only bootstraps admin and scan apps to save time
  */
-export async function bootstrapRepo(repoPath: string): Promise<void> {
-  if (!needsBootstrap(repoPath)) {
+export async function bootstrapRepo(repoPath: string, commit: string): Promise<void> {
+  if (!needsBootstrap(repoPath, commit)) {
     logger.info('Repository already bootstrapped, skipping...');
     return;
   }
@@ -85,6 +111,8 @@ export async function bootstrapRepo(repoPath: string): Promise<void> {
   if (bootstrapCode !== 0) {
     throw new Error(`Build failed with code ${bootstrapCode}`);
   }
+
+  await writeFile(join(repoPath, BOOTSTRAP_COMMIT_MARKER), commit);
 
   logger.success('Admin and scan apps bootstrapped successfully');
 }
