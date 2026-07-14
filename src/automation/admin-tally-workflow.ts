@@ -1009,7 +1009,7 @@ async function validateTallyCsv(
     const contestIdIndex = columnMap.get('Contest ID');
     const selectionIdIndex = columnMap.get('Selection ID');
 
-    if (contestIdIndex !== undefined && selectionIdIndex !== undefined && hasManualResults) {
+    if (contestIdIndex !== undefined && selectionIdIndex !== undefined) {
       const contestId = fields[contestIdIndex];
       const selectionId = fields[selectionIdIndex];
       const votes = parseInt(fields[totalVotesColumnIndex] || '0', 10);
