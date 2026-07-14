@@ -7,6 +7,7 @@ import {
   getContestsForBallotStyle,
   normalizeGridLayouts,
   normalizeYesNoContests,
+  assertNoDuplicateBallotKeys,
 } from './election-loader.js';
 import type {
   Election,
@@ -14,6 +15,7 @@ import type {
   YesNoContest,
   BallotStyle,
   SheetPositions,
+  BallotPdfInfo,
 } from './election-loader.js';
 
 /**
@@ -380,5 +382,43 @@ describe('normalizeYesNoContests', () => {
     const result = election.contests[0] as YesNoContest;
     expect(result.yesOption).toEqual({ id: 'y', label: 'Yes' });
     expect(result.noOption).toEqual({ id: 'n', label: 'No' });
+  });
+});
+
+describe('assertNoDuplicateBallotKeys', () => {
+  function ballot(overrides: Partial<BallotPdfInfo> = {}): BallotPdfInfo {
+    return {
+      ballotStyleId: 'style-1',
+      precinctId: 'precinct-1',
+      ballotType: 'precinct',
+      ballotMode: 'official',
+      compact: false,
+      pdfData: new Uint8Array(),
+      ...overrides,
+    };
+  }
+
+  test('does not throw when all keys are unique', () => {
+    expect(() =>
+      assertNoDuplicateBallotKeys([
+        ballot(),
+        ballot({ ballotType: 'absentee' }),
+        ballot({ ballotMode: 'test' }),
+        ballot({ precinctId: 'precinct-2' }),
+        ballot({ ballotStyleId: 'style-2' }),
+      ]),
+    ).not.toThrow();
+  });
+
+  test('throws when two entries share the same key', () => {
+    expect(() => assertNoDuplicateBallotKeys([ballot(), ballot()])).toThrow(
+      /Duplicate ballot entry/,
+    );
+  });
+
+  test('does not confuse entries that differ only in one field', () => {
+    expect(() =>
+      assertNoDuplicateBallotKeys([ballot(), ballot({ ballotType: 'absentee' })]),
+    ).not.toThrow();
   });
 });

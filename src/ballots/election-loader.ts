@@ -280,6 +280,8 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
   }
   logger.debug(`Loaded ${ballots.length} ballot PDFs`);
 
+  assertNoDuplicateBallotKeys(ballots);
+
   // Validate we have what we need
   assert(ballots.length > 0, 'Election package contains no ballot PDFs.');
 
@@ -463,6 +465,27 @@ export interface BallotPdfInfo {
   ballotMode: BallotMode;
   compact: boolean;
   pdfData: Uint8Array;
+}
+
+/**
+ * Each (ballotStyleId, precinctId, ballotType, ballotMode) combination should
+ * appear exactly once in ballots.jsonl. A repeat indicates a VxDesign export
+ * bug (e.g. an extra ballot variant that shouldn't have been included), so
+ * fail loudly rather than silently overwriting or duplicating downstream
+ * ballot files.
+ */
+export function assertNoDuplicateBallotKeys(ballots: readonly BallotPdfInfo[]): void {
+  const seenBallotKeys = new Set<string>();
+  for (const ballot of ballots) {
+    const key = `${ballot.ballotStyleId}|${ballot.precinctId}|${ballot.ballotType}|${ballot.ballotMode}`;
+    assert(
+      !seenBallotKeys.has(key),
+      `Duplicate ballot entry in ballots.jsonl: ballotStyleId=${ballot.ballotStyleId}, ` +
+        `precinctId=${ballot.precinctId}, ballotType=${ballot.ballotType}, ` +
+        `ballotMode=${ballot.ballotMode}. Each combination should appear exactly once.`,
+    );
+    seenBallotKeys.add(key);
+  }
 }
 
 /**
