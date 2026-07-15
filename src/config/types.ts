@@ -10,8 +10,24 @@ export type BallotPattern =
   | 'blank'
   | 'valid'
   | 'overvote'
+  | 'undervote'
   | 'marked-write-in'
   | 'unmarked-write-in';
+
+/**
+ * VxScan precinct-scan adjudication reasons (see VxSuite's `AdjudicationReason`
+ * enum in libs/types). These are the reasons a scanned ballot can be flagged
+ * for voter review; which ones are enabled is an election/jurisdiction setting.
+ */
+export type AdjudicationReason =
+  | 'MarginalMark'
+  | 'Overvote'
+  | 'Undervote'
+  | 'BlankBallot'
+  | 'UnmarkedWriteIn'
+  // Deprecated in VxSuite but still accepted for compatibility with existing
+  // elections.
+  | 'UninterpretableBallot';
 
 export interface VxSuiteConfig {
   /** Path where VxSuite repo should be cloned */
@@ -25,6 +41,13 @@ export interface VxSuiteConfig {
 export interface SystemSettingsOverrides {
   /** Override whether VxScan refuses to cast overvoted ballots. */
   disallowCastingOvervotes?: boolean;
+  /**
+   * Override the precinct-scan adjudication reasons VxScan flags for review.
+   * Lets one election package exercise jurisdiction-specific behavior — e.g.
+   * Mississippi, which flags `BlankBallot` and/or `Undervote` — without
+   * maintaining a separate package.
+   */
+  precinctScanAdjudicationReasons?: AdjudicationReason[];
 }
 
 export interface ElectionConfig {

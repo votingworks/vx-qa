@@ -12,8 +12,18 @@ export const BallotPatternSchema = z.enum([
   'blank',
   'valid',
   'overvote',
+  'undervote',
   'marked-write-in',
   'unmarked-write-in',
+]);
+
+export const AdjudicationReasonSchema = z.enum([
+  'MarginalMark',
+  'Overvote',
+  'Undervote',
+  'BlankBallot',
+  'UnmarkedWriteIn',
+  'UninterpretableBallot',
 ]);
 
 export const TallyModeSchema = z.enum(TALLY_MODES);
@@ -34,6 +44,7 @@ export const VxSuiteConfigSchema = z.object({
  */
 export const SystemSettingsOverridesSchema = z.object({
   disallowCastingOvervotes: z.boolean().optional(),
+  precinctScanAdjudicationReasons: z.array(AdjudicationReasonSchema).optional(),
 });
 
 export const ElectionConfigSchema = z.object({
