@@ -6,6 +6,7 @@
   "election": {
     "source": "./election-package-and-ballots-e71c80e-c4446e7.zip",
     "systemSettingsOverrides": {
+      "disallowCastingOvervotes": false,
       "precinctScanAdjudicationReasons": ["Overvote", "Undervote", "BlankBallot"]
     }
   },
