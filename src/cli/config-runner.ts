@@ -203,6 +203,11 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
       : [];
     const blankBallotRequiresReview = precinctScanAdjudicationReasons.includes('BlankBallot');
 
+    // When 'Undervote' is configured (e.g. Mississippi), VxScan returns
+    // under-voted ballots for review. Unlike overvotes, under-votes can always
+    // be cast, so the voter is offered both choices.
+    const undervoteRequiresReview = precinctScanAdjudicationReasons.includes('Undervote');
+
     // When overvotes may not be cast, an overvoted ballot can only be returned;
     // when they may be cast, the voter can choose to cast it anyway. This drives
     // how many overvote ballots we scan and what outcome we expect for each.
@@ -311,6 +316,26 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
             { ...overvoteBase, expectedAccepted: true },
             { ...overvoteBase, expectedAccepted: false },
           );
+        }
+
+        const undervoteBase = {
+          ballotStyleId: ballot.ballotStyleId,
+          precinctId: ballot.precinctId,
+          ballotMode: ballot.ballotMode,
+          ballotType: ballot.ballotType,
+          pattern: 'undervote' as const,
+          pdfPath,
+        };
+        if (undervoteRequiresReview) {
+          // Under-votes are flagged for review but always castable: exercise
+          // both voter choices — cast one (counted) and return one (rejected).
+          ballotsToScan.push(
+            { ...undervoteBase, expectedAccepted: true },
+            { ...undervoteBase, expectedAccepted: false },
+          );
+        } else {
+          // Not flagged: the under-voted ballot is counted directly.
+          ballotsToScan.push({ ...undervoteBase, expectedAccepted: true });
         }
 
         ballotsToScan.push(

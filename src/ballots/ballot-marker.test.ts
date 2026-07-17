@@ -6,6 +6,7 @@ import { describe, test, expect } from 'vitest';
 import {
   generateValidVotes,
   generateOvervoteVotes,
+  generateUndervoteVotes,
   generateValidWriteInVotes,
   generateUnmarkedWriteInVotes,
   generateMarkedWriteInVotes,
@@ -299,6 +300,96 @@ describe('generateOvervoteVotes', () => {
     expect(votes).toBeDefined();
     expect(votes!.mayor).toHaveLength(2); // Overvoted
     expect(votes!.treasurer).toHaveLength(1); // Not overvoted, just voted normally
+  });
+});
+
+describe('generateUndervoteVotes', () => {
+  test('under-vote every contest, anchoring non-blankness on a multi-seat contest', () => {
+    const contests: (CandidateContest | YesNoContest)[] = [
+      {
+        type: 'candidate',
+        id: 'city-council',
+        title: 'City Council',
+        seats: 3,
+        candidates: [
+          { id: 'alice', name: 'Alice' },
+          { id: 'bob', name: 'Bob' },
+          { id: 'carol', name: 'Carol' },
+        ],
+        allowWriteIns: false,
+        districtId: 'district-1',
+      },
+      {
+        type: 'candidate',
+        id: 'mayor',
+        title: 'Mayor',
+        seats: 1,
+        candidates: [{ id: 'dave', name: 'Dave' }],
+        allowWriteIns: false,
+        districtId: 'district-1',
+      },
+    ];
+
+    const election = createTestElection(contests);
+    const votes = generateUndervoteVotes(election, 'test-ballot-style');
+
+    expect(votes).toBeDefined();
+    // Multi-seat contest is under-voted (2 of 3 seats) but still marked, so the
+    // ballot is not blank.
+    expect(votes!['city-council']).toHaveLength(2);
+    // Every other contest is left blank (an under-vote of zero) so that every
+    // sheet of a multi-sheet ballot is flagged for review.
+    expect(votes!.mayor).toBeUndefined();
+  });
+
+  test('leave one contest blank when all contests are single-winner', () => {
+    const contests: (CandidateContest | YesNoContest)[] = [
+      {
+        type: 'candidate',
+        id: 'mayor',
+        title: 'Mayor',
+        seats: 1,
+        candidates: [{ id: 'alice', name: 'Alice' }],
+        allowWriteIns: false,
+        districtId: 'district-1',
+      },
+      {
+        type: 'yesno',
+        id: 'proposition-1',
+        title: 'Proposition 1',
+        yesOption: { id: 'yes', label: 'Yes' },
+        noOption: { id: 'no', label: 'No' },
+        districtId: 'district-1',
+      },
+    ];
+
+    const election = createTestElection(contests);
+    const votes = generateUndervoteVotes(election, 'test-ballot-style');
+
+    expect(votes).toBeDefined();
+    // First contest voted, last contest omitted (an under-vote of zero).
+    expect(votes!.mayor).toHaveLength(1);
+    expect(votes!['proposition-1']).toBeUndefined();
+  });
+
+  test('return undefined when a single single-winner contest cannot be under-voted without going blank', () => {
+    const contest: CandidateContest = {
+      type: 'candidate',
+      id: 'mayor',
+      title: 'Mayor',
+      seats: 1,
+      candidates: [
+        { id: 'alice', name: 'Alice' },
+        { id: 'bob', name: 'Bob' },
+      ],
+      allowWriteIns: false,
+      districtId: 'district-1',
+    };
+
+    const election = createTestElection([contest]);
+    const votes = generateUndervoteVotes(election, 'test-ballot-style');
+
+    expect(votes).toBeUndefined();
   });
 });
 

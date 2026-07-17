@@ -1,0 +1,16 @@
+{
+  "vxsuite": {
+    "repoPath": "~/.vx-qa/vxsuite",
+    "version": "v4.1"
+  },
+  "election": {
+    "source": "./election-package-and-ballots-v4.1.zip",
+    "systemSettingsOverrides": {
+      "disallowCastingOvervotes": false,
+      "precinctScanAdjudicationReasons": ["Overvote", "Undervote", "BlankBallot"]
+    }
+  },
+  "output": {
+    "directory": "./output"
+  }
+}

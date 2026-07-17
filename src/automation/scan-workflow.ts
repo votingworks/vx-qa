@@ -594,7 +594,12 @@ async function scanBallot(
         screenshotPath: screenshot.path,
         ballotStyleId,
         ballotMode: ballot.ballotMode,
-        rejectedReason: markPattern === 'overvote' ? 'overvote' : 'rejected',
+        rejectedReason:
+          markPattern === 'overvote'
+            ? 'overvote'
+            : markPattern === 'undervote'
+              ? 'undervote'
+              : 'rejected',
         markPattern,
         votes: votesForSheet,
       });

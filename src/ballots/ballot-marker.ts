@@ -104,6 +104,27 @@ export async function generateMarkedBallotForPattern(
       };
     }
 
+    case 'undervote': {
+      const votes = generateUndervoteVotes(election, ballotStyleId);
+
+      if (!votes) {
+        return undefined;
+      }
+
+      return {
+        ballotStyleId,
+        pattern,
+        pdfBytes: await generateMarkedBallot(
+          repoPath,
+          election,
+          ballotStyleId,
+          votes,
+          baseBallotPdf,
+        ),
+        votes,
+      };
+    }
+
     case 'unmarked-write-in': {
       const votes = generateUnmarkedWriteInVotes(election, ballotStyleId);
 
@@ -244,6 +265,61 @@ export function generateOvervoteVotes(
   }
 
   return hasAnyOvervote ? votes : undefined;
+}
+
+/**
+ * Generate votes for an under-voted (but non-blank) ballot. When VxScan's
+ * `Undervote` adjudication reason is enabled, such a ballot is returned to the
+ * voter for review (they may still cast it).
+ *
+ * A ballot can span multiple sheets, and VxScan reviews each sheet
+ * independently — a sheet with no flagged contest is accepted outright. So to
+ * make the whole ballot behave consistently (every sheet flagged, so a returned
+ * ballot is returned in full), we under-vote *every* contest. Keeping the
+ * ballot non-blank requires at least one contest that is both marked and
+ * under-voted, which only a multi-seat candidate contest can be; it anchors the
+ * ballot while every other contest is left blank (an under-vote of zero).
+ *
+ * When no multi-seat contest exists we fall back to voting the ballot in full
+ * except for one contest left blank. That still exercises an under-vote, but
+ * only reliably on single-sheet ballots (a fully-voted sheet elsewhere would be
+ * accepted rather than returned).
+ *
+ * Returns `undefined` when the ballot style can't be under-voted without going
+ * entirely blank (a single single-winner contest), since that's a `BlankBallot`
+ * case rather than an under-vote.
+ */
+export function generateUndervoteVotes(
+  election: Election,
+  ballotStyleId: string,
+): VotesDict | undefined {
+  const contests = getContestsForBallotStyle(election, ballotStyleId);
+  if (contests.length === 0) {
+    return undefined;
+  }
+
+  // Preferred: under-vote every contest, anchoring the ballot as non-blank with
+  // one multi-seat candidate contest kept partially marked.
+  const anchor = contests.find(
+    (c) => c.type === 'candidate' && c.seats > 1 && c.candidates.length >= 1,
+  );
+  if (anchor && anchor.type === 'candidate') {
+    // Keep one fewer than the seats (at least one selection): under-voted but
+    // still marked. Every other contest is left blank.
+    const kept = Math.max(1, anchor.seats - 1);
+    return { [anchor.id]: anchor.candidates.slice(0, kept) };
+  }
+
+  // Fallback (no multi-seat contest): vote the ballot in full except one
+  // contest left blank. Needs at least two contests, else the whole ballot
+  // would be blank.
+  if (contests.length >= 2) {
+    const votes = generateValidVotes(election, ballotStyleId);
+    delete votes[contests[contests.length - 1].id];
+    return votes;
+  }
+
+  return undefined;
 }
 
 export function generateValidWriteInVotes(
