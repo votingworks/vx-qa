@@ -222,9 +222,9 @@ workflows:
           version: 'v4.1'
           config: 'v4.1-mississippi'
       - test-qa:
-          name: test-qa-v4.1-multi-precinct
+          name: test-qa-v4.1-multi-precinct-with-cross-endorsement
           version: 'v4.1'
-          config: 'v4.1-multi-precinct'
+          config: 'v4.1-multi-precinct-with-cross-endorsement'
 
   qa-from-vxdesign:
     when:

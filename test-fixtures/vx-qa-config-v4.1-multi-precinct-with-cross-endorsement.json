@@ -4,7 +4,7 @@
     "version": "v4.1"
   },
   "election": {
-    "source": "./election-package-multi-precinct-v4.1.zip"
+    "source": "./election-package-multi-precinct-with-cross-endorsement-v4.1.zip"
   },
   "output": {
     "directory": "./output"
