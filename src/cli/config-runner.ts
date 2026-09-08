@@ -180,14 +180,19 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
 
     // Apply any systemSettings overrides to the package VxAdmin will load (and
     // re-export to VxScan), so a single package can exercise different behaviors.
-    const systemSettingsOverrides = config.election.systemSettingsOverrides;
-    if (systemSettingsOverrides && Object.keys(systemSettingsOverrides).length > 0) {
-      logger.info(`Applying systemSettings overrides: ${JSON.stringify(systemSettingsOverrides)}`);
-      electionPackage.systemSettings = await applySystemSettingsOverrides(
-        electionPackagePath,
-        systemSettingsOverrides as Record<string, unknown>,
-      );
-    }
+    // VxScan blocks closing the polls in official mode until the package's
+    // `electionDayPollsCloseTime`, which a QA run can't wait for, so runs would
+    // pass or fail based on the time of day they start. Off unless the config
+    // asks for it.
+    const systemSettingsOverrides = {
+      disallowClosingPollsBeforeElectionDayPollsCloseTime: false,
+      ...config.election.systemSettingsOverrides,
+    };
+    logger.info(`Applying systemSettings overrides: ${JSON.stringify(systemSettingsOverrides)}`);
+    electionPackage.systemSettings = await applySystemSettingsOverrides(
+      electionPackagePath,
+      systemSettingsOverrides as Record<string, unknown>,
+    );
 
     const { election } = electionPackage.electionDefinition;
 

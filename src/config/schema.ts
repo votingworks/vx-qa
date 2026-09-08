@@ -45,6 +45,12 @@ export const VxSuiteConfigSchema = z.object({
 export const SystemSettingsOverridesSchema = z.object({
   disallowCastingOvervotes: z.boolean().optional(),
   precinctScanAdjudicationReasons: z.array(AdjudicationReasonSchema).optional(),
+  /**
+   * VxScan blocks closing the polls in official mode until
+   * `electionDayPollsCloseTime`, so a package that sets both makes a QA run
+   * succeed or fail depending on the time of day it starts.
+   */
+  disallowClosingPollsBeforeElectionDayPollsCloseTime: z.boolean().optional(),
 });
 
 export const ElectionConfigSchema = z.object({
