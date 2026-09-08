@@ -15,7 +15,7 @@ import {
   waitForTextInApp,
   waitForTextInAppWithDebug,
 } from './browser.js';
-import type { BallotPattern, PrecinctSelection } from '../config/types.js';
+import type { BallotPattern } from '../config/types.js';
 import { getVersionSpec, type VxSuiteVersion } from '../config/versions.js';
 import type { StepCollector, ArtifactCollector } from '../report/artifacts.js';
 import { basename, join } from 'node:path';
@@ -53,7 +53,7 @@ export async function runScanWorkflow(
   electionPackage: ElectionPackage,
   electionPackagePath: string,
   electionPath: string,
-  precinctSelection: PrecinctSelection,
+  precinctId: string,
   ballotsToScan: BallotToScan[],
   outputDir: string,
   dataPath: string,
@@ -118,7 +118,7 @@ export async function runScanWorkflow(
     }
   }
 
-  await selectScannerLocation(page, version, election, precinctSelection);
+  await selectScannerLocation(page, version, election, precinctId);
 
   await page.getByText('Official Ballot Mode').click();
 
@@ -316,16 +316,13 @@ export interface ScannerLocationSelection {
 export function scannerLocationSelection(
   version: VxSuiteVersion,
   election: Election,
-  precinctSelection: PrecinctSelection,
+  precinctId: string,
 ): ScannerLocationSelection | undefined {
   if (getVersionSpec(version).locationModel === 'precinct') {
     if (election.precincts.length <= 1) return undefined;
 
-    const precinct =
-      precinctSelection.kind === 'AllPrecincts'
-        ? 'All Precincts'
-        : election.precincts.find(({ id }) => id === precinctSelection.precinctId)?.name;
-    assert(precinct, `Invalid precinct selection: ${JSON.stringify(precinctSelection)}`);
+    const precinct = election.precincts.find(({ id }) => id === precinctId)?.name;
+    assert(precinct, `Invalid precinct selection: ${precinctId}`);
 
     return { placeholder: 'Select a precinct…', optionName: precinct };
   }
@@ -333,26 +330,10 @@ export function scannerLocationSelection(
   const pollingPlaces = election.pollingPlaces ?? [];
   if (pollingPlaces.length <= 1) return undefined;
 
-  // Absentee places cover every precinct, so they stand in for v4.0's "All
-  // Precincts"; a single precinct is scanned at its own election day place.
-  const place =
-    precinctSelection.kind === 'AllPrecincts'
-      ? pollingPlaces.find(
-          (pollingPlace) =>
-            pollingPlace.type === 'absentee' &&
-            election.precincts.every(({ id }) => id in pollingPlace.precincts),
-        )
-      : pollingPlaces.find(
-          (pollingPlace) =>
-            pollingPlace.type === 'election_day' &&
-            precinctSelection.precinctId in pollingPlace.precincts,
-        );
-  assert(
-    place,
-    precinctSelection.kind === 'AllPrecincts'
-      ? 'No absentee polling place covers every precinct'
-      : `No election day polling place for precinct: ${precinctSelection.precinctId}`,
+  const place = pollingPlaces.find(
+    (pollingPlace) => pollingPlace.type === 'election_day' && precinctId in pollingPlace.precincts,
   );
+  assert(place, `No election day polling place for precinct: ${precinctId}`);
 
   return { placeholder: 'Select a polling place…', optionName: place.name };
 }
@@ -362,9 +343,9 @@ async function selectScannerLocation(
   page: Page,
   version: VxSuiteVersion,
   election: Election,
-  precinctSelection: PrecinctSelection,
+  precinctId: string,
 ): Promise<void> {
-  const selection = scannerLocationSelection(version, election, precinctSelection);
+  const selection = scannerLocationSelection(version, election, precinctId);
   if (!selection) return;
 
   // Both versions' pickers are a VxSuite `SearchSelect`.

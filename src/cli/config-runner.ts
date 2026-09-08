@@ -517,7 +517,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
               electionPackage,
               adminExportedPackage.path,
               electionPackagePath, // Use the extracted election package ZIP
-              { kind: 'SinglePrecinct', precinctId: precinct.id },
+              precinct.id,
               precinctBallotsToScan,
               config.output.directory,
               dataPath,
@@ -661,7 +661,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
               electionPackage,
               adminExportedPackage.path,
               electionPackagePath,
-              { kind: 'SinglePrecinct', precinctId: precinct.id },
+              precinct.id,
               precinctBallotsToScan,
               config.output.directory,
               dataPath,
