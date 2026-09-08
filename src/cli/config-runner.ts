@@ -504,6 +504,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
 
             await runScanWorkflow(
               repoPath,
+              config.vxsuite.version,
               page,
               electionPackage,
               adminExportedPackage.path,
@@ -647,6 +648,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
           try {
             await runScanWorkflow(
               repoPath,
+              config.vxsuite.version,
               page,
               electionPackage,
               adminExportedPackage.path,

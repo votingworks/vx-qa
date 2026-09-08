@@ -143,6 +143,18 @@ export interface Precinct {
   name: string;
 }
 
+export type PollingPlaceType = 'absentee' | 'early_voting' | 'election_day';
+
+/** A polling place covers either a whole precinct or only some of its splits. */
+export type PollingPlacePrecinct = { type: 'whole' } | { type: 'partial'; splitIds: string[] };
+
+export interface PollingPlace {
+  id: string;
+  name: string;
+  precincts: Record<string, PollingPlacePrecinct>;
+  type: PollingPlaceType;
+}
+
 export interface Party {
   id: string;
   name: string;
@@ -157,6 +169,8 @@ export interface Election {
   type: 'general' | 'primary';
   ballotStyles: BallotStyle[];
   precincts: Precinct[];
+  /** v4.1+ only: the locations VxScan can be scoped to. */
+  pollingPlaces?: PollingPlace[];
   contests: Contest[];
   parties?: Party[];
   ballotLayout: {
