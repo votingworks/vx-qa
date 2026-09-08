@@ -180,14 +180,19 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
 
     // Apply any systemSettings overrides to the package VxAdmin will load (and
     // re-export to VxScan), so a single package can exercise different behaviors.
-    const systemSettingsOverrides = config.election.systemSettingsOverrides;
-    if (systemSettingsOverrides && Object.keys(systemSettingsOverrides).length > 0) {
-      logger.info(`Applying systemSettings overrides: ${JSON.stringify(systemSettingsOverrides)}`);
-      electionPackage.systemSettings = await applySystemSettingsOverrides(
-        electionPackagePath,
-        systemSettingsOverrides as Record<string, unknown>,
-      );
-    }
+    // VxScan blocks closing the polls in official mode until the package's
+    // `electionDayPollsCloseTime`, which a QA run can't wait for, so runs would
+    // pass or fail based on the time of day they start. Off unless the config
+    // asks for it.
+    const systemSettingsOverrides = {
+      disallowClosingPollsBeforeElectionDayPollsCloseTime: false,
+      ...config.election.systemSettingsOverrides,
+    };
+    logger.info(`Applying systemSettings overrides: ${JSON.stringify(systemSettingsOverrides)}`);
+    electionPackage.systemSettings = await applySystemSettingsOverrides(
+      electionPackagePath,
+      systemSettingsOverrides as Record<string, unknown>,
+    );
 
     const { election } = electionPackage.electionDefinition;
 
@@ -207,6 +212,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // under-voted ballots for review. Unlike overvotes, under-votes can always
     // be cast, so the voter is offered both choices.
     const undervoteRequiresReview = precinctScanAdjudicationReasons.includes('Undervote');
+    const overvoteRequiresReview = precinctScanAdjudicationReasons.includes('Overvote');
 
     // When overvotes may not be cast, an overvoted ballot can only be returned;
     // when they may be cast, the voter can choose to cast it anyway. This drives
@@ -306,9 +312,12 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
           pdfPath,
         };
         if (disallowCastingOvervotes) {
+          logger.warn(
+            `Found 'disallowCastingOvervotes' while 'Overvote' absent from 'precinctScanAdjudicationReasons'`,
+          );
           // Overvotes cannot be cast: verify the ballot is returned, not counted.
           ballotsToScan.push({ ...overvoteBase, expectedAccepted: false });
-        } else {
+        } else if (overvoteRequiresReview) {
           // Overvotes may be cast: exercise both voter choices — cast one
           // (counted) and return one (rejected) — so tallies and reports
           // reflect a cast overvote.
@@ -316,6 +325,10 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
             { ...overvoteBase, expectedAccepted: true },
             { ...overvoteBase, expectedAccepted: false },
           );
+        } else {
+          // Without 'Overvote' being an adjudication reason, they should simply
+          // be accepted with no user interaction.
+          ballotsToScan.push({ ...overvoteBase, expectedAccepted: true });
         }
 
         const undervoteBase = {
@@ -499,11 +512,12 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
 
             await runScanWorkflow(
               repoPath,
+              config.vxsuite.version,
               page,
               electionPackage,
               adminExportedPackage.path,
               electionPackagePath, // Use the extracted election package ZIP
-              { kind: 'SinglePrecinct', precinctId: precinct.id },
+              precinct.id,
               precinctBallotsToScan,
               config.output.directory,
               dataPath,
@@ -642,11 +656,12 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
           try {
             await runScanWorkflow(
               repoPath,
+              config.vxsuite.version,
               page,
               electionPackage,
               adminExportedPackage.path,
               electionPackagePath,
-              { kind: 'SinglePrecinct', precinctId: precinct.id },
+              precinct.id,
               precinctBallotsToScan,
               config.output.directory,
               dataPath,
@@ -779,8 +794,12 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     collector.complete();
     try {
       await generateHtmlReport(collector.getCollection(), config.output.directory);
-    } catch {
-      // Ignore report generation errors
+    } catch (reportError) {
+      logger.error(
+        `Failed to generate partial report: ${
+          reportError instanceof Error ? (reportError.stack ?? reportError.message) : reportError
+        }`,
+      );
     }
 
     throw error;

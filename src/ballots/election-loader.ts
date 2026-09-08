@@ -143,6 +143,18 @@ export interface Precinct {
   name: string;
 }
 
+export type PollingPlaceType = 'absentee' | 'early_voting' | 'election_day';
+
+/** A polling place covers either a whole precinct or only some of its splits. */
+export type PollingPlacePrecinct = { type: 'whole' } | { type: 'partial'; splitIds: string[] };
+
+export interface PollingPlace {
+  id: string;
+  name: string;
+  precincts: Record<string, PollingPlacePrecinct>;
+  type: PollingPlaceType;
+}
+
 export interface Party {
   id: string;
   name: string;
@@ -157,6 +169,8 @@ export interface Election {
   type: 'general' | 'primary';
   ballotStyles: BallotStyle[];
   precincts: Precinct[];
+  /** v4.1+ only: the locations VxScan can be scoped to. */
+  pollingPlaces?: PollingPlace[];
   contests: Contest[];
   parties?: Party[];
   ballotLayout: {
@@ -195,6 +209,8 @@ export interface GridPositionOption {
   row: number;
   contestId: string;
   optionId: string;
+  /** Set for a cross-endorsed candidate: one position per endorsing party. */
+  partyIds?: string[];
 }
 
 export interface Rect {
@@ -271,9 +287,10 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
 
   for await (const line of ballotsJsonLines) {
     try {
-      const { encodedBallot, ...props } = RawBallotPdfInfo.parse(JSON.parse(line));
+      const { encodedBallot, ballotMode, ...props } = RawBallotPdfInfo.parse(JSON.parse(line));
       const pdfData = Buffer.from(encodedBallot, 'base64');
-      ballots.push({ ...props, pdfData });
+      if (ballotMode === 'sample') continue;
+      ballots.push({ ...props, ballotMode, pdfData });
     } catch (e) {
       logger.warn(`Failed to parse ballot entry: ${(e as Error).message}`);
     }
@@ -362,7 +379,12 @@ export function normalizeGridLayouts(election: Election): void {
                 writeInArea: gridRectToRect(option.writeInArea),
               });
             } else {
-              gridPositions.push({ ...base, type: 'option', optionId: option.optionId });
+              gridPositions.push({
+                ...base,
+                type: 'option',
+                optionId: option.optionId,
+                partyIds: option.partyIds,
+              });
             }
           }
         }
@@ -446,8 +468,8 @@ export function getContestsForBallotStyle(election: Election, ballotStyleId: str
 export const RawBallotPdfInfo = z.strictObject({
   ballotStyleId: z.string(),
   precinctId: z.string(),
-  ballotType: z.union([z.literal('precinct'), z.literal('absentee')]),
-  ballotMode: z.union([z.literal('official'), z.literal('test')]),
+  ballotType: z.enum(['precinct', 'absentee']),
+  ballotMode: z.enum(['official', 'test', 'sample']),
   compact: z.boolean(),
   encodedBallot: z.string(),
 });

@@ -15,7 +15,8 @@ import {
   waitForTextInApp,
   waitForTextInAppWithDebug,
 } from './browser.js';
-import type { BallotPattern, PrecinctSelection } from '../config/types.js';
+import type { BallotPattern } from '../config/types.js';
+import { getVersionSpec, type VxSuiteVersion } from '../config/versions.js';
 import type { StepCollector, ArtifactCollector } from '../report/artifacts.js';
 import { basename, join } from 'node:path';
 import { createMockScannerController } from '../mock-hardware/scanner.js';
@@ -47,11 +48,12 @@ export interface BallotToScan {
  */
 export async function runScanWorkflow(
   repoPath: string,
+  version: VxSuiteVersion,
   page: Page,
   electionPackage: ElectionPackage,
   electionPackagePath: string,
   electionPath: string,
-  precinctSelection: PrecinctSelection,
+  precinctId: string,
   ballotsToScan: BallotToScan[],
   outputDir: string,
   dataPath: string,
@@ -116,16 +118,7 @@ export async function runScanWorkflow(
     }
   }
 
-  if (election.precincts.length > 1) {
-    const precinctToSelect =
-      precinctSelection.kind === 'AllPrecincts'
-        ? 'All Precincts'
-        : election.precincts.find(({ id }) => id === precinctSelection.precinctId)?.name;
-    assert(precinctToSelect, 'Invalid precinct selection');
-
-    await page.getByText('Select a precinct…').click({ force: true });
-    await page.getByText(precinctToSelect, { exact: true }).click({ force: true });
-  }
+  await selectScannerLocation(page, version, election, precinctId);
 
   await page.getByText('Official Ballot Mode').click();
 
@@ -303,6 +296,61 @@ export async function runScanWorkflow(
   await unconfiguringStep.captureScreenshot('unconfigured', 'VxScan unconfigured');
 
   unconfiguringStep.complete();
+}
+
+/**
+ * The dropdown VxScan's election manager screen offers for scoping the machine
+ * to a location, and the option to pick from it.
+ */
+export interface ScannerLocationSelection {
+  placeholder: string;
+  optionName: string;
+}
+
+/**
+ * Work out which location option VxScan needs for the ballots being scanned.
+ *
+ * v4.0 scopes the machine to a precinct; v4.1 replaced that with a polling
+ * place, so the same precinct selection maps onto a different dropdown.
+ */
+export function scannerLocationSelection(
+  version: VxSuiteVersion,
+  election: Election,
+  precinctId: string,
+): ScannerLocationSelection | undefined {
+  if (getVersionSpec(version).locationModel === 'precinct') {
+    if (election.precincts.length <= 1) return undefined;
+
+    const precinct = election.precincts.find(({ id }) => id === precinctId)?.name;
+    assert(precinct, `Invalid precinct selection: ${precinctId}`);
+
+    return { placeholder: 'Select a precinct…', optionName: precinct };
+  }
+
+  const pollingPlaces = election.pollingPlaces ?? [];
+  if (pollingPlaces.length <= 1) return undefined;
+
+  const place = pollingPlaces.find(
+    (pollingPlace) => pollingPlace.type === 'election_day' && precinctId in pollingPlace.precincts,
+  );
+  assert(place, `No election day polling place for precinct: ${precinctId}`);
+
+  return { placeholder: 'Select a polling place…', optionName: place.name };
+}
+
+/** Scope VxScan to the location the ballots being scanned belong to. */
+async function selectScannerLocation(
+  page: Page,
+  version: VxSuiteVersion,
+  election: Election,
+  precinctId: string,
+): Promise<void> {
+  const selection = scannerLocationSelection(version, election, precinctId);
+  if (!selection) return;
+
+  // Both versions' pickers are a VxSuite `SearchSelect`.
+  await page.getByText(selection.placeholder).click({ force: true });
+  await page.getByText(selection.optionName, { exact: true }).click({ force: true });
 }
 
 function votesWithOnlyIds(votes: VotesDict): Record<string, string[]> {

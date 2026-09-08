@@ -26,6 +26,16 @@ export type VxSuiteVersion = (typeof SUPPORTED_VERSIONS)[number];
  */
 export type BallotModel = 'gridLayouts' | 'ballotPositions';
 
+/**
+ * How VxScan's election manager screen scopes the machine to a location.
+ *
+ * - `precinct`: a precinct is picked from `election.precincts` (v4.0's
+ *   `ChangePrecinctButton`, placeholder "Select a precinct…").
+ * - `pollingPlace`: a polling place is picked from `election.pollingPlaces`
+ *   (v4.1's `PollingPlacePicker`, placeholder "Select a polling place…").
+ */
+export type LocationModel = 'precinct' | 'pollingPlace';
+
 export interface VersionSpec {
   /** Git tag/branch to check out in the VxSuite repo. */
   ref: string;
@@ -33,6 +43,8 @@ export interface VersionSpec {
   patchFile: string;
   /** Ballot-geometry data model used by this version's election definition. */
   ballotModel: BallotModel;
+  /** How VxScan's election manager screen scopes the machine to a location. */
+  locationModel: LocationModel;
   /**
    * Mock USB drive data directory, relative to `<repo>/.mock-state/<NODE_ENV>`.
    * v4.1's simulated USB platform (libs/usb-drive/src/mocks/simulated_usb_platform.ts)
@@ -48,12 +60,14 @@ export const VERSION_SPECS: Record<VxSuiteVersion, VersionSpec> = {
     ref: 'v4.0.7',
     patchFile: 'vxsuite-v4.0.patch',
     ballotModel: 'gridLayouts',
+    locationModel: 'precinct',
     mockUsbDataDir: 'usb-drive/mock-usb-data',
   },
   'v4.1': {
     ref: 'v4.1.0',
     patchFile: 'vxsuite-v4.1.patch',
     ballotModel: 'ballotPositions',
+    locationModel: 'pollingPlace',
     mockUsbDataDir: 'usb-drive/storage/sdb',
   },
 };

@@ -11,6 +11,7 @@ import {
   getContestsForBallotStyle,
   GridPosition,
   Vote,
+  type Candidate,
   type Election,
   type VotesDict,
 } from './election-loader.js';
@@ -175,6 +176,64 @@ export async function generateMarkedBallotForPattern(
   }
 }
 
+/**
+ * The endorsements each of a candidate's bubbles was rendered under, in ballot
+ * order. A cross-endorsed candidate gets one bubble per endorsing party.
+ */
+function renderedEndorsements(
+  election: Election,
+  ballotStyleId: string,
+  contestId: string,
+  candidateId: string,
+): Array<string[] | undefined> {
+  const ballotStyle = election.ballotStyles.find(({ id }) => id === ballotStyleId);
+
+  // v4.1+ carries geometry per ballot style; this is the same data VxSuite's
+  // marking matches votes against.
+  const fromBallotPositions = (ballotStyle?.ballotPositions ?? [])
+    .flat(2)
+    .filter((contestPosition) => contestPosition.contestId === contestId)
+    .flatMap((contestPosition) => contestPosition.options)
+    .flatMap((option) =>
+      option.type === 'option' && option.optionId === candidateId ? [option.partyIds] : [],
+    );
+
+  if (fromBallotPositions.length > 0) {
+    return fromBallotPositions;
+  }
+
+  // v4.0 carries it in top-level gridLayouts instead.
+  return (election.gridLayouts ?? [])
+    .filter((layout) => layout.ballotStyleId === ballotStyleId)
+    .flatMap((layout) => layout.gridPositions)
+    .flatMap((position) =>
+      position.type === 'option' &&
+      position.contestId === contestId &&
+      position.optionId === candidateId
+        ? [position.partyIds]
+        : [],
+    );
+}
+
+/**
+ * A voter fills one bubble, so a cross-endorsed candidate — rendered once per
+ * endorsing party — votes under a single endorsement. Voting with the
+ * candidate's full party list matches none of those bubbles.
+ */
+function voteForCandidate(
+  election: Election,
+  ballotStyleId: string,
+  contestId: string,
+  candidate: Candidate,
+): Candidate {
+  if ((candidate.partyIds?.length ?? 0) <= 1) {
+    return candidate;
+  }
+
+  const endorsements = renderedEndorsements(election, ballotStyleId, contestId, candidate.id);
+  return endorsements.length > 1 ? { ...candidate, partyIds: endorsements[0] } : candidate;
+}
+
 export function generateValidVotes(election: Election, ballotStyleId: string): VotesDict {
   const votes: VotesDict = {};
   const contests = getContestsForBallotStyle(election, ballotStyleId);
@@ -182,7 +241,9 @@ export function generateValidVotes(election: Election, ballotStyleId: string): V
   for (const contest of contests) {
     switch (contest.type) {
       case 'candidate': {
-        const selectedCandidates = contest.candidates.slice(0, contest.seats);
+        const selectedCandidates: Candidate[] = contest.candidates
+          .slice(0, contest.seats)
+          .map((candidate) => voteForCandidate(election, ballotStyleId, contest.id, candidate));
 
         // If there's still room after selecting regular candidates and write-ins are allowed,
         // add write-in candidates to fill remaining seats
@@ -225,7 +286,9 @@ export function generateOvervoteVotes(
     switch (contest.type) {
       case 'candidate': {
         // Start with all regular candidates
-        const allCandidates = [...contest.candidates];
+        const allCandidates: Candidate[] = contest.candidates.map((candidate) =>
+          voteForCandidate(election, ballotStyleId, contest.id, candidate),
+        );
 
         // Add write-in candidates if allowed, to create more overvote opportunities
         if (contest.allowWriteIns) {
@@ -307,7 +370,11 @@ export function generateUndervoteVotes(
     // Keep one fewer than the seats (at least one selection): under-voted but
     // still marked. Every other contest is left blank.
     const kept = Math.max(1, anchor.seats - 1);
-    return { [anchor.id]: anchor.candidates.slice(0, kept) };
+    return {
+      [anchor.id]: anchor.candidates
+        .slice(0, kept)
+        .map((candidate) => voteForCandidate(election, ballotStyleId, anchor.id, candidate)),
+    };
   }
 
   // Fallback (no multi-seat contest): vote the ballot in full except one
