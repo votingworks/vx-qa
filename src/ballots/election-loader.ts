@@ -209,6 +209,8 @@ export interface GridPositionOption {
   row: number;
   contestId: string;
   optionId: string;
+  /** Set for a cross-endorsed candidate: one position per endorsing party. */
+  partyIds?: string[];
 }
 
 export interface Rect {
@@ -377,7 +379,12 @@ export function normalizeGridLayouts(election: Election): void {
                 writeInArea: gridRectToRect(option.writeInArea),
               });
             } else {
-              gridPositions.push({ ...base, type: 'option', optionId: option.optionId });
+              gridPositions.push({
+                ...base,
+                type: 'option',
+                optionId: option.optionId,
+                partyIds: option.partyIds,
+              });
             }
           }
         }
