@@ -1175,7 +1175,7 @@ export async function validateTallyResults(
     }
 
     if (reportResults.length === 0) {
-      throw new Error('No tally report CSV output found');
+      return { isValid: false, message: 'No tally report CSV output found' };
     }
 
     const isValid = reportResults.every((result) => result.isValid);

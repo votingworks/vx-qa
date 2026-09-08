@@ -779,8 +779,12 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     collector.complete();
     try {
       await generateHtmlReport(collector.getCollection(), config.output.directory);
-    } catch {
-      // Ignore report generation errors
+    } catch (reportError) {
+      logger.error(
+        `Failed to generate partial report: ${
+          reportError instanceof Error ? (reportError.stack ?? reportError.message) : reportError
+        }`,
+      );
     }
 
     throw error;
