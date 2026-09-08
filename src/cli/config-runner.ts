@@ -212,6 +212,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // under-voted ballots for review. Unlike overvotes, under-votes can always
     // be cast, so the voter is offered both choices.
     const undervoteRequiresReview = precinctScanAdjudicationReasons.includes('Undervote');
+    const overvoteRequiresReview = precinctScanAdjudicationReasons.includes('Overvote');
 
     // When overvotes may not be cast, an overvoted ballot can only be returned;
     // when they may be cast, the voter can choose to cast it anyway. This drives
@@ -311,9 +312,12 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
           pdfPath,
         };
         if (disallowCastingOvervotes) {
+          logger.warn(
+            `Found 'disallowCastingOvervotes' while 'Overvote' absent from 'precinctScanAdjudicationReasons'`,
+          );
           // Overvotes cannot be cast: verify the ballot is returned, not counted.
           ballotsToScan.push({ ...overvoteBase, expectedAccepted: false });
-        } else {
+        } else if (overvoteRequiresReview) {
           // Overvotes may be cast: exercise both voter choices — cast one
           // (counted) and return one (rejected) — so tallies and reports
           // reflect a cast overvote.
@@ -321,6 +325,10 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
             { ...overvoteBase, expectedAccepted: true },
             { ...overvoteBase, expectedAccepted: false },
           );
+        } else {
+          // Without 'Overvote' being an adjudication reason, they should simply
+          // be accepted with no user interaction.
+          ballotsToScan.push({ ...overvoteBase, expectedAccepted: true });
         }
 
         const undervoteBase = {
