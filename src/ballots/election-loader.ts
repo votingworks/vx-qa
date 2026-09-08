@@ -271,9 +271,10 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
 
   for await (const line of ballotsJsonLines) {
     try {
-      const { encodedBallot, ...props } = RawBallotPdfInfo.parse(JSON.parse(line));
+      const { encodedBallot, ballotMode, ...props } = RawBallotPdfInfo.parse(JSON.parse(line));
       const pdfData = Buffer.from(encodedBallot, 'base64');
-      ballots.push({ ...props, pdfData });
+      if (ballotMode === 'sample') continue;
+      ballots.push({ ...props, ballotMode, pdfData });
     } catch (e) {
       logger.warn(`Failed to parse ballot entry: ${(e as Error).message}`);
     }
@@ -446,8 +447,8 @@ export function getContestsForBallotStyle(election: Election, ballotStyleId: str
 export const RawBallotPdfInfo = z.strictObject({
   ballotStyleId: z.string(),
   precinctId: z.string(),
-  ballotType: z.union([z.literal('precinct'), z.literal('absentee')]),
-  ballotMode: z.union([z.literal('official'), z.literal('test')]),
+  ballotType: z.enum(['precinct', 'absentee']),
+  ballotMode: z.enum(['official', 'test', 'sample']),
   compact: z.boolean(),
   encodedBallot: z.string(),
 });
