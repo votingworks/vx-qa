@@ -11,7 +11,7 @@ import {
   generateUnmarkedWriteInVotes,
   generateMarkedWriteInVotes,
 } from './ballot-marker.js';
-import type { Election, CandidateContest, YesNoContest } from './election-loader.js';
+import type { Candidate, Election, CandidateContest, YesNoContest } from './election-loader.js';
 
 /**
  * Helper to create a minimal election for testing
@@ -109,11 +109,32 @@ describe('generateValidVotes', () => {
     expect(votes['city-council']).toHaveLength(3);
     expect(votes['city-council'][0]).toEqual({ id: 'alice', name: 'Alice' });
     expect(votes['city-council'][1]).toEqual({ id: 'bob', name: 'Bob' });
-    expect(votes['city-council'][2]).toMatchObject({
+    expect(votes['city-council'][2]).toEqual({
       id: 'write-in-0',
       name: 'Write-In',
       isWriteIn: true,
+      writeInIndex: 0,
     });
+  });
+
+  test('fills every remaining seat with a distinctly indexed write-in', () => {
+    const contest: CandidateContest = {
+      type: 'candidate',
+      id: 'school-board',
+      title: 'School Board',
+      seats: 3,
+      candidates: [{ id: 'alice', name: 'Alice' }],
+      allowWriteIns: true,
+      districtId: 'district-1',
+    };
+
+    const votes = generateValidVotes(createTestElection([contest]), 'test-ballot-style');
+
+    expect(votes['school-board'].map((vote) => (vote as Candidate).writeInIndex)).toEqual([
+      undefined,
+      0,
+      1,
+    ]);
   });
 
   test('generate yes vote for yes/no contest', () => {

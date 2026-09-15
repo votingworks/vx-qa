@@ -246,7 +246,9 @@ export function generateValidVotes(election: Election, ballotStyleId: string): V
           .map((candidate) => voteForCandidate(election, ballotStyleId, contest.id, candidate));
 
         // If there's still room after selecting regular candidates and write-ins are allowed,
-        // add write-in candidates to fill remaining seats
+        // add write-in candidates to fill remaining seats. VxSuite's marking
+        // matches a write-in vote to its bubble by `writeInIndex`, so without
+        // it the bubble is never drawn and the contest is silently undervoted.
         if (contest.allowWriteIns && selectedCandidates.length < contest.seats) {
           const writeInsNeeded = contest.seats - selectedCandidates.length;
           for (let i = 0; i < writeInsNeeded; i++) {
@@ -254,6 +256,7 @@ export function generateValidVotes(election: Election, ballotStyleId: string): V
               id: `write-in-${i}`,
               name: 'Write-In',
               isWriteIn: true,
+              writeInIndex: i,
             });
           }
         }
