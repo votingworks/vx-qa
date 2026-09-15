@@ -10,9 +10,9 @@ import {
   getOptionLabel,
   labelSide,
   writeInCropArea,
-} from './proof-ballot.js';
-import { loadElectionPackage } from './election-loader.js';
-import { expectToMatchPdfSnapshot } from '../test/pdf-snapshot.js';
+} from './proof-ballot.ts';
+import { loadElectionPackage } from './election-loader.ts';
+import { expectToMatchPdfSnapshot } from '../test/pdf-snapshot.ts';
 import type {
   Election,
   CandidateContest,
@@ -23,7 +23,7 @@ import type {
   ElectionPackage,
   ElectionDefinition,
   BallotPdfInfo,
-} from './election-loader.js';
+} from './election-loader.ts';
 
 const IN = 72;
 

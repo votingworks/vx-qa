@@ -10,8 +10,8 @@ import {
   generateValidWriteInVotes,
   generateUnmarkedWriteInVotes,
   generateMarkedWriteInVotes,
-} from './ballot-marker.js';
-import type { Candidate, Election, CandidateContest, YesNoContest } from './election-loader.js';
+} from './ballot-marker.ts';
+import type { Candidate, Election, CandidateContest, YesNoContest } from './election-loader.ts';
 
 /**
  * Helper to create a minimal election for testing

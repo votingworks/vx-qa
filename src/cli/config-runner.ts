@@ -2,58 +2,58 @@
  * Config file mode execution
  */
 
-import { logger, formatDuration, printDivider } from '../utils/logger.js';
-import { resolvePath } from '../utils/paths.js';
-import type { QARunConfig, WebhookConfig } from '../config/types.js';
-import { getVersionSpec, type VxSuiteVersion } from '../config/versions.js';
-import { determineTallyMode } from '../config/tally-mode.js';
+import { logger, formatDuration, printDivider } from '../utils/logger.ts';
+import { resolvePath } from '../utils/paths.ts';
+import type { QARunConfig, WebhookConfig } from '../config/types.ts';
+import { getVersionSpec, type VxSuiteVersion } from '../config/versions.ts';
+import { determineTallyMode } from '../config/tally-mode.ts';
 import { existsSync } from 'node:fs';
 import { relative } from 'node:path';
 
 // Repository management
-import { cloneOrUpdateRepo, getCurrentCommit, applyPatch } from '../repo/clone.js';
+import { cloneOrUpdateRepo, getCurrentCommit, applyPatch } from '../repo/clone.ts';
 import {
   bootstrapRepo,
-  checkPnpmAvailable,
+  checkPnpmVersion,
   checkNodeVersion,
   installPlaywrightBrowsers,
-} from '../repo/bootstrap.js';
+} from '../repo/bootstrap.ts';
 
 // Election package loading
-import { applySystemSettingsOverrides, loadElectionPackage } from '../ballots/election-loader.js';
+import { applySystemSettingsOverrides, loadElectionPackage } from '../ballots/election-loader.ts';
 
 // App orchestration
-import { createAppOrchestrator, ensureNoAppsRunning } from '../apps/orchestrator.js';
-import { MOCK_NODE_ENV } from '../apps/env-config.js';
+import { createAppOrchestrator, ensureNoAppsRunning } from '../apps/orchestrator.ts';
+import { MOCK_NODE_ENV } from '../apps/env-config.ts';
 
 // Browser automation
-import { createBrowserSession } from '../automation/browser.js';
+import { createBrowserSession } from '../automation/browser.ts';
 import {
   runAdminConfigureWorkflow,
   runAdminUnconfigureWorkflow,
-} from '../automation/admin-workflow.js';
+} from '../automation/admin-workflow.ts';
 import {
   runScanWorkflow,
   scannerAcceptedPrecinctIds,
   type BallotToScan,
-} from '../automation/scan-workflow.js';
-import { planBallotsToScan, scanExpectationsFromSystemSettings } from '../ballots/scan-plan.js';
-import { runAdminTallyWorkflow } from '../automation/admin-tally-workflow.js';
-import { createMockUsbController } from '../mock-hardware/usb.js';
+} from '../automation/scan-workflow.ts';
+import { planBallotsToScan, scanExpectationsFromSystemSettings } from '../ballots/scan-plan.ts';
+import { runAdminTallyWorkflow } from '../automation/admin-tally-workflow.ts';
+import { createMockUsbController } from '../mock-hardware/usb.ts';
 
 // Proof ballot generation
-import { generateProofBallot } from '../ballots/proof-ballot.js';
-import type { Election, Precinct } from '../ballots/election-loader.js';
+import { generateProofBallot } from '../ballots/proof-ballot.ts';
+import type { Election, Precinct } from '../ballots/election-loader.ts';
 
 // Reporting
-import { createArtifactCollector, PROOF_PREFIX } from '../report/artifacts.js';
-import { generateHtmlReport } from '../report/html-generator.js';
+import { createArtifactCollector, PROOF_PREFIX } from '../report/artifacts.ts';
+import { generateHtmlReport } from '../report/html-generator.ts';
 import { join, dirname } from 'node:path';
-import { sendWebhookUpdate } from '../webhook/client.js';
-import { State } from '../repo/state.js';
+import { sendWebhookUpdate } from '../webhook/client.ts';
+import { State } from '../repo/state.ts';
 import { writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
-import type { AppOrchestrator } from '../apps/orchestrator.js';
+import type { AppOrchestrator } from '../apps/orchestrator.ts';
 import { fileURLToPath } from 'node:url';
 
 export interface RunOptions {
@@ -737,19 +737,27 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
 async function runPreflightChecks(): Promise<void> {
   logger.step('Running pre-flight checks');
 
-  // Check pnpm
-  const pnpmAvailable = await checkPnpmAvailable();
-  if (!pnpmAvailable) {
+  // Check the pnpm running vx-qa; it switches to VxSuite's pinned pnpm itself.
+  const pnpmVersion = await checkPnpmVersion();
+  if (!pnpmVersion) {
     throw new Error('pnpm is not available. Please install pnpm: npm install -g pnpm');
   }
-  logger.debug('pnpm is available');
-
-  // Check Node.js version
-  const nodeVersion = await checkNodeVersion();
-  if (!nodeVersion.compatible) {
-    throw new Error(`Node.js ${nodeVersion.required}+ required, found ${nodeVersion.current}`);
+  if (!pnpmVersion.compatible) {
+    throw new Error(
+      `pnpm ${pnpmVersion.required}+ required to run vx-qa, found ${pnpmVersion.current}`,
+    );
   }
-  logger.debug(`Node.js ${nodeVersion.current} is compatible`);
+  logger.debug(`vx-qa running on pnpm ${pnpmVersion.current}`);
+
+  // Check the Node.js running vx-qa; VxSuite's own Node.js is resolved from
+  // its checkout during bootstrap.
+  const nodeVersion = checkNodeVersion();
+  if (!nodeVersion.compatible) {
+    throw new Error(
+      `Node.js ${nodeVersion.required}+ required to run vx-qa, found ${nodeVersion.current}`,
+    );
+  }
+  logger.debug(`vx-qa running on Node.js ${nodeVersion.current}`);
 
   logger.success('Pre-flight checks passed');
 }

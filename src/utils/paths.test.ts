@@ -6,7 +6,7 @@ import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
-import { expandHome, resolvePath, ensureDir, generateTimestampedDir, pathsEqual } from './paths.js';
+import { expandHome, resolvePath, ensureDir, generateTimestampedDir, pathsEqual } from './paths.ts';
 import { mkdir, rm } from 'node:fs/promises';
 
 describe('expandHome', () => {

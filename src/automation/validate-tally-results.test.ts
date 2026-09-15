@@ -2,8 +2,8 @@ import { afterEach, describe, expect, test } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { validateTallyResults } from './admin-tally-workflow.js';
-import type { ArtifactCollection, StepOutput, WorkflowStep } from '../config/types.js';
+import { validateTallyResults } from './admin-tally-workflow.ts';
+import type { ArtifactCollection, StepOutput, WorkflowStep } from '../config/types.ts';
 
 const tempDirs: string[] = [];
 

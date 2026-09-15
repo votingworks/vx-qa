@@ -9,7 +9,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { tmpdir } from 'node:os';
 import JSZip from 'jszip';
-import { logger } from '../utils/logger.js';
+import { logger } from '../utils/logger.ts';
 import assert from 'node:assert';
 import { createInterface } from 'node:readline/promises';
 import { z } from 'zod/v4';

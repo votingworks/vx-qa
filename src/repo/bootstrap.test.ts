@@ -6,7 +6,7 @@ import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { needsBootstrap } from './bootstrap.js';
+import { checkNodeVersion, needsBootstrap } from './bootstrap.ts';
 
 const BUILD_DIRS = [
   'apps/admin/frontend/build',
@@ -58,5 +58,17 @@ describe('needsBootstrap', () => {
     await makeFullyBootstrappedRepo(repoPath);
     await writeFile(join(repoPath, '.vx-qa-bootstrap-commit'), 'abc123');
     expect(needsBootstrap(repoPath, 'abc123')).toBe(false);
+  });
+});
+
+describe('checkNodeVersion', () => {
+  test('accepts the minimum version and newer', () => {
+    expect(checkNodeVersion('22.18.0').compatible).toBe(true);
+    expect(checkNodeVersion('24.19.0').compatible).toBe(true);
+  });
+
+  test('rejects older versions, including a lower minor of the same major', () => {
+    expect(checkNodeVersion('22.17.9').compatible).toBe(false);
+    expect(checkNodeVersion('20.19.0').compatible).toBe(false);
   });
 });

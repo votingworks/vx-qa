@@ -4,10 +4,10 @@
 
 import { ChildProcess, execFile } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { logger } from '../utils/logger.js';
-import { spawnBackground, killProcessTree, waitForPort, sleep } from '../utils/process.js';
-import { getMockEnvironment, APP_PORTS, getBackendPort, type MachineType } from './env-config.js';
-import { waitForDevDock } from '../mock-hardware/client.js';
+import { logger } from '../utils/logger.ts';
+import { spawnBackground, killProcessTree, waitForPort, sleep } from '../utils/process.ts';
+import { getMockEnvironment, APP_PORTS, getBackendPort, type MachineType } from './env-config.ts';
+import { waitForDevDock } from '../mock-hardware/client.ts';
 import { promisify } from 'node:util';
 import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -116,7 +116,7 @@ export function createAppOrchestrator(repoPath: string, logDir?: string): AppOrc
         }
 
         // Start the app using pnpm run-dev
-        const env = getMockEnvironment();
+        const env = getMockEnvironment(repoPath);
 
         logger.debug(`Starting ${app} with mock environment`);
 

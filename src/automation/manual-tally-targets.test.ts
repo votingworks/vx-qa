@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { manualTallyTargets } from './admin-tally-workflow.js';
+import { manualTallyTargets } from './admin-tally-workflow.ts';
 
 const shared = { id: 'shared', precincts: ['a', 'b'], districts: ['d1'] };
 const onlyB = { id: 'only-b', precincts: ['b'], districts: ['d2'] };

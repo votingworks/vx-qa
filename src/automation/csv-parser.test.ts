@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseCsvLine } from './admin-tally-workflow.js';
+import { parseCsvLine } from './admin-tally-workflow.ts';
 
 describe('parseCsvLine', () => {
   it('should parse simple CSV line without quotes', () => {

@@ -2,6 +2,8 @@
  * Environment configuration for mock hardware
  */
 
+import { getVxSuiteEnvironment } from '../repo/vxsuite-env.ts';
+
 /**
  * Environment variables to enable mock hardware
  */
@@ -33,15 +35,9 @@ export const MOCK_ENV_VARS: Record<string, string> = {
  */
 export const MOCK_NODE_ENV = 'development';
 
-/**
- * Get environment variables for running VxSuite apps with mocks
- */
-export function getMockEnvironment(): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    ...MOCK_ENV_VARS,
-    NODE_ENV: MOCK_NODE_ENV,
-  };
+/** Environment for running the VxSuite apps at `repoPath` with mock hardware. */
+export function getMockEnvironment(repoPath: string): NodeJS.ProcessEnv {
+  return getVxSuiteEnvironment(repoPath, { ...MOCK_ENV_VARS, NODE_ENV: MOCK_NODE_ENV });
 }
 
 /**

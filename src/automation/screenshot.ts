@@ -2,11 +2,11 @@
  * Screenshot utilities for capturing app state
  */
 
-import { Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { join } from 'node:path';
 import { mkdir } from 'node:fs/promises';
-import { logger } from '../utils/logger.js';
-import type { ScreenshotArtifact } from '../config/types.js';
+import { logger } from '../utils/logger.ts';
+import type { ScreenshotArtifact } from '../config/types.ts';
 
 export interface ScreenshotManager {
   /**

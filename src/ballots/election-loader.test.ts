@@ -9,7 +9,7 @@ import {
   normalizeYesNoContests,
   assertNoDuplicateBallotKeys,
   RawBallotPdfInfo,
-} from './election-loader.js';
+} from './election-loader.ts';
 import type {
   Election,
   CandidateContest,
@@ -17,7 +17,7 @@ import type {
   BallotStyle,
   SheetPositions,
   BallotPdfInfo,
-} from './election-loader.js';
+} from './election-loader.ts';
 
 /**
  * Helper to create a test election

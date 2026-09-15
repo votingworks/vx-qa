@@ -9,13 +9,13 @@
 import { readFile } from 'node:fs/promises';
 import http from 'node:http';
 import { dirname, join } from 'node:path';
-import { logger, printHeader } from '../utils/logger.js';
-import { validateConfig } from '../config/schema.js';
-import { resolvePath, generateTimestampedDir, ensureDir } from '../utils/paths.js';
-import { runQAWorkflow } from './config-runner.js';
-import { downloadFile } from '../ballots/election-loader.js';
-import type { QARunConfig } from '../config/types.js';
-import { SUPPORTED_VERSIONS, type VxSuiteVersion } from '../config/versions.js';
+import { logger, printHeader } from '../utils/logger.ts';
+import { validateConfig } from '../config/schema.ts';
+import { resolvePath, generateTimestampedDir, ensureDir } from '../utils/paths.ts';
+import { runQAWorkflow } from './config-runner.ts';
+import { downloadFile } from '../ballots/election-loader.ts';
+import type { QARunConfig } from '../config/types.ts';
+import { SUPPORTED_VERSIONS, type VxSuiteVersion } from '../config/versions.ts';
 
 export interface ServeOptions {
   port: number;

@@ -5,8 +5,8 @@
 import { rm, readdir, cp, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { logger } from '../utils/logger.js';
-import { resolvePath } from '../utils/paths.js';
+import { logger } from '../utils/logger.ts';
+import { resolvePath } from '../utils/paths.ts';
 
 export class State {
   static defaultFor(repoPath: string): State {
@@ -15,10 +15,13 @@ export class State {
     return new State(repoPath, join(repoPath, '.mock-state'));
   }
 
-  private constructor(
-    private readonly repoPath: string,
-    private readonly mockStatePath: string,
-  ) {}
+  private readonly repoPath: string;
+  private readonly mockStatePath: string;
+
+  private constructor(repoPath: string, mockStatePath: string) {
+    this.repoPath = repoPath;
+    this.mockStatePath = mockStatePath;
+  }
 
   async clear(): Promise<void> {
     logger.step('Clearing all state for fresh QA run...');

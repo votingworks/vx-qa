@@ -3,8 +3,8 @@
  */
 
 import { describe, test, expect } from 'vitest';
-import { determineTallyMode } from './tally-mode.js';
-import type { Election, Precinct } from '../ballots/election-loader.js';
+import { determineTallyMode } from './tally-mode.ts';
+import type { Election, Precinct } from '../ballots/election-loader.ts';
 
 function createTestElection(state: string, precincts: Precinct[]): Election {
   return {

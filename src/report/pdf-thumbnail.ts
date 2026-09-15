@@ -3,7 +3,7 @@
  */
 
 import { pdf } from 'pdf-to-img';
-import { logger } from '../utils/logger.js';
+import { logger } from '../utils/logger.ts';
 
 /**
  * Generate a thumbnail of the first page of a PDF

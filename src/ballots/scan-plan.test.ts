@@ -3,7 +3,7 @@ import {
   planBallotsToScan,
   scanExpectationsFromSystemSettings,
   type ScanExpectations,
-} from './scan-plan.js';
+} from './scan-plan.ts';
 
 const officialBallot = {
   ballotStyleId: '1',

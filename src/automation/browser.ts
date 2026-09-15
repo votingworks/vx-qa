@@ -2,9 +2,9 @@
  * Playwright browser setup and management
  */
 
-import { chromium, Browser, Page, BrowserContext } from '@playwright/test';
-import { logger } from '../utils/logger.js';
-import { APP_PORTS } from '../apps/env-config.js';
+import { chromium, type Browser, type Page, type BrowserContext } from '@playwright/test';
+import { logger } from '../utils/logger.ts';
+import { APP_PORTS } from '../apps/env-config.ts';
 
 export interface BrowserSession {
   browser: Browser;

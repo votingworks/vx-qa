@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import type { Election, PollingPlace } from '../ballots/election-loader.js';
-import { scannerAcceptedPrecinctIds, scannerLocationSelection } from './scan-workflow.js';
+import type { Election, PollingPlace } from '../ballots/election-loader.ts';
+import { scannerAcceptedPrecinctIds, scannerLocationSelection } from './scan-workflow.ts';
 
 function election(precinctIds: string[], pollingPlaces?: PollingPlace[]): Election {
   return {

@@ -7,17 +7,17 @@
  */
 
 import { Command, InvalidArgumentError } from 'commander';
-import { logger, printHeader } from './utils/logger.js';
-import { validateConfig, safeValidateConfig } from './config/schema.js';
-import { resolvePath, generateTimestampedDir, ensureDir } from './utils/paths.js';
-import { runQAWorkflow } from './cli/config-runner.js';
-import { TALLY_MODES, type QARunConfig, type WebhookConfig } from './config/types.js';
-import { SUPPORTED_VERSIONS } from './config/versions.js';
+import { logger, printHeader } from './utils/logger.ts';
+import { validateConfig, safeValidateConfig } from './config/schema.ts';
+import { resolvePath, generateTimestampedDir, ensureDir } from './utils/paths.ts';
+import { runQAWorkflow } from './cli/config-runner.ts';
+import { TALLY_MODES, type QARunConfig, type WebhookConfig } from './config/types.ts';
+import { SUPPORTED_VERSIONS } from './config/versions.ts';
 import { dirname, join } from 'node:path';
-import { regenerateHtmlReportFromRawData } from './report/html-generator.js';
-import { revalidateTallyResults } from './automation/admin-tally-workflow.js';
-import { downloadFile } from './ballots/election-loader.js';
-import { startServe } from './cli/serve.js';
+import { regenerateHtmlReportFromRawData } from './report/html-generator.ts';
+import { revalidateTallyResults } from './automation/admin-tally-workflow.ts';
+import { downloadFile } from './ballots/election-loader.ts';
+import { startServe } from './cli/serve.ts';
 import { readFile, writeFile } from 'node:fs/promises';
 
 /**
@@ -94,7 +94,10 @@ program
           );
           process.exit(1);
         }
-        parsedConfig.vxsuite = { ...parsedConfig.vxsuite, version: options.vxsuiteVersion };
+        parsedConfig.vxsuite = {
+          ...parsedConfig.vxsuite,
+          version: options.vxsuiteVersion,
+        };
       }
 
       config = validateConfig(parsedConfig, configPath);

@@ -2,12 +2,12 @@
  * Git repository cloning and checkout operations
  */
 
-import { simpleGit, SimpleGit } from 'simple-git';
+import { simpleGit, type SimpleGit } from 'simple-git';
 import { existsSync } from 'node:fs';
-import { logger } from '../utils/logger.js';
-import { ensureDir, resolvePath } from '../utils/paths.js';
-import type { VxSuiteConfig } from '../config/types.js';
-import { refForVersion } from '../config/versions.js';
+import { logger } from '../utils/logger.ts';
+import { ensureDir, resolvePath } from '../utils/paths.ts';
+import type { VxSuiteConfig } from '../config/types.ts';
+import { refForVersion } from '../config/versions.ts';
 import { rm, readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 

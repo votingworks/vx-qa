@@ -3,7 +3,7 @@
  */
 
 import { describe, test, expect } from 'vitest';
-import { validateConfig, safeValidateConfig } from './schema.js';
+import { validateConfig, safeValidateConfig } from './schema.ts';
 
 describe('validateConfig', () => {
   test('resolve vxsuite.repoPath relative to config directory', () => {

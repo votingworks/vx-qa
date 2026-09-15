@@ -4,14 +4,14 @@
 
 import Handlebars from 'handlebars';
 import { dirname, join, relative } from 'node:path';
-import { logger } from '../utils/logger.js';
-import type { ArtifactCollection, ScreenshotArtifact } from '../config/types.js';
-import { refForVersion } from '../config/versions.js';
-import { collectFilesInDir, loadCollection, PROOF_PREFIX } from './artifacts.js';
-import { generatePdfThumbnail } from './pdf-thumbnail.js';
+import { logger } from '../utils/logger.ts';
+import type { ArtifactCollection, ScreenshotArtifact } from '../config/types.ts';
+import { refForVersion } from '../config/versions.ts';
+import { collectFilesInDir, loadCollection, PROOF_PREFIX } from './artifacts.ts';
+import { generatePdfThumbnail } from './pdf-thumbnail.ts';
 import { writeFile } from 'node:fs/promises';
-import { resolvePath } from '../utils/paths.js';
-import { validateTallyResults } from '../automation/admin-tally-workflow.js';
+import { resolvePath } from '../utils/paths.ts';
+import { validateTallyResults } from '../automation/admin-tally-workflow.ts';
 
 /**
  * Generate an HTML report from the artifact collection

@@ -10,7 +10,7 @@ import type {
   GridPositionWriteIn,
   OptionBoundsFromTargetMark,
   Rect,
-} from './election-loader.js';
+} from './election-loader.ts';
 
 const IN = 72; // PDF points per inch
 

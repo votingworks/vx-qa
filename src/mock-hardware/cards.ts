@@ -2,8 +2,8 @@
  * Mock smart card control via dev-dock API
  */
 
-import { createDevDockClient, type DevDockClient } from './client.js';
-import { logger } from '../utils/logger.js';
+import { createDevDockClient, type DevDockClient } from './client.ts';
+import { logger } from '../utils/logger.ts';
 
 export type CardRole = 'system_administrator' | 'election_manager' | 'poll_worker';
 

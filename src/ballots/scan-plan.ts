@@ -3,8 +3,8 @@
  * should count or return each one.
  */
 
-import type { BallotToScan } from '../automation/scan-workflow.js';
-import type { BallotPdfInfo } from './election-loader.js';
+import type { BallotToScan } from '../automation/scan-workflow.ts';
+import type { BallotPdfInfo } from './election-loader.ts';
 
 /**
  * The election settings that decide whether VxScan counts a ballot outright or

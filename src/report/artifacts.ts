@@ -4,7 +4,7 @@
 
 import { existsSync } from 'node:fs';
 import { join, basename, extname, isAbsolute } from 'node:path';
-import { logger } from '../utils/logger.js';
+import { logger } from '../utils/logger.ts';
 import type {
   ArtifactCollection,
   BallotArtifact,
@@ -14,11 +14,11 @@ import type {
   StepInput,
   StepOutput,
   ScreenshotArtifact,
-} from '../config/types.js';
+} from '../config/types.ts';
 import { copyFile, mkdir, readdir, readFile, stat } from 'node:fs/promises';
 import assert from 'node:assert';
-import { Page } from '@playwright/test';
-import { createScreenshotManager } from '../automation/screenshot.js';
+import type { Page } from '@playwright/test';
+import { createScreenshotManager } from '../automation/screenshot.ts';
 
 export const PROOF_PREFIX = 'PROOF-';
 

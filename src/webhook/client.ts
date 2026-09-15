@@ -2,8 +2,8 @@
  * Webhook client for sending status updates back to VxDesign.
  */
 
-import { logger } from '../utils/logger.js';
-import type { WebhookConfig } from '../config/types.js';
+import { logger } from '../utils/logger.ts';
+import type { WebhookConfig } from '../config/types.ts';
 
 // eslint-disable-next-line no-control-regex
 const ANSI_REGEX = /\x1b\[[0-9;]*[a-zA-Z]/g;

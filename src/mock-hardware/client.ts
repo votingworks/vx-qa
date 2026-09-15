@@ -6,7 +6,7 @@
  * through the Vite frontend proxy at http://localhost:3000/dock.
  */
 
-import { logger } from '../utils/logger.js';
+import { logger } from '../utils/logger.ts';
 
 export interface DevDockClient {
   baseUrl: string;

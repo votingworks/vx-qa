@@ -3,10 +3,10 @@
  */
 
 import { z } from 'zod/v4';
-import { resolvePath } from '../utils/paths.js';
+import { resolvePath } from '../utils/paths.ts';
 import { dirname } from 'node:path';
-import { ADJUDICATION_REASONS, getVersionSpec, SUPPORTED_VERSIONS } from './versions.js';
-import { TALLY_MODES } from './types.js';
+import { ADJUDICATION_REASONS, getVersionSpec, SUPPORTED_VERSIONS } from './versions.ts';
+import { TALLY_MODES } from './types.ts';
 
 export const BallotPatternSchema = z.enum([
   'blank',

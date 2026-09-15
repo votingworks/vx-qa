@@ -4,8 +4,8 @@
 
 import { basename, dirname, join } from 'node:path';
 import { cp, mkdir, writeFile } from 'node:fs/promises';
-import { createDevDockClient, type DevDockClient } from './client.js';
-import { logger } from '../utils/logger.js';
+import { createDevDockClient, type DevDockClient } from './client.ts';
+import { logger } from '../utils/logger.ts';
 
 export type UsbDriveStatus = 'inserted' | 'removed';
 

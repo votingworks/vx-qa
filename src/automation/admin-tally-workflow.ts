@@ -2,10 +2,10 @@
  * VxAdmin tally workflow - imports CVRs and generates reports
  */
 
-import { Page, Locator } from '@playwright/test';
-import { logger } from '../utils/logger.js';
-import { createMockUsbController } from '../mock-hardware/usb.js';
-import { dipElectionManagerCardAndLogin, logOut } from './auth-helpers.js';
+import type { Page, Locator } from '@playwright/test';
+import { logger } from '../utils/logger.ts';
+import { createMockUsbController } from '../mock-hardware/usb.ts';
+import { dipElectionManagerCardAndLogin, logOut } from './auth-helpers.ts';
 import {
   navigateToApp,
   waitForTextWithDebug,
@@ -14,19 +14,19 @@ import {
   toggleDevDock,
   debugPageState,
   getMainContent,
-} from './browser.js';
-import { loadCollection, type StepCollector, type ArtifactCollector } from '../report/artifacts.js';
-import { ArtifactCollection, StepOutput, ValidationResult } from '../config/types.js';
+} from './browser.ts';
+import { loadCollection, type StepCollector, type ArtifactCollector } from '../report/artifacts.ts';
+import type { ArtifactCollection, StepOutput, ValidationResult } from '../config/types.ts';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
-  BallotStyle,
-  Contest,
-  Election,
+  type BallotStyle,
+  type Contest,
+  type Election,
   getContestsForBallotStyle,
-  Precinct,
-  PrecinctSplit,
-} from '../ballots/election-loader.js';
+  type Precinct,
+  type PrecinctSplit,
+} from '../ballots/election-loader.ts';
 
 /**
  * Contest result tallies for manual data entry

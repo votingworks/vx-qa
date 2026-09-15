@@ -12,13 +12,13 @@
   "author": "VotingWorks",
   "license": "GPL-3.0",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "src/index.ts",
   "bin": {
-    "vx-qa": "./dist/index.js"
+    "vx-qa": "src/index.ts"
   },
   "scripts": {
     "build": "tsgo",
-    "start": "pnpm build && node dist/index.js",
+    "start": "node src/index.ts",
     "lint": "oxfmt --check && oxlint --type-aware",
     "lint:fix": "oxfmt && oxlint --type-aware --fix",
     "test": "vitest",
@@ -60,6 +60,6 @@
   },
   "packageManager": "pnpm@10.34.1",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.18.0"
   }
 }

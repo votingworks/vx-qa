@@ -7,7 +7,7 @@ import {
   manualTallyOptionName,
   type ManualTallyBallotStyle,
   type ManualTallyPrecinct,
-} from './admin-tally-workflow.js';
+} from './admin-tally-workflow.ts';
 
 /**
  * Splits of a real precinct share every district but the one distinguishing

@@ -2,10 +2,10 @@
  * VxAdmin automation workflow
  */
 
-import { Page } from '@playwright/test';
-import { logger } from '../utils/logger.js';
-import { createMockUsbController } from '../mock-hardware/usb.js';
-import { dipSystemAdministratorCardAndLogin, logOut } from './auth-helpers.js';
+import type { Page } from '@playwright/test';
+import { logger } from '../utils/logger.ts';
+import { createMockUsbController } from '../mock-hardware/usb.ts';
+import { dipSystemAdministratorCardAndLogin, logOut } from './auth-helpers.ts';
 import {
   navigateToApp,
   waitForTextInAppWithDebug,
@@ -13,8 +13,8 @@ import {
   waitForTextWithDebug,
   clickButtonWithDebug,
   toggleDevDock,
-} from './browser.js';
-import type { StepCollector } from '../report/artifacts.js';
+} from './browser.ts';
+import type { StepCollector } from '../report/artifacts.ts';
 import { basename, join } from 'node:path';
 import { readdir, readFile, stat } from 'node:fs/promises';
 

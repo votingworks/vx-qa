@@ -6,16 +6,16 @@
  */
 
 import { join } from 'node:path';
-import { logger } from '../utils/logger.js';
+import { logger } from '../utils/logger.ts';
 import {
   getContestsForBallotStyle,
-  GridPosition,
-  Vote,
+  type GridPosition,
+  type Vote,
   type Candidate,
   type Election,
   type VotesDict,
-} from './election-loader.js';
-import type { BallotPattern } from '../config/types.js';
+} from './election-loader.ts';
+import type { BallotPattern } from '../config/types.ts';
 
 export interface MarkedBallot {
   ballotStyleId: string;

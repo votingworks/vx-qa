@@ -2,8 +2,8 @@
  * Mock PDI scanner control via dev-dock API
  */
 
-import { createDevDockClient, type DevDockClient } from './client.js';
-import { logger } from '../utils/logger.js';
+import { createDevDockClient, type DevDockClient } from './client.ts';
+import { logger } from '../utils/logger.ts';
 
 /**
  * Mock sheet status reported by VxSuite's mock PDI scanner

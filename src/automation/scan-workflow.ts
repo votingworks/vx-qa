@@ -2,34 +2,34 @@
  * VxScan automation workflow
  */
 
-import { Page } from '@playwright/test';
-import { logger } from '../utils/logger.js';
-import { createMockUsbController } from '../mock-hardware/usb.js';
+import type { Page } from '@playwright/test';
+import { logger } from '../utils/logger.ts';
+import { createMockUsbController } from '../mock-hardware/usb.ts';
 import {
   insertElectionManagerCardAndLogin,
   insertPollWorkerCardAndLogin as insertPollWorkerCard,
-} from './auth-helpers.js';
+} from './auth-helpers.ts';
 import {
   toggleDevDock,
   clickButtonWithDebug,
   waitForTextInApp,
   waitForTextInAppWithDebug,
-} from './browser.js';
-import type { BallotPattern } from '../config/types.js';
-import { getVersionSpec, type VxSuiteVersion } from '../config/versions.js';
-import type { StepCollector, ArtifactCollector } from '../report/artifacts.js';
+} from './browser.ts';
+import type { BallotPattern } from '../config/types.ts';
+import { getVersionSpec, type VxSuiteVersion } from '../config/versions.ts';
+import type { StepCollector, ArtifactCollector } from '../report/artifacts.ts';
 import { basename, join } from 'node:path';
-import { createMockScannerController } from '../mock-hardware/scanner.js';
-import { generateMarkedBallotForPattern } from '../ballots/ballot-marker.js';
-import { MOCK_NODE_ENV } from '../apps/env-config.js';
-import {
+import { createMockScannerController } from '../mock-hardware/scanner.ts';
+import { generateMarkedBallotForPattern } from '../ballots/ballot-marker.ts';
+import { MOCK_NODE_ENV } from '../apps/env-config.ts';
+import type {
   BallotMode,
   BallotType,
   Election,
   ElectionPackage,
   PollingPlace,
   VotesDict,
-} from '../ballots/election-loader.js';
+} from '../ballots/election-loader.ts';
 import { copyFile, readdir, readFile, writeFile } from 'node:fs/promises';
 import assert from 'node:assert';
 import { PDFDocument } from 'pdf-lib';

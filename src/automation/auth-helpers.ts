@@ -4,20 +4,20 @@
  * Based on patterns from apps/admin/integration-testing/e2e/support/auth.ts
  */
 
-import { Page } from '@playwright/test';
-import { logger } from '../utils/logger.js';
+import type { Page } from '@playwright/test';
+import { logger } from '../utils/logger.ts';
 import {
   createMockCardController,
   DEFAULT_PIN,
-  MockCardController,
-} from '../mock-hardware/cards.js';
+  type MockCardController,
+} from '../mock-hardware/cards.ts';
 import {
   clickTextInApp,
   waitForTextInAppWithDebug,
   waitForTextInApp,
   getMainContent,
   debugPageState,
-} from './browser.js';
+} from './browser.ts';
 
 /**
  * Enter the PIN on the PIN pad screen
