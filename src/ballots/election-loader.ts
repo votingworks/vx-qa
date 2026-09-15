@@ -138,9 +138,17 @@ export interface ContestPosition {
 /** Per-sheet positions: a [front, back] tuple of contest positions. */
 export type SheetPositions = [front: ContestPosition[], back: ContestPosition[]];
 
+/** A subdivision of a precinct with its own set of districts. */
+export interface PrecinctSplit {
+  id: string;
+  name: string;
+  districtIds?: string[];
+}
+
 export interface Precinct {
   id: string;
   name: string;
+  splits?: PrecinctSplit[];
 }
 
 export type PollingPlaceType = 'absentee' | 'early_voting' | 'election_day';
