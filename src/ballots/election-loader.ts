@@ -504,13 +504,20 @@ export function getContestsForBallotStyle(election: Election, ballotStyleId: str
   });
 }
 
-export const RawBallotPdfInfo = z.strictObject({
+/**
+ * One line of ballots.jsonl. VxDesign v4.1+ also emits `watermark` and
+ * `ballotAuditId` when set, and may add more, so unknown keys are stripped
+ * rather than rejected.
+ */
+export const RawBallotPdfInfo = z.object({
   ballotStyleId: z.string(),
   precinctId: z.string(),
   ballotType: z.enum(['precinct', 'absentee']),
   ballotMode: z.enum(['official', 'test', 'sample']),
   compact: z.boolean(),
   encodedBallot: z.string(),
+  watermark: z.string().optional(),
+  ballotAuditId: z.string().optional(),
 });
 
 export type BallotType = 'precinct' | 'absentee';
@@ -525,6 +532,10 @@ export interface BallotPdfInfo {
   ballotType: BallotType;
   ballotMode: BallotMode;
   compact: boolean;
+  /** v4.1+: text VxDesign watermarked across the ballot, if any. */
+  watermark?: string;
+  /** v4.1+: the ballot's audit ID, when the election uses them. */
+  ballotAuditId?: string;
   pdfData: Uint8Array;
 }
 

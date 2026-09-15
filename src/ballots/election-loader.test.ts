@@ -8,6 +8,7 @@ import {
   normalizeGridLayouts,
   normalizeYesNoContests,
   assertNoDuplicateBallotKeys,
+  RawBallotPdfInfo,
 } from './election-loader.js';
 import type {
   Election,
@@ -428,6 +429,37 @@ describe('normalizeYesNoContests', () => {
     const result = election.contests[0] as YesNoContest;
     expect(result.yesOption).toEqual({ id: 'y', label: 'Yes' });
     expect(result.noOption).toEqual({ id: 'n', label: 'No' });
+  });
+});
+
+describe('RawBallotPdfInfo', () => {
+  const entry = {
+    ballotStyleId: '1_en',
+    precinctId: 'p1',
+    ballotType: 'precinct',
+    ballotMode: 'official',
+    compact: false,
+    encodedBallot: 'JVBERi0=',
+  };
+
+  test('accepts the v4.0 entry shape', () => {
+    expect(RawBallotPdfInfo.parse(entry)).toEqual(entry);
+  });
+
+  test('accepts v4.1 audit ID and watermark fields', () => {
+    expect(RawBallotPdfInfo.parse({ ...entry, ballotAuditId: '7', watermark: 'SAMPLE' })).toEqual({
+      ...entry,
+      ballotAuditId: '7',
+      watermark: 'SAMPLE',
+    });
+  });
+
+  test('strips fields it does not know about', () => {
+    expect(RawBallotPdfInfo.parse({ ...entry, someFutureField: true })).toEqual(entry);
+  });
+
+  test('still rejects a malformed entry', () => {
+    expect(() => RawBallotPdfInfo.parse({ ...entry, ballotMode: 'proof' })).toThrow();
   });
 });
 
