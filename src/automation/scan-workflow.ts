@@ -516,21 +516,19 @@ async function scanBallot(
       );
       throw error;
     }
-    const messageText = await message.innerText();
+    // Warning headings prefix the title with an icon, so compare on the text.
+    const messageText = (await message.innerText()).trim();
     logger.debug(`Message after sheet ${sheetIndex + 1}: ${messageText}`);
 
-    // A hard technical failure ("There was a problem scanning your ballot.
-    // Please scan it again.") has no Cast/Return choice -- unlike a genuine
-    // review screen, its heading also happens to match /ballot|wrong/i, so it
-    // must be checked and handled before the needsReview branches below.
     const isScanFailure = messageText === 'Ballot Scan Failed';
 
-    // A ballot the scanner won't count outright presents a review screen
-    // ("Review Your Ballot") or a wrong-election/precinct rejection.
-    const needsReview =
-      !isScanFailure &&
-      messageText !== 'Your ballot was counted!' &&
-      /ballot|wrong/i.test(messageText);
+    // "Review Your Ballot" is the only screen offering a Cast/Return choice.
+    // Every other non-success heading -- "Wrong Precinct", "Wrong Election",
+    // "Test Ballot", "Multiple Sheets Detected" -- is an outright rejection
+    // with no "Cast Ballot" button to click.
+    const isReviewScreen = messageText === 'Review Your Ballot';
+
+    const needsReview = !isScanFailure && messageText !== 'Your ballot was counted!';
 
     if (isScanFailure) {
       logger.warn(`Ballot scan failed after sheet ${sheetIndex + 1}/${sheetCount}: ${messageText}`);
@@ -565,7 +563,7 @@ async function scanBallot(
         markPattern,
         votes: votesForSheet,
       });
-    } else if (needsReview && ballot.expectedAccepted) {
+    } else if (isReviewScreen && ballot.expectedAccepted) {
       // A castable warning we choose to cast anyway, e.g. an overvote when the
       // election allows casting overvotes. Click "Cast Ballot" and confirm the
       // ballot is counted.
@@ -578,13 +576,13 @@ async function scanBallot(
       );
 
       await page.waitForTimeout(1000);
-      await page.getByRole('button', { name: 'Cast Ballot' }).click();
       try {
+        await page.getByRole('button', { name: 'Cast Ballot' }).click({ timeout: 10000 });
         await waitForTextInApp(page, 'Your ballot was counted!');
       } catch (error) {
         await stepCollector.captureScreenshot(
           'timeout-cast-ballot',
-          'Timeout waiting for ballot to be counted after casting',
+          'Timeout casting ballot after review',
         );
         throw error;
       }
@@ -607,7 +605,12 @@ async function scanBallot(
         votes: votesForSheet,
       });
     } else if (needsReview) {
-      logger.info(`Ballot rejected after sheet ${sheetIndex + 1}/${sheetCount}: ${messageText}`);
+      const rejection = `Ballot rejected after sheet ${sheetIndex + 1}/${sheetCount}: ${messageText}`;
+      if (ballot.expectedAccepted) {
+        logger.warn(`${rejection} (expected it to be accepted)`);
+      } else {
+        logger.info(rejection);
+      }
 
       const screenshot = await stepCollector.captureScreenshot(
         `scan-${ballotStyleId}-${markPattern}-sheet-${sheetIndex + 1}`,
@@ -642,12 +645,13 @@ async function scanBallot(
         screenshotPath: screenshot.path,
         ballotStyleId,
         ballotMode: ballot.ballotMode,
-        rejectedReason:
-          markPattern === 'overvote'
+        rejectedReason: isReviewScreen
+          ? markPattern === 'overvote'
             ? 'overvote'
             : markPattern === 'undervote'
               ? 'undervote'
-              : 'rejected',
+              : 'rejected'
+          : messageText,
         markPattern,
         votes: votesForSheet,
       });
