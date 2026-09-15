@@ -239,7 +239,7 @@ describe('normalizeGridLayouts', () => {
     election.gridLayouts = [
       {
         ballotStyleId: 'bs-1',
-        optionBoundsFromTargetMark: { x: 0, y: 0, width: 1, height: 1 },
+        optionBoundsFromTargetMark: { top: 1, right: 0, bottom: 1, left: 1 },
         gridPositions: [
           {
             type: 'option',
@@ -322,6 +322,52 @@ describe('normalizeGridLayouts', () => {
       writeInIndex: 0,
       // grid rect (row/column/width/height) converted to Rect (x/y/width/height)
       writeInArea: { x: 8, y: 6, width: 12, height: 3 },
+    });
+
+    // Bubble at column 4 in an option box spanning columns 3-5: 1 to its left,
+    // 1 to its right.
+    expect(layout.optionBoundsFromTargetMark).toEqual({
+      top: 1,
+      right: 1,
+      bottom: 1,
+      left: 1,
+    });
+  });
+
+  test('measures option bounds from the target mark', () => {
+    // A Mississippi-style layout: the mark sits left of the option's text.
+    const ballotPositions: SheetPositions[] = [
+      [
+        [
+          {
+            contestId: 'mayor',
+            bounds: { row: 10, column: 1, width: 10, height: 8 },
+            options: [
+              {
+                type: 'option',
+                bubbleCenter: { row: 12, column: 2 },
+                bounds: { row: 11, column: 1, width: 10, height: 2 },
+                optionId: 'alice',
+              },
+            ],
+          },
+        ],
+        [],
+      ],
+    ];
+
+    const election = createTestElection(
+      [{ id: 'bs-1', precincts: ['precinct-1'], districts: ['district-1'], ballotPositions }],
+      [],
+    );
+
+    normalizeGridLayouts(election);
+
+    expect(election.gridLayouts![0].optionBoundsFromTargetMark).toEqual({
+      top: 1,
+      right: 9,
+      bottom: 1,
+      left: 1,
     });
   });
 

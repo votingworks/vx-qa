@@ -24,6 +24,7 @@ import {
   Election,
   getContestsForBallotStyle,
   Precinct,
+  PrecinctSplit,
 } from '../ballots/election-loader.js';
 
 /**
@@ -159,6 +160,55 @@ async function addManualTally(
   logger.success(`Added manual tallies for ${ballotStylesToProcess} ballot styles`);
 }
 
+/** Whether both lists hold the same values, ignoring order and duplicates. */
+function haveSameMembers(a: readonly string[], b: readonly string[]): boolean {
+  const setA = new Set(a);
+  const setB = new Set(b);
+  return setA.size === setB.size && [...setA].every((value) => setB.has(value));
+}
+
+/** The precinct fields a manual tally option label depends on. */
+export interface ManualTallyPrecinct {
+  name: string;
+  splits?: readonly PrecinctSplit[];
+}
+
+/** The ballot style fields a manual tally option label depends on. */
+export interface ManualTallyBallotStyle {
+  id: string;
+  districts: readonly string[];
+  /** The ballot style's party, in primaries. */
+  partyName?: string;
+}
+
+/**
+ * The label VxAdmin's manual tally dropdown shows for a ballot style in a
+ * precinct: the precinct or split name, with the party appended in primaries.
+ */
+export function manualTallyOptionName(
+  ballotStyle: ManualTallyBallotStyle,
+  precinct: ManualTallyPrecinct,
+): string {
+  let name = precinct.name;
+
+  if (precinct.splits && precinct.splits.length > 0) {
+    const split = precinct.splits.find((candidate) =>
+      haveSameMembers(candidate.districtIds ?? [], ballotStyle.districts),
+    );
+
+    if (!split) {
+      throw new Error(
+        `No split of precinct "${precinct.name}" has the same districts as ballot style ` +
+          `${ballotStyle.id}, so its manual tally entry cannot be identified.`,
+      );
+    }
+
+    name = split.name;
+  }
+
+  return ballotStyle.partyName ? `${name} - ${ballotStyle.partyName}` : name;
+}
+
 /**
  * Process a single ballot style - select it and fill out all contests
  */
@@ -209,43 +259,18 @@ async function processBallotStyle(
   const allDivs = await page.locator('div').all();
   logger.debug(`Total divs on page: ${allDivs.length}`);
 
-  // Find and click the ballot style option
-  // The label format is "{Precinct or Split Name}" or "{Precinct or Split Name} - {Party}"
   const precinctInfo = election.precincts.find((p) => p.id === precinctId);
   const ballotStyleInfo = election.ballotStyles.find((bs) => bs.id === ballotStyleGroupId);
+  const party = election.parties?.find((p) => p.id === ballotStyleInfo?.partyId);
 
-  // Determine the display name: if the precinct has splits, use the split name; otherwise use precinct name
-  let displayName = precinctInfo?.name || precinctId;
-
-  // Check for splits (not in our type definition, but may exist in runtime data)
-  const precinctWithSplits = precinctInfo as Precinct & {
-    splits?: Array<{ name: string; districtIds?: string[] }>;
-  };
-  if (precinctWithSplits.splits && precinctWithSplits.splits.length > 0) {
-    // If there are splits, we need to find the right one for this ballot style
-    // The ballot style's groupId corresponds to the split's corresponding district or identifier
-    const matchingSplit = precinctWithSplits.splits.find((split) => {
-      // The split corresponds to this ballot style if they share districts
-      return ballotStyleInfo?.districts?.some((districtId: string) =>
-        split.districtIds?.includes(districtId),
-      );
-    });
-
-    if (matchingSplit) {
-      displayName = matchingSplit.name;
-    }
-  }
-
-  // In primary elections, VxAdmin labels each ballot-style option with the
-  // party appended (e.g. "Bedford - Democratic"). Without this suffix the
-  // dropdown option never matches, the style is never selected, and the
-  // Voting Method dropdown stays disabled.
-  if (ballotStyleInfo?.partyId) {
-    const party = election.parties?.find((p) => p.id === ballotStyleInfo.partyId);
-    if (party) {
-      displayName = `${displayName} - ${party.name}`;
-    }
-  }
+  const displayName = manualTallyOptionName(
+    {
+      id: ballotStyleGroupId,
+      districts: ballotStyleInfo?.districts ?? [],
+      partyName: party?.name,
+    },
+    { name: precinctInfo?.name || precinctId, splits: precinctInfo?.splits },
+  );
 
   logger.debug(`Looking for ballot style option containing "${displayName}"`);
 
@@ -256,13 +281,22 @@ async function processBallotStyle(
     // delay for a large real-world election with many contests and already-
     // imported CVRs, so poll for the option rather than doing a single
     // immediate count check right after a fixed wait.
-    const optionElement = page.getByText(displayName, { exact: true });
-    await optionElement.first().waitFor({ state: 'visible', timeout: 10000 });
-    const count = await optionElement.count();
-    logger.debug(`Found ${count} elements with text "${displayName}"`);
+    // The menu renders inside the select, so scoping the search to it skips the
+    // same name in the table of already-entered tallies -- clicking that leaves
+    // the dropdown on whichever entry it was already showing. The menu follows
+    // the control, which shows any current selection, so take the last match.
+    const option = ballotStyleSelect.getByText(displayName, { exact: true }).last();
+    await option.waitFor({ state: 'visible', timeout: 10000 });
+    await option.click({ timeout: 10000, force: true });
 
-    // Click the last one (dropdown options are typically later in the DOM than labels)
-    await optionElement.last().click({ timeout: 5000, force: true });
+    // Confirm the pick took before entering tallies against it. The select's
+    // first child is its control, which shows the current value; checking there
+    // rather than anywhere in the select avoids matching the still-open menu.
+    await ballotStyleSelect
+      .locator('> div')
+      .first()
+      .getByText(displayName, { exact: true })
+      .waitFor({ timeout: 10000 });
     logger.debug(`Selected ballot style option "${displayName}"`);
   } catch (error) {
     // Every ballot style should be selectable here -- if it's missing from the
@@ -384,7 +418,11 @@ async function fillContest(
 
   // Find all number inputs
   const allInputs = await page.locator('input[type="text"]:not([disabled])').all();
-  const candidateInputs: Array<{ input: Locator; id: string; optionId: string }> = [];
+  const candidateInputs: Array<{
+    input: Locator;
+    id: string;
+    optionId: string;
+  }> = [];
 
   // Step 1: Initialize all candidate inputs with 0
   for (const input of allInputs) {
@@ -615,7 +653,10 @@ async function loadCvrs(
       // file. Each row in the table has a "Load" button (or "Loaded" if
       // already imported).
       const modal = page.locator('[role="alertdialog"]');
-      const loadButtons = modal.getByRole('button', { name: 'Load', exact: true });
+      const loadButtons = modal.getByRole('button', {
+        name: 'Load',
+        exact: true,
+      });
 
       const loadButtonCount = await loadButtons.count();
       logger.debug(`Found ${loadButtonCount} Load buttons in CVR modal`);
