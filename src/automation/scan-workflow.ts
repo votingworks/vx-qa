@@ -104,21 +104,6 @@ export async function runScanWorkflow(
   );
   await openingPollsStep.captureScreenshot('scan-unconfigured', 'Logged in');
 
-  const precinctsForAllBallots = new Set(election.precincts.map((p) => p.id));
-
-  for (const ballotToScan of ballotsToScan) {
-    const ballotStylePrecincts = election.ballotStyles.find(
-      ({ id }) => id === ballotToScan.ballotStyleId,
-    )?.precincts;
-    assert(ballotStylePrecincts, `Invalid ballot style ID: ${ballotToScan.ballotStyleId}`);
-
-    for (const precinct of election.precincts) {
-      if (!ballotStylePrecincts.includes(precinct.id)) {
-        precinctsForAllBallots.delete(precinct.id);
-      }
-    }
-  }
-
   await selectScannerLocation(page, version, election, precinctId);
 
   await page.getByText('Official Ballot Mode').click();
