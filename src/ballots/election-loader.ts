@@ -188,9 +188,21 @@ export interface Election {
   gridLayouts?: GridLayout[];
 }
 
+/**
+ * How far an option's bounding box extends from its target mark on each side.
+ * Which side the option's text occupies varies by jurisdiction: NH puts the
+ * mark to the right of the text, Mississippi to the left.
+ */
+export interface OptionBoundsFromTargetMark {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
 export interface GridLayout {
   ballotStyleId: string;
-  optionBoundsFromTargetMark: Rect;
+  optionBoundsFromTargetMark: OptionBoundsFromTargetMark;
   gridPositions: GridPosition[];
 }
 
@@ -335,6 +347,19 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
   };
 }
 
+/** Measure an option's bounds as distances from its target mark. */
+function boundsFromTargetMark(
+  bounds: GridRect,
+  bubbleCenter: GridPoint,
+): OptionBoundsFromTargetMark {
+  return {
+    top: bubbleCenter.row - bounds.row,
+    right: bounds.column + bounds.width - bubbleCenter.column,
+    bottom: bounds.row + bounds.height - bubbleCenter.row,
+    left: bubbleCenter.column - bounds.column,
+  };
+}
+
 /** Convert a (column, row) grid rect into the tool's (x, y) Rect. */
 function gridRectToRect(gridRect: GridRect): Rect {
   return {
@@ -364,6 +389,7 @@ export function normalizeGridLayouts(election: Election): void {
     }
 
     const gridPositions: GridPosition[] = [];
+    let optionBoundsFromTargetMark: OptionBoundsFromTargetMark | undefined;
 
     ballotStyle.ballotPositions.forEach((sheet, sheetIndex) => {
       const sheetNumber = sheetIndex + 1;
@@ -378,6 +404,8 @@ export function normalizeGridLayouts(election: Election): void {
               column: option.bubbleCenter.column,
               row: option.bubbleCenter.row,
             } as const;
+
+            optionBoundsFromTargetMark ??= boundsFromTargetMark(option.bounds, option.bubbleCenter);
 
             if (option.type === 'write-in') {
               gridPositions.push({
@@ -401,9 +429,12 @@ export function normalizeGridLayouts(election: Election): void {
 
     gridLayouts.push({
       ballotStyleId: ballotStyle.id,
-      // Unused by the QA tool (proof ballots derive bounds from write-in areas);
-      // vxsuite's marking reads ballotPositions directly.
-      optionBoundsFromTargetMark: { x: 0, y: 0, width: 0, height: 0 },
+      optionBoundsFromTargetMark: optionBoundsFromTargetMark ?? {
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+      },
       gridPositions,
     });
   }

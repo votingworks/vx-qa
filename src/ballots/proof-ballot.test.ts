@@ -3,7 +3,13 @@ import { PDFDocument } from 'pdf-lib';
 import { join } from 'node:path';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { generateProofBallot, getPageGeometry, gridToPdf, getOptionLabel } from './proof-ballot.js';
+import {
+  generateProofBallot,
+  getPageGeometry,
+  gridToPdf,
+  getOptionLabel,
+  labelSide,
+} from './proof-ballot.js';
 import { loadElectionPackage } from './election-loader.js';
 import { expectToMatchPdfSnapshot } from '../test/pdf-snapshot.js';
 import type {
@@ -46,7 +52,7 @@ function createTestElection(
     gridLayouts: [
       {
         ballotStyleId: 'ballot-style-1',
-        optionBoundsFromTargetMark: { x: 0, y: 0, width: 1, height: 1 },
+        optionBoundsFromTargetMark: { top: 1, right: 0, bottom: 1, left: 1 },
         gridPositions,
       },
     ],
@@ -60,6 +66,20 @@ async function createBlankPdf({ pageCount = 2 }: { pageCount?: number } = {}): P
   }
   return doc.save();
 }
+
+describe('labelSide', () => {
+  test('put the label right of the mark when the option extends right (MS)', () => {
+    expect(labelSide({ top: 0.98, right: 9.2, bottom: 1.17, left: 0.76 })).toEqual('right');
+  });
+
+  test('put the label left of the mark when the option extends left (NH)', () => {
+    expect(labelSide({ top: 0.98, right: 0.76, bottom: 1.17, left: 9.2 })).toEqual('left');
+  });
+
+  test('fall back to the left when bounds are unavailable', () => {
+    expect(labelSide({ top: 0, right: 0, bottom: 0, left: 0 })).toEqual('left');
+  });
+});
 
 describe('getPageGeometry', () => {
   test('compute letter geometry', () => {

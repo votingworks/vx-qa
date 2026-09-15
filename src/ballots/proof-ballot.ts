@@ -4,7 +4,7 @@
  */
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
-import type { Election, GridPosition } from './election-loader.js';
+import type { Election, GridPosition, OptionBoundsFromTargetMark } from './election-loader.js';
 
 const IN = 72; // PDF points per inch
 
@@ -124,15 +124,25 @@ export function getOptionLabel(election: Election, gridPosition: GridPosition): 
   return gridPosition.optionId;
 }
 
+/**
+ * Which side of the target mark an option's label goes on.
+ */
+export function labelSide(bounds: OptionBoundsFromTargetMark): 'left' | 'right' {
+  return bounds.right > bounds.left ? 'right' : 'left';
+}
+
 function addProofAnnotationsToPage(
   page: PDFPage,
   gridPositions: GridPosition[],
   geometry: PageGeometry,
   fonts: Fonts,
   election: Election,
+  optionBoundsFromTargetMark: OptionBoundsFromTargetMark,
 ): void {
   const labelMaxWidth = 120;
   const labelPadding = 2;
+  const labelGap = 8;
+  const side = labelSide(optionBoundsFromTargetMark);
 
   for (const gp of gridPositions) {
     const { x, y } = gridToPdf(gp.column, gp.row, geometry);
@@ -172,7 +182,7 @@ function addProofAnnotationsToPage(
       const optionHeight = optionFit.fontSize * lineHeight;
       const contestHeight = contestFit.fontSize * lineHeight;
       const boxHeight = optionHeight + contestHeight + 2 * labelPadding;
-      const boxX = x - labelMaxWidth - 8;
+      const boxX = side === 'left' ? x - labelMaxWidth - labelGap : x + labelGap;
       const boxY = y - boxHeight / 2;
 
       // Draw label background
@@ -276,7 +286,14 @@ export async function generateProofBallot(
     );
 
     if (pagePositions.length > 0) {
-      addProofAnnotationsToPage(pages[pageIndex], pagePositions, geometry, fonts, election);
+      addProofAnnotationsToPage(
+        pages[pageIndex],
+        pagePositions,
+        geometry,
+        fonts,
+        election,
+        gridLayout.optionBoundsFromTargetMark,
+      );
     }
   }
 
