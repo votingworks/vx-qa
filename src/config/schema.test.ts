@@ -152,6 +152,59 @@ describe('validateConfig', () => {
   });
 });
 
+describe('precinctScanAdjudicationReasons per version', () => {
+  function configWith(version: string, reasons: string[]) {
+    return {
+      vxsuite: { repoPath: './vxsuite', version },
+      election: {
+        source: './election.zip',
+        systemSettingsOverrides: { precinctScanAdjudicationReasons: reasons },
+      },
+      output: { directory: './output' },
+    };
+  }
+
+  test('accepts the reasons every version shares', () => {
+    for (const version of ['v4.0', 'v4.1']) {
+      const result = safeValidateConfig(
+        configWith(version, [
+          'MarginalMark',
+          'Overvote',
+          'Undervote',
+          'BlankBallot',
+          'UnmarkedWriteIn',
+        ]),
+      );
+      expect(result.success).toBe(true);
+    }
+  });
+
+  test('accepts UninterpretableBallot only on v4.0', () => {
+    expect(safeValidateConfig(configWith('v4.0', ['UninterpretableBallot'])).success).toBe(true);
+
+    const result = safeValidateConfig(configWith('v4.1', ['Overvote', 'UninterpretableBallot']));
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        path: ['election', 'systemSettingsOverrides', 'precinctScanAdjudicationReasons', 1],
+        message: expect.stringContaining(
+          '"UninterpretableBallot" is not supported by VxSuite v4.1',
+        ),
+      }),
+    ]);
+  });
+
+  test('accepts CrossoverVoting only on v4.1', () => {
+    expect(safeValidateConfig(configWith('v4.1', ['CrossoverVoting'])).success).toBe(true);
+    expect(safeValidateConfig(configWith('v4.0', ['CrossoverVoting'])).success).toBe(false);
+  });
+
+  test('rejects an unknown reason on every version', () => {
+    expect(safeValidateConfig(configWith('v4.0', ['Nope'])).success).toBe(false);
+    expect(safeValidateConfig(configWith('v4.1', ['Nope'])).success).toBe(false);
+  });
+});
+
 describe('safeValidateConfig', () => {
   test('return success for valid config', () => {
     const config = {

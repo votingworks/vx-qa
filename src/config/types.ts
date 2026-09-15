@@ -4,7 +4,7 @@
 
 import { BallotToScan } from '../automation/scan-workflow.js';
 import { BallotMode, BallotType, VotesDict } from '../ballots/election-loader.js';
-import type { VxSuiteVersion } from './versions.js';
+import type { AdjudicationReason, VxSuiteVersion } from './versions.js';
 
 export type BallotPattern =
   | 'blank'
@@ -14,20 +14,7 @@ export type BallotPattern =
   | 'marked-write-in'
   | 'unmarked-write-in';
 
-/**
- * VxScan precinct-scan adjudication reasons (see VxSuite's `AdjudicationReason`
- * enum in libs/types). These are the reasons a scanned ballot can be flagged
- * for voter review; which ones are enabled is an election/jurisdiction setting.
- */
-export type AdjudicationReason =
-  | 'MarginalMark'
-  | 'Overvote'
-  | 'Undervote'
-  | 'BlankBallot'
-  | 'UnmarkedWriteIn'
-  // Deprecated in VxSuite but still accepted for compatibility with existing
-  // elections.
-  | 'UninterpretableBallot';
+export type { AdjudicationReason } from './versions.js';
 
 export interface VxSuiteConfig {
   /** Path where VxSuite repo should be cloned */
@@ -48,6 +35,11 @@ export interface SystemSettingsOverrides {
    * maintaining a separate package.
    */
   precinctScanAdjudicationReasons?: AdjudicationReason[];
+  /**
+   * Override VxScan's refusal to close polls before the election day polls
+   * close time. The QA run turns this off unless the config asks for it.
+   */
+  disallowClosingPollsBeforeElectionDayPollsCloseTime?: boolean;
 }
 
 export interface ElectionConfig {
