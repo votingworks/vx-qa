@@ -33,6 +33,7 @@ import {
   runAdminUnconfigureWorkflow,
 } from '../automation/admin-workflow.js';
 import { runScanWorkflow, type BallotToScan } from '../automation/scan-workflow.js';
+import { planBallotsToScan, scanExpectationsFromSystemSettings } from '../ballots/scan-plan.js';
 import { runAdminTallyWorkflow } from '../automation/admin-tally-workflow.js';
 import { createMockUsbController } from '../mock-hardware/usb.js';
 
@@ -197,28 +198,22 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     const { election } = electionPackage.electionDefinition;
 
     // Which ballots VxScan returns to the voter for review (vs. counts) depends
-    // on the election's precinct-scan adjudication reasons. Notably, when
-    // 'BlankBallot' is configured (e.g. the primary fixture), blank ballots —
-    // and effectively-blank ballots such as our unmarked-write-in pattern,
-    // which fills no bubbles — are returned rather than accepted.
+    // on the election's precinct-scan adjudication reasons and whether
+    // overvotes may be cast. This drives which marked variants of each ballot
+    // we scan and the outcome we expect for each.
+    const scanExpectations = scanExpectationsFromSystemSettings(electionPackage.systemSettings);
     const precinctScanAdjudicationReasons = Array.isArray(
       electionPackage.systemSettings['precinctScanAdjudicationReasons'],
     )
       ? (electionPackage.systemSettings['precinctScanAdjudicationReasons'] as string[])
       : [];
-    const blankBallotRequiresReview = precinctScanAdjudicationReasons.includes('BlankBallot');
 
-    // When 'Undervote' is configured (e.g. Mississippi), VxScan returns
-    // under-voted ballots for review. Unlike overvotes, under-votes can always
-    // be cast, so the voter is offered both choices.
-    const undervoteRequiresReview = precinctScanAdjudicationReasons.includes('Undervote');
-    const overvoteRequiresReview = precinctScanAdjudicationReasons.includes('Overvote');
-
-    // When overvotes may not be cast, an overvoted ballot can only be returned;
-    // when they may be cast, the voter can choose to cast it anyway. This drives
-    // how many overvote ballots we scan and what outcome we expect for each.
-    const disallowCastingOvervotes =
-      electionPackage.systemSettings['disallowCastingOvervotes'] === true;
+    if (scanExpectations.disallowCastingOvervotes && !scanExpectations.overvoteRequiresReview) {
+      logger.warn(
+        `'disallowCastingOvervotes' is set but 'Overvote' is not a precinct-scan adjudication ` +
+          `reason, so VxScan will count overvoted ballots without review`,
+      );
+    }
 
     logger.info(`Election: ${election.title}`);
     logger.info(`Ballot styles: ${election.ballotStyles.length}`);
@@ -229,7 +224,9 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
         precinctScanAdjudicationReasons.join(', ') || '(none)'
       }`,
     );
-    logger.info(`Casting overvotes: ${disallowCastingOvervotes ? 'disallowed' : 'allowed'}`);
+    logger.info(
+      `Casting overvotes: ${scanExpectations.disallowCastingOvervotes ? 'disallowed' : 'allowed'}`,
+    );
 
     // tallyMode controls whether VxAdmin tallies every precinct's CVRs
     // together ('consolidated') or cycles through each precinct separately
@@ -279,103 +276,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
         pdfPath,
       });
 
-      ballotsToScan.push({
-        ballotStyleId: ballot.ballotStyleId,
-        precinctId: ballot.precinctId,
-        ballotMode: ballot.ballotMode,
-        ballotType: ballot.ballotType,
-        pattern: 'blank',
-        pdfPath,
-        // A blank ballot is counted only if the scanner is in official mode
-        // (test ballots are returned) and blank ballots aren't flagged for
-        // review by the election's adjudication settings.
-        expectedAccepted: ballot.ballotMode === 'official' && !blankBallotRequiresReview,
-      });
-
-      if (ballot.ballotMode === 'official') {
-        ballotsToScan.push({
-          ballotStyleId: ballot.ballotStyleId,
-          precinctId: ballot.precinctId,
-          ballotMode: ballot.ballotMode,
-          ballotType: ballot.ballotType,
-          pattern: 'valid',
-          pdfPath,
-          expectedAccepted: true,
-        });
-
-        const overvoteBase = {
-          ballotStyleId: ballot.ballotStyleId,
-          precinctId: ballot.precinctId,
-          ballotMode: ballot.ballotMode,
-          ballotType: ballot.ballotType,
-          pattern: 'overvote' as const,
-          pdfPath,
-        };
-        if (disallowCastingOvervotes) {
-          logger.warn(
-            `Found 'disallowCastingOvervotes' while 'Overvote' absent from 'precinctScanAdjudicationReasons'`,
-          );
-          // Overvotes cannot be cast: verify the ballot is returned, not counted.
-          ballotsToScan.push({ ...overvoteBase, expectedAccepted: false });
-        } else if (overvoteRequiresReview) {
-          // Overvotes may be cast: exercise both voter choices — cast one
-          // (counted) and return one (rejected) — so tallies and reports
-          // reflect a cast overvote.
-          ballotsToScan.push(
-            { ...overvoteBase, expectedAccepted: true },
-            { ...overvoteBase, expectedAccepted: false },
-          );
-        } else {
-          // Without 'Overvote' being an adjudication reason, they should simply
-          // be accepted with no user interaction.
-          ballotsToScan.push({ ...overvoteBase, expectedAccepted: true });
-        }
-
-        const undervoteBase = {
-          ballotStyleId: ballot.ballotStyleId,
-          precinctId: ballot.precinctId,
-          ballotMode: ballot.ballotMode,
-          ballotType: ballot.ballotType,
-          pattern: 'undervote' as const,
-          pdfPath,
-        };
-        if (undervoteRequiresReview) {
-          // Under-votes are flagged for review but always castable: exercise
-          // both voter choices — cast one (counted) and return one (rejected).
-          ballotsToScan.push(
-            { ...undervoteBase, expectedAccepted: true },
-            { ...undervoteBase, expectedAccepted: false },
-          );
-        } else {
-          // Not flagged: the under-voted ballot is counted directly.
-          ballotsToScan.push({ ...undervoteBase, expectedAccepted: true });
-        }
-
-        ballotsToScan.push(
-          {
-            ballotStyleId: ballot.ballotStyleId,
-            precinctId: ballot.precinctId,
-            ballotMode: ballot.ballotMode,
-            ballotType: ballot.ballotType,
-            pattern: 'marked-write-in',
-            pdfPath,
-            expectedAccepted: true,
-          },
-          {
-            ballotStyleId: ballot.ballotStyleId,
-            precinctId: ballot.precinctId,
-            ballotMode: ballot.ballotMode,
-            ballotType: ballot.ballotType,
-            pattern: 'unmarked-write-in',
-            pdfPath,
-            // The unmarked-write-in pattern fills no bubbles, so the ballot has
-            // no counted votes and is treated as blank: returned for review
-            // when blank ballots are flagged, otherwise counted (and the
-            // unmarked write-in flagged for later adjudication in VxAdmin).
-            expectedAccepted: !blankBallotRequiresReview,
-          },
-        );
-      }
+      ballotsToScan.push(...planBallotsToScan(ballot, pdfPath, scanExpectations));
     }
 
     // Apply ballot limit if specified
