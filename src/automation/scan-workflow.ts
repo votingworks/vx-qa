@@ -27,6 +27,7 @@ import {
   BallotType,
   Election,
   ElectionPackage,
+  PollingPlace,
   VotesDict,
 } from '../ballots/election-loader.js';
 import { copyFile, readdir, readFile, writeFile } from 'node:fs/promises';
@@ -308,7 +309,51 @@ export interface ScannerLocationSelection {
 }
 
 /**
- * Work out which location option VxScan needs for the ballots being scanned.
+ * The polling place VxScan ends up scoped to for a precinct's ballots: the one
+ * polling place when there is only one (VxScan selects it itself), otherwise
+ * the election day polling place covering the precinct.
+ */
+function pollingPlaceForPrecinct(election: Election, precinctId: string): PollingPlace {
+  const pollingPlaces = election.pollingPlaces ?? [];
+  assert(pollingPlaces.length > 0, 'Election has no polling places');
+
+  const place =
+    pollingPlaces.length === 1
+      ? pollingPlaces[0]
+      : pollingPlaces.find(
+          (pollingPlace) =>
+            pollingPlace.type === 'election_day' && precinctId in pollingPlace.precincts,
+        );
+  assert(place, `No election day polling place for precinct: ${precinctId}`);
+  assert(
+    precinctId in place.precincts,
+    `Polling place "${place.name}" does not cover precinct ${precinctId}`,
+  );
+
+  return place;
+}
+
+/**
+ * The precincts whose ballots VxScan counts once scoped to the location for
+ * `precinctId`. Ballots from any other precinct are returned as "Wrong
+ * Precinct". v4.0 accepts only the selected precinct; v4.1 accepts every
+ * precinct of the selected polling place.
+ */
+export function scannerAcceptedPrecinctIds(
+  version: VxSuiteVersion,
+  election: Election,
+  precinctId: string,
+): ReadonlySet<string> {
+  if (getVersionSpec(version).locationModel === 'precinct') {
+    return new Set([precinctId]);
+  }
+
+  return new Set(Object.keys(pollingPlaceForPrecinct(election, precinctId).precincts));
+}
+
+/**
+ * Work out which location option VxScan needs for the ballots being scanned,
+ * or `undefined` when VxScan offers no picker because there is only one choice.
  *
  * v4.0 scopes the machine to a precinct; v4.1 replaced that with a polling
  * place, so the same precinct selection maps onto a different dropdown.
@@ -327,15 +372,12 @@ export function scannerLocationSelection(
     return { placeholder: 'Select a precinct…', optionName: precinct };
   }
 
-  const pollingPlaces = election.pollingPlaces ?? [];
-  if (pollingPlaces.length <= 1) return undefined;
+  if ((election.pollingPlaces ?? []).length <= 1) return undefined;
 
-  const place = pollingPlaces.find(
-    (pollingPlace) => pollingPlace.type === 'election_day' && precinctId in pollingPlace.precincts,
-  );
-  assert(place, `No election day polling place for precinct: ${precinctId}`);
-
-  return { placeholder: 'Select a polling place…', optionName: place.name };
+  return {
+    placeholder: 'Select a polling place…',
+    optionName: pollingPlaceForPrecinct(election, precinctId).name,
+  };
 }
 
 /** Scope VxScan to the location the ballots being scanned belong to. */

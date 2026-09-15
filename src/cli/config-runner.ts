@@ -5,7 +5,7 @@
 import { logger, formatDuration, printDivider } from '../utils/logger.js';
 import { resolvePath } from '../utils/paths.js';
 import type { QARunConfig, WebhookConfig } from '../config/types.js';
-import { getVersionSpec } from '../config/versions.js';
+import { getVersionSpec, type VxSuiteVersion } from '../config/versions.js';
 import { determineTallyMode } from '../config/tally-mode.js';
 import { existsSync } from 'node:fs';
 import { relative } from 'node:path';
@@ -32,13 +32,18 @@ import {
   runAdminConfigureWorkflow,
   runAdminUnconfigureWorkflow,
 } from '../automation/admin-workflow.js';
-import { runScanWorkflow, type BallotToScan } from '../automation/scan-workflow.js';
+import {
+  runScanWorkflow,
+  scannerAcceptedPrecinctIds,
+  type BallotToScan,
+} from '../automation/scan-workflow.js';
 import { planBallotsToScan, scanExpectationsFromSystemSettings } from '../ballots/scan-plan.js';
 import { runAdminTallyWorkflow } from '../automation/admin-tally-workflow.js';
 import { createMockUsbController } from '../mock-hardware/usb.js';
 
 // Proof ballot generation
 import { generateProofBallot } from '../ballots/proof-ballot.js';
+import type { Election, Precinct } from '../ballots/election-loader.js';
 
 // Reporting
 import { createArtifactCollector, PROOF_PREFIX } from '../report/artifacts.js';
@@ -47,7 +52,6 @@ import { join, dirname } from 'node:path';
 import { sendWebhookUpdate } from '../webhook/client.js';
 import { State } from '../repo/state.js';
 import { writeFile } from 'node:fs/promises';
-import assert from 'node:assert';
 import { spawn } from 'node:child_process';
 import type { AppOrchestrator } from '../apps/orchestrator.js';
 import { fileURLToPath } from 'node:url';
@@ -81,6 +85,38 @@ function getProjectRoot(): string {
   const currentFilePath = fileURLToPath(currentFileUrl);
   // Go up from src/cli/config-runner.ts to project root
   return join(dirname(currentFilePath), '..', '..');
+}
+
+/**
+ * A ballot VxScan should return as "Wrong Precinct" while scoped to
+ * `precinct`: a would-be-accepted ballot from a precinct outside the scanner's
+ * location. `undefined` when every precinct's ballots are accepted there, e.g.
+ * a single-precinct election or a v4.1 polling place covering every precinct.
+ */
+function wrongPrecinctBallotFor(
+  version: VxSuiteVersion,
+  election: Election,
+  precinct: Precinct,
+  ballotsToScanByPrecinct: ReadonlyMap<Precinct, readonly BallotToScan[]>,
+): BallotToScan | undefined {
+  const acceptedPrecinctIds = scannerAcceptedPrecinctIds(version, election, precinct.id);
+
+  for (const [otherPrecinct, otherBallots] of ballotsToScanByPrecinct) {
+    if (acceptedPrecinctIds.has(otherPrecinct.id)) continue;
+
+    const ballot = otherBallots.find((b) => b.expectedAccepted);
+    if (ballot) {
+      return { ...ballot, expectedAccepted: false };
+    }
+  }
+
+  if (election.precincts.length > 1) {
+    logger.info(
+      `Every precinct's ballots are accepted at the scanner location for "${precinct.name}"; ` +
+        `skipping the wrong-precinct ballot`,
+    );
+  }
+  return undefined;
 }
 
 /**
@@ -393,22 +429,14 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
               path: adminExportedPackage.path,
             });
 
-            const otherPrecinctAndBallotsToScan = [...ballotsToScanByPrecinct].find(
-              ([otherPrecinct]) => otherPrecinct.id !== precinct.id,
+            const wrongPrecinctBallot = wrongPrecinctBallotFor(
+              config.vxsuite.version,
+              election,
+              precinct,
+              ballotsToScanByPrecinct,
             );
-
-            if (otherPrecinctAndBallotsToScan) {
-              // Add a ballot from another precinct to ensure it's rejected.
-              const ballotToScan = otherPrecinctAndBallotsToScan[1].find((b) => b.expectedAccepted);
-
-              if (ballotToScan) {
-                precinctBallotsToScan.push({
-                  ...ballotToScan,
-                  expectedAccepted: false,
-                });
-              }
-            } else {
-              assert(election.precincts.length === 1);
+            if (wrongPrecinctBallot) {
+              precinctBallotsToScan.push(wrongPrecinctBallot);
             }
 
             await runScanWorkflow(
@@ -535,22 +563,14 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
             path: adminExportedPackage.path,
           });
 
-          const otherPrecinctAndBallotsToScan = [...ballotsToScanByPrecinct].find(
-            ([otherPrecinct]) => otherPrecinct.id !== precinct.id,
+          const wrongPrecinctBallot = wrongPrecinctBallotFor(
+            config.vxsuite.version,
+            election,
+            precinct,
+            ballotsToScanByPrecinct,
           );
-
-          if (otherPrecinctAndBallotsToScan) {
-            // Add a ballot from another precinct to ensure it's rejected.
-            const ballotToScan = otherPrecinctAndBallotsToScan[1].find((b) => b.expectedAccepted);
-
-            if (ballotToScan) {
-              precinctBallotsToScan.push({
-                ...ballotToScan,
-                expectedAccepted: false,
-              });
-            }
-          } else {
-            assert(election.precincts.length === 1);
+          if (wrongPrecinctBallot) {
+            precinctBallotsToScan.push(wrongPrecinctBallot);
           }
 
           await orchestrator.startApp('scan');
