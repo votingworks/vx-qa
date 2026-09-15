@@ -1113,22 +1113,13 @@ async function validateTallyCsv(
     }
   }
 
-  // Check for votes in CSV that weren't expected
+  // Check for votes in CSV that weren't expected in that contest. Selection
+  // IDs repeat across contests ('write-in' in particular), so the lookup must
+  // be scoped to the contest or a stray count is masked by a match elsewhere.
   for (const [contestId, candidates] of actualVotes) {
     for (const [selectionId, actualCount] of candidates) {
-      if (actualCount > 0) {
-        let found = false;
-        for (const candidates of expectedVotes.values()) {
-          if (candidates.get(selectionId)) {
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          mismatches.push(
-            `Unexpected votes in CSV for ${contestId}/${selectionId}: ${actualCount}`,
-          );
-        }
+      if (actualCount > 0 && !expectedVotes.get(contestId)?.has(selectionId)) {
+        mismatches.push(`Unexpected votes in CSV for ${contestId}/${selectionId}: ${actualCount}`);
       }
     }
   }
