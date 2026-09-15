@@ -116,9 +116,11 @@ export function getOptionLabel(election: Election, gridPosition: GridPosition): 
   }
 
   if (contest.type === 'yesno') {
-    if (gridPosition.optionId === contest.yesOption.id) return contest.yesOption.label;
-    if (gridPosition.optionId === contest.noOption.id) return contest.noOption.label;
-    return gridPosition.optionId;
+    // v4.1+ ballot measures may carry options beyond yes/no.
+    const options = contest.options ?? [contest.yesOption, contest.noOption];
+    return (
+      options.find((option) => option.id === gridPosition.optionId)?.label ?? gridPosition.optionId
+    );
   }
 
   return gridPosition.optionId;

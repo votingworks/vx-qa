@@ -232,6 +232,35 @@ describe('getOptionLabel', () => {
     expect(getOptionLabel(election, noGp)).toBe('No on A');
   });
 
+  test('return labels for every option of a v4.1 multi-option measure', () => {
+    const multiOption: YesNoContest = {
+      type: 'yesno',
+      id: 'measure-b',
+      title: 'Measure B',
+      districtId: 'district-1',
+      yesOption: { id: 'b-1', label: 'Option 1' },
+      noOption: { id: 'b-2', label: 'Option 2' },
+      options: [
+        { id: 'b-1', label: 'Option 1' },
+        { id: 'b-2', label: 'Option 2' },
+        { id: 'b-3', label: 'Option 3' },
+      ],
+    };
+    const gp = (optionId: string): GridPositionOption => ({
+      type: 'option',
+      sheetNumber: 1,
+      side: 'front',
+      column: 10,
+      row: 30,
+      contestId: 'measure-b',
+      optionId,
+    });
+    const multiOptionElection = { ...election, contests: [multiOption] };
+    expect(getOptionLabel(multiOptionElection, gp('b-3'))).toBe('Option 3');
+    expect(getOptionLabel(multiOptionElection, gp('b-1'))).toBe('Option 1');
+    expect(getOptionLabel(multiOptionElection, gp('b-9'))).toBe('b-9');
+  });
+
   test('return contestId when contest not found', () => {
     const gp: GridPositionOption = {
       type: 'option',
