@@ -325,7 +325,7 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
   const systemSettingsFile = zip.file('systemSettings.json');
   if (!systemSettingsFile) {
     throw new Error(
-      `Invalid election package: election.json not found.\n` +
+      `Invalid election package: systemSettings.json not found.\n` +
         `This doesn't appear to be a valid VxDesign election package.\n` +
         `Files found: ${fileNames.slice(0, 5).join(', ')}${fileNames.length > 5 ? '...' : ''}\n` +
         `Source: ${sourcePath}`,
