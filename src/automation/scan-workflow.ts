@@ -348,9 +348,21 @@ async function selectScannerLocation(
   const selection = scannerLocationSelection(version, election, precinctId);
   if (!selection) return;
 
-  // Both versions' pickers are a VxSuite `SearchSelect`.
-  await page.getByText(selection.placeholder).click({ force: true });
-  await page.getByText(selection.optionName, { exact: true }).click({ force: true });
+  // Both versions' pickers are a VxSuite `SearchSelect`, whose placeholder sits
+  // under react-select's input, so opening the menu needs a forced click.
+  const placeholder = page.getByText(selection.placeholder, { exact: true });
+  await placeholder.click({ force: true });
+
+  const option = page
+    .getByRole('option')
+    .filter({ has: page.getByText(selection.optionName, { exact: true }) });
+  await option.click({ timeout: 10000 });
+
+  // The picker commits asynchronously. Without confirming it, a click that
+  // lands before the menu is ready leaves the scanner on its previous location
+  // and every ballot in the session scans as the wrong precinct.
+  await placeholder.waitFor({ state: 'detached', timeout: 10000 });
+  await page.getByText(selection.optionName, { exact: true }).first().waitFor({ timeout: 10000 });
 }
 
 function votesWithOnlyIds(votes: VotesDict): Record<string, string[]> {
