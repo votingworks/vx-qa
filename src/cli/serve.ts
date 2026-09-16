@@ -15,7 +15,8 @@ import { resolvePath, generateTimestampedDir, ensureDir } from '../utils/paths.t
 import { runQAWorkflow } from './config-runner.ts';
 import { downloadFile } from '../ballots/election-loader.ts';
 import type { QARunConfig } from '../config/types.ts';
-import { SUPPORTED_VERSIONS, type VxSuiteVersion } from '../config/versions.ts';
+import { SUPPORTED_VERSIONS } from '../config/versions.ts';
+import type { VxSuiteVersion } from '../config/versions.ts';
 
 export interface ServeOptions {
   port: number;
@@ -114,14 +115,18 @@ export function startServe(options: ServeOptions): void {
 
         // Run the QA workflow in the background
         running = true;
-        void runPipeline(
-          options,
-          exportPackageUrl,
-          webhookUrl,
-          vxsuiteVersion as VxSuiteVersion | undefined,
-        ).finally(() => {
-          running = false;
-        });
+        void (async () => {
+          try {
+            await runPipeline(
+              options,
+              exportPackageUrl,
+              webhookUrl,
+              vxsuiteVersion as VxSuiteVersion | undefined,
+            );
+          } finally {
+            running = false;
+          }
+        })();
       });
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' });

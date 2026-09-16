@@ -3,6 +3,7 @@
  */
 
 import { describe, test, expect } from 'vitest';
+import { ZodError } from 'zod/v4';
 import {
   getContestsForBallotStyle,
   normalizeGridLayouts,
@@ -24,7 +25,7 @@ import type {
  */
 function createTestElection(
   ballotStyles: BallotStyle[],
-  contests: (CandidateContest | YesNoContest)[],
+  contests: Array<CandidateContest | YesNoContest>,
 ): Election {
   return {
     title: 'Test Election',
@@ -84,7 +85,7 @@ describe('getContestsForBallotStyle', () => {
   });
 
   test('return multiple contests for ballot style with multiple districts', () => {
-    const contests: (CandidateContest | YesNoContest)[] = [
+    const contests: Array<CandidateContest | YesNoContest> = [
       {
         type: 'candidate',
         id: 'mayor',
@@ -125,7 +126,7 @@ describe('getContestsForBallotStyle', () => {
     const result = getContestsForBallotStyle(election, 'ballot-style-1');
 
     expect(result).toHaveLength(3);
-    expect(result.map((c) => c.id).sort()).toEqual(['city-council', 'mayor', 'proposition-1']);
+    expect(result.map((c) => c.id).toSorted()).toEqual(['city-council', 'mayor', 'proposition-1']);
   });
 
   test('return empty array for ballot style with no matching contests', () => {
@@ -258,7 +259,9 @@ describe('normalizeGridLayouts', () => {
     normalizeGridLayouts(election);
 
     expect(election.gridLayouts).toHaveLength(1);
-    expect(election.gridLayouts[0].gridPositions[0]).toMatchObject({ optionId: 'o' });
+    expect(election.gridLayouts[0].gridPositions[0]).toMatchObject({
+      optionId: 'o',
+    });
   });
 
   test('derives gridLayouts from ballotPositions (v4.1 format)', () => {
@@ -292,7 +295,14 @@ describe('normalizeGridLayouts', () => {
     ];
 
     const election = createTestElection(
-      [{ id: 'bs-1', precincts: ['precinct-1'], districts: ['district-1'], ballotPositions }],
+      [
+        {
+          id: 'bs-1',
+          precincts: ['precinct-1'],
+          districts: ['district-1'],
+          ballotPositions,
+        },
+      ],
       [],
     );
 
@@ -360,7 +370,14 @@ describe('normalizeGridLayouts', () => {
     ];
 
     const election = createTestElection(
-      [{ id: 'bs-1', precincts: ['precinct-1'], districts: ['district-1'], ballotPositions }],
+      [
+        {
+          id: 'bs-1',
+          precincts: ['precinct-1'],
+          districts: ['district-1'],
+          ballotPositions,
+        },
+      ],
       [],
     );
 
@@ -449,7 +466,13 @@ describe('RawBallotPdfInfo', () => {
   });
 
   test('accepts v4.1 audit ID and watermark fields', () => {
-    expect(RawBallotPdfInfo.parse({ ...entry, ballotAuditId: '7', watermark: 'SAMPLE' })).toEqual({
+    expect(
+      RawBallotPdfInfo.parse({
+        ...entry,
+        ballotAuditId: '7',
+        watermark: 'SAMPLE',
+      }),
+    ).toEqual({
       ...entry,
       ballotAuditId: '7',
       watermark: 'SAMPLE',
@@ -461,44 +484,44 @@ describe('RawBallotPdfInfo', () => {
   });
 
   test('still rejects a malformed entry', () => {
-    expect(() => RawBallotPdfInfo.parse({ ...entry, ballotMode: 'proof' })).toThrow();
+    expect(() => RawBallotPdfInfo.parse({ ...entry, ballotMode: 'proof' })).toThrow(ZodError);
   });
 });
 
-describe('assertNoDuplicateBallotKeys', () => {
-  function ballot(overrides: Partial<BallotPdfInfo> = {}): BallotPdfInfo {
-    return {
-      ballotStyleId: 'style-1',
-      precinctId: 'precinct-1',
-      ballotType: 'precinct',
-      ballotMode: 'official',
-      compact: false,
-      pdfData: new Uint8Array(),
-      ...overrides,
-    };
-  }
+function ballot(overrides: Partial<BallotPdfInfo> = {}): BallotPdfInfo {
+  return {
+    ballotStyleId: 'style-1',
+    precinctId: 'precinct-1',
+    ballotType: 'precinct',
+    ballotMode: 'official',
+    compact: false,
+    pdfData: new Uint8Array(),
+    ...overrides,
+  };
+}
 
+describe('assertNoDuplicateBallotKeys', () => {
   test('does not throw when all keys are unique', () => {
-    expect(() =>
+    expect(() => {
       assertNoDuplicateBallotKeys([
         ballot(),
         ballot({ ballotType: 'absentee' }),
         ballot({ ballotMode: 'test' }),
         ballot({ precinctId: 'precinct-2' }),
         ballot({ ballotStyleId: 'style-2' }),
-      ]),
-    ).not.toThrow();
+      ]);
+    }).not.toThrow();
   });
 
   test('throws when two entries share the same key', () => {
-    expect(() => assertNoDuplicateBallotKeys([ballot(), ballot()])).toThrow(
-      /Duplicate ballot entry/,
-    );
+    expect(() => {
+      assertNoDuplicateBallotKeys([ballot(), ballot()]);
+    }).toThrow(/Duplicate ballot entry/);
   });
 
   test('does not confuse entries that differ only in one field', () => {
-    expect(() =>
-      assertNoDuplicateBallotKeys([ballot(), ballot({ ballotType: 'absentee' })]),
-    ).not.toThrow();
+    expect(() => {
+      assertNoDuplicateBallotKeys([ballot(), ballot({ ballotType: 'absentee' })]);
+    }).not.toThrow();
   });
 });

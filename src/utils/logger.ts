@@ -3,7 +3,8 @@
  */
 
 import chalk from 'chalk';
-import ora, { type Ora } from 'ora';
+import ora from 'ora';
+import type { Ora } from 'ora';
 import { appendFileSync } from 'node:fs';
 
 export interface Logger {

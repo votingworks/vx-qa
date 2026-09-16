@@ -45,7 +45,7 @@ describe('v4.1 (polling place location model)', () => {
   test('a single polling place is auto-selected and accepts all its precincts', () => {
     const e = election(['a', 'b'], [place('pp', 'election_day', 'a', 'b')]);
     expect(scannerLocationSelection('v4.1', e, 'a')).toBeUndefined();
-    expect([...scannerAcceptedPrecinctIds('v4.1', e, 'a')].sort()).toEqual(['a', 'b']);
+    expect([...scannerAcceptedPrecinctIds('v4.1', e, 'a')].toSorted()).toEqual(['a', 'b']);
   });
 
   test('picks the election day polling place covering the precinct', () => {
@@ -69,7 +69,7 @@ describe('v4.1 (polling place location model)', () => {
       ['a', 'b', 'c'],
       [place('pab', 'election_day', 'a', 'b'), place('pc', 'election_day', 'c')],
     );
-    expect([...scannerAcceptedPrecinctIds('v4.1', e, 'a')].sort()).toEqual(['a', 'b']);
+    expect([...scannerAcceptedPrecinctIds('v4.1', e, 'a')].toSorted()).toEqual(['a', 'b']);
     expect([...scannerAcceptedPrecinctIds('v4.1', e, 'c')]).toEqual(['c']);
   });
 

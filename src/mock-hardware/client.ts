@@ -7,6 +7,7 @@
  */
 
 import { logger } from '../utils/logger.ts';
+import { sleep } from '../utils/process.ts';
 
 export interface DevDockClient {
   baseUrl: string;
@@ -31,7 +32,7 @@ export function createDevDockClient(port = 3000): DevDockClient {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(params || {}),
+          body: JSON.stringify(params ?? {}),
         });
 
         if (!response.ok) {
@@ -45,6 +46,7 @@ export function createDevDockClient(port = 3000): DevDockClient {
         if (error instanceof Error && error.message.includes('ECONNREFUSED')) {
           throw new Error(
             `Cannot connect to dev-dock at ${baseUrl}. Is the app running with mock hardware enabled?`,
+            { cause: error },
           );
         }
         throw error;
@@ -75,7 +77,7 @@ export async function waitForDevDock(port: number, timeout = 30000): Promise<boo
       // Not ready yet
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await sleep(500);
   }
 
   return false;

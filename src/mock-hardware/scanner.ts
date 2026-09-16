@@ -2,8 +2,10 @@
  * Mock PDI scanner control via dev-dock API
  */
 
-import { createDevDockClient, type DevDockClient } from './client.ts';
+import { createDevDockClient } from './client.ts';
+import type { DevDockClient } from './client.ts';
 import { logger } from '../utils/logger.ts';
+import { sleep } from '../utils/process.ts';
 
 /**
  * Mock sheet status reported by VxSuite's mock PDI scanner
@@ -84,7 +86,7 @@ export function createMockScannerController(): MockScannerController {
         if (expected.includes(status)) {
           return status;
         }
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await sleep(200);
       }
 
       const currentStatus = await this.getSheetStatus();

@@ -6,11 +6,8 @@
 
 import type { Page } from '@playwright/test';
 import { logger } from '../utils/logger.ts';
-import {
-  createMockCardController,
-  DEFAULT_PIN,
-  type MockCardController,
-} from '../mock-hardware/cards.ts';
+import { createMockCardController, DEFAULT_PIN } from '../mock-hardware/cards.ts';
+import type { MockCardController } from '../mock-hardware/cards.ts';
 import {
   clickTextInApp,
   waitForTextInAppWithDebug,

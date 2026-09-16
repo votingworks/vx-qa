@@ -8,7 +8,9 @@ import type { ArtifactCollection, StepOutput, WorkflowStep } from '../config/typ
 const tempDirs: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  await Promise.all(
+    tempDirs.splice(0).map(async (dir) => rm(dir, { recursive: true, force: true })),
+  );
 });
 
 async function writeTallyCsv(rows: Array<[contestId: string, selectionId: string, votes: number]>) {
@@ -87,7 +89,10 @@ describe('validateTallyResults', () => {
     const result = await validateTallyResults(
       collection([scanResult({ mayor: ['alice'] }), report(csv)]),
     );
-    expect(result).toEqual({ isValid: true, message: expect.stringContaining('1 vote(s) match') });
+    expect(result).toEqual({
+      isValid: true,
+      message: expect.stringContaining('1 vote(s) match'),
+    });
   });
 
   test('flags a count that is short of the scanned votes', async () => {
@@ -114,6 +119,9 @@ describe('validateTallyResults', () => {
 
   test('reports a missing CSV', async () => {
     const result = await validateTallyResults(collection([scanResult({ mayor: ['alice'] })]));
-    expect(result).toEqual({ isValid: false, message: 'No tally report CSV output found' });
+    expect(result).toEqual({
+      isValid: false,
+      message: 'No tally report CSV output found',
+    });
   });
 });

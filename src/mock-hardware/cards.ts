@@ -2,7 +2,8 @@
  * Mock smart card control via dev-dock API
  */
 
-import { createDevDockClient, type DevDockClient } from './client.ts';
+import { createDevDockClient } from './client.ts';
+import type { DevDockClient } from './client.ts';
 import { logger } from '../utils/logger.ts';
 
 export type CardRole = 'system_administrator' | 'election_manager' | 'poll_worker';
@@ -62,7 +63,7 @@ export function createMockCardController(): MockCardController {
     },
 
     async getCardStatus(): Promise<CardStatus> {
-      return await client.call<CardStatus>('getCardStatus', {});
+      return client.call<CardStatus>('getCardStatus', {});
     },
   };
 }

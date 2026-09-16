@@ -3,6 +3,7 @@
  */
 
 import { describe, test, expect } from 'vitest';
+import { ZodError } from 'zod/v4';
 import { validateConfig, safeValidateConfig } from './schema.ts';
 
 describe('validateConfig', () => {
@@ -148,22 +149,22 @@ describe('validateConfig', () => {
 
     expect(() => {
       validateConfig(config, configPath);
-    }).toThrow();
+    }).toThrow(ZodError);
   });
 });
 
-describe('precinctScanAdjudicationReasons per version', () => {
-  function configWith(version: string, reasons: string[]) {
-    return {
-      vxsuite: { repoPath: './vxsuite', version },
-      election: {
-        source: './election.zip',
-        systemSettingsOverrides: { precinctScanAdjudicationReasons: reasons },
-      },
-      output: { directory: './output' },
-    };
-  }
+function configWith(version: string, reasons: string[]) {
+  return {
+    vxsuite: { repoPath: './vxsuite', version },
+    election: {
+      source: './election.zip',
+      systemSettingsOverrides: { precinctScanAdjudicationReasons: reasons },
+    },
+    output: { directory: './output' },
+  };
+}
 
+describe('precinctScanAdjudicationReasons per version', () => {
   test('accepts the reasons every version shares', () => {
     for (const version of ['v4.0', 'v4.1']) {
       const result = safeValidateConfig(

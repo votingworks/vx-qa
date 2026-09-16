@@ -3,11 +3,8 @@
  */
 
 import { describe, test, expect } from 'vitest';
-import {
-  manualTallyOptionName,
-  type ManualTallyBallotStyle,
-  type ManualTallyPrecinct,
-} from './admin-tally-workflow.ts';
+import { manualTallyOptionName } from './admin-tally-workflow.ts';
+import type { ManualTallyBallotStyle, ManualTallyPrecinct } from './admin-tally-workflow.ts';
 
 /**
  * Splits of a real precinct share every district but the one distinguishing
@@ -91,6 +88,6 @@ describe('manualTallyOptionName', () => {
       districts: ['shared-1', 'shared-2', 'only-a', 'only-b'],
     };
 
-    expect(() => manualTallyOptionName(superset, splitPrecinct)).toThrow();
+    expect(() => manualTallyOptionName(superset, splitPrecinct)).toThrow(/cannot be identified/);
   });
 });

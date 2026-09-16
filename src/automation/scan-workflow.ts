@@ -16,7 +16,8 @@ import {
   waitForTextInAppWithDebug,
 } from './browser.ts';
 import type { BallotPattern } from '../config/types.ts';
-import { getVersionSpec, type VxSuiteVersion } from '../config/versions.ts';
+import { getVersionSpec } from '../config/versions.ts';
+import type { VxSuiteVersion } from '../config/versions.ts';
 import type { StepCollector, ArtifactCollector } from '../report/artifacts.ts';
 import { basename, join } from 'node:path';
 import { createMockScannerController } from '../mock-hardware/scanner.ts';
@@ -78,7 +79,9 @@ export async function runScanWorkflow(
   try {
     const printsDir = join(printerWorkspace, 'prints');
     const files = await readdir(printsDir);
-    files.forEach((f) => existingPrinterFiles.add(f));
+    for (const file of files) {
+      existingPrinterFiles.add(file);
+    }
   } catch {
     // Directory might not exist yet
   }
@@ -300,7 +303,7 @@ export interface ScannerLocationSelection {
  */
 function pollingPlaceForPrecinct(election: Election, precinctId: string): PollingPlace {
   const pollingPlaces = election.pollingPlaces ?? [];
-  assert(pollingPlaces.length > 0, 'Election has no polling places');
+  assert.ok(pollingPlaces.length > 0, 'Election has no polling places');
 
   const place =
     pollingPlaces.length === 1
@@ -309,8 +312,8 @@ function pollingPlaceForPrecinct(election: Election, precinctId: string): Pollin
           (pollingPlace) =>
             pollingPlace.type === 'election_day' && precinctId in pollingPlace.precincts,
         );
-  assert(place, `No election day polling place for precinct: ${precinctId}`);
-  assert(
+  assert.ok(place, `No election day polling place for precinct: ${precinctId}`);
+  assert.ok(
     precinctId in place.precincts,
     `Polling place "${place.name}" does not cover precinct ${precinctId}`,
   );
@@ -352,7 +355,7 @@ export function scannerLocationSelection(
     if (election.precincts.length <= 1) return undefined;
 
     const precinct = election.precincts.find(({ id }) => id === precinctId)?.name;
-    assert(precinct, `Invalid precinct selection: ${precinctId}`);
+    assert.ok(precinct, `Invalid precinct selection: ${precinctId}`);
 
     return { placeholder: 'Select a precinct…', optionName: precinct };
   }
@@ -394,9 +397,9 @@ async function selectScannerLocation(
 
 function votesWithOnlyIds(votes: VotesDict): Record<string, string[]> {
   return Object.fromEntries(
-    Object.entries(votes).map(([contestId, votes]) => [
+    Object.entries(votes).map(([contestId, contestVotes]) => [
       contestId,
-      votes.map((vote) => (typeof vote === 'string' ? vote : vote.id)),
+      contestVotes.map((vote) => (typeof vote === 'string' ? vote : vote.id)),
     ]),
   );
 }
@@ -448,7 +451,7 @@ async function scanBallot(
     const frontPageIndex = sheetIndex * 2;
     const backPageIndex = frontPageIndex + 1;
 
-    const votesForSheet: VotesDict = Object.fromEntries(
+    const sheetVotes: VotesDict = Object.fromEntries(
       Object.entries(markedBallotPdf.votes)
         .map(([contestId, votes]) => [
           contestId,
@@ -482,13 +485,13 @@ async function scanBallot(
     // no selections for it (only an overvote). Drop such contests so the
     // recorded votes reflect what is actually counted — this matters when an
     // overvoted ballot is cast (accepted) rather than returned.
-    for (const [contestId, contestVotes] of Object.entries(votesForSheet)) {
-      const contest = election.contests.find((c) => c.id === contestId);
-      const seats = contest?.type === 'candidate' ? contest.seats : 1;
-      if (contestVotes.length > seats) {
-        delete votesForSheet[contestId];
-      }
-    }
+    const votesForSheet: VotesDict = Object.fromEntries(
+      Object.entries(sheetVotes).filter(([contestId, contestVotes]) => {
+        const contest = election.contests.find((c) => c.id === contestId);
+        const seats = contest?.type === 'candidate' ? contest.seats : 1;
+        return contestVotes.length <= seats;
+      }),
+    );
 
     // Convert votes to IDs for validation (handles both Candidate objects and string IDs)
     const votesAsIds = votesWithOnlyIds(votesForSheet);

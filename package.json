@@ -9,27 +9,21 @@
     "votingworks",
     "vxsuite"
   ],
-  "author": "VotingWorks",
   "license": "GPL-3.0",
-  "type": "module",
-  "main": "src/index.ts",
+  "author": "VotingWorks",
   "bin": {
     "vx-qa": "src/index.ts"
   },
+  "type": "module",
+  "main": "src/index.ts",
   "scripts": {
-    "build": "tsgo",
+    "build": "tsc",
     "start": "node src/index.ts",
     "lint": "oxfmt --check && oxlint --type-aware",
     "lint:fix": "oxfmt && oxlint --type-aware --fix",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
     "prepare": "husky"
-  },
-  "lint-staged": {
-    "*.{ts,js}": [
-      "oxfmt",
-      "oxlint --type-aware --fix"
-    ]
   },
   "dependencies": {
     "@playwright/test": "^1.40.0",
@@ -48,18 +42,24 @@
   "devDependencies": {
     "@types/jest-image-snapshot": "^6.4.1",
     "@types/node": "^20.10.0",
-    "@typescript/native-preview": "7.0.0-dev.20260210.1",
     "@vitest/coverage-v8": "^4.0.16",
     "husky": "^9.1.7",
     "jest-image-snapshot": "^6.5.1",
     "lint-staged": "^16.2.7",
-    "oxfmt": "^0.18.0",
-    "oxlint": "^1.33.0",
-    "oxlint-tsgolint": "^0.9.1",
+    "oxfmt": "^0.68.0",
+    "oxlint": "^1.83.0",
+    "oxlint-tsgolint": "^7.0.2001",
+    "typescript": "^7.0.2",
     "vitest": "^4.0.16"
   },
-  "packageManager": "pnpm@10.34.1",
+  "lint-staged": {
+    "*.{ts,js}": [
+      "oxfmt",
+      "oxlint --type-aware --fix"
+    ]
+  },
   "engines": {
     "node": ">=22.18.0"
-  }
+  },
+  "packageManager": "pnpm@10.34.1"
 }

@@ -28,7 +28,7 @@ import type {
 const IN = 72;
 
 function createTestElection(
-  contests: (CandidateContest | YesNoContest)[],
+  contests: Array<CandidateContest | YesNoContest>,
   gridPositions: GridPosition[] = [],
 ): Election {
   return {
@@ -304,19 +304,10 @@ describe('getOptionLabel', () => {
         { id: 'b-3', label: 'Option 3' },
       ],
     };
-    const gp = (optionId: string): GridPositionOption => ({
-      type: 'option',
-      sheetNumber: 1,
-      side: 'front',
-      column: 10,
-      row: 30,
-      contestId: 'measure-b',
-      optionId,
-    });
     const multiOptionElection = { ...election, contests: [multiOption] };
-    expect(getOptionLabel(multiOptionElection, gp('b-3'))).toBe('Option 3');
-    expect(getOptionLabel(multiOptionElection, gp('b-1'))).toBe('Option 1');
-    expect(getOptionLabel(multiOptionElection, gp('b-9'))).toBe('b-9');
+    expect(getOptionLabel(multiOptionElection, measureBOption('b-3'))).toBe('Option 3');
+    expect(getOptionLabel(multiOptionElection, measureBOption('b-1'))).toBe('Option 1');
+    expect(getOptionLabel(multiOptionElection, measureBOption('b-9'))).toBe('b-9');
   });
 
   test('return contestId when contest not found', () => {
@@ -475,16 +466,16 @@ const prooftest = test.extend<{
   },
   electionPackage: async ({ tmp }, use) =>
     use((await loadElectionPackage(FIXTURE_PATH, tmp)).electionPackage),
-  electionDefinition: ({ electionPackage }, use) => use(electionPackage.electionDefinition),
-  election: ({ electionDefinition }, use) => use(electionDefinition.election),
-  ballotStyle1: ({ electionPackage }, use) =>
+  electionDefinition: async ({ electionPackage }, use) => use(electionPackage.electionDefinition),
+  election: async ({ electionDefinition }, use) => use(electionDefinition.election),
+  ballotStyle1: async ({ electionPackage }, use) =>
     use(
       electionPackage.ballots.find(
         (b) =>
           b.ballotStyleId === '1_en' && b.ballotMode === 'official' && b.ballotType === 'precinct',
       )!,
     ),
-  ballotStyle2: ({ electionPackage }, use) =>
+  ballotStyle2: async ({ electionPackage }, use) =>
     use(
       electionPackage.ballots.find(
         (b) =>
@@ -524,3 +515,15 @@ describe('generateProofBallot with real election fixture', async () => {
     });
   });
 });
+
+function measureBOption(optionId: string): GridPositionOption {
+  return {
+    type: 'option',
+    sheetNumber: 1,
+    side: 'front',
+    column: 10,
+    row: 30,
+    contestId: 'measure-b',
+    optionId,
+  };
+}

@@ -62,16 +62,18 @@ export const QARunConfigSchema = z
     output: OutputConfigSchema,
     tallyMode: TallyModeSchema.optional(),
   })
-  .superRefine((config, ctx) => {
+  .check((ctx) => {
     // The set of adjudication reasons changed between versions (v4.1 dropped
     // `UninterpretableBallot` and added `CrossoverVoting`), and VxAdmin
     // rejects a package naming one its schema lacks.
+    const config = ctx.value;
     const supported = getVersionSpec(config.vxsuite.version).adjudicationReasons;
     const overrides = config.election.systemSettingsOverrides?.precinctScanAdjudicationReasons;
     for (const [index, reason] of (overrides ?? []).entries()) {
       if (!supported.includes(reason)) {
-        ctx.addIssue({
+        ctx.issues.push({
           code: 'custom',
+          input: config,
           path: ['election', 'systemSettingsOverrides', 'precinctScanAdjudicationReasons', index],
           message:
             `Adjudication reason "${reason}" is not supported by VxSuite ` +

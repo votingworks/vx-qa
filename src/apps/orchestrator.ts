@@ -2,13 +2,19 @@
  * App orchestration - starting and stopping VxSuite apps
  */
 
-import { ChildProcess, execFile } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { logger } from '../utils/logger.ts';
-import { spawnBackground, killProcessTree, waitForPort, sleep } from '../utils/process.ts';
-import { getMockEnvironment, APP_PORTS, getBackendPort, type MachineType } from './env-config.ts';
+import {
+  spawnBackground,
+  killProcessTree,
+  waitForPort,
+  sleep,
+  execCommand,
+} from '../utils/process.ts';
+import { getMockEnvironment, APP_PORTS, getBackendPort } from './env-config.ts';
+import type { MachineType } from './env-config.ts';
 import { waitForDevDock } from '../mock-hardware/client.ts';
-import { promisify } from 'node:util';
 import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import net from 'node:net';
@@ -26,9 +32,15 @@ async function isPortFree(port: number, host = '127.0.0.1'): Promise<boolean> {
       resolve(free);
     };
     socket.setTimeout(1000);
-    socket.once('connect', () => finish(false)); // something is listening
-    socket.once('timeout', () => finish(true));
-    socket.once('error', () => finish(true)); // connection refused => free
+    socket.once('connect', () => {
+      finish(false);
+    }); // something is listening
+    socket.once('timeout', () => {
+      finish(true);
+    });
+    socket.once('error', () => {
+      finish(true);
+    }); // connection refused => free
     socket.connect(port, host);
   });
 }
@@ -39,7 +51,7 @@ async function isPortFree(port: number, host = '127.0.0.1'): Promise<boolean> {
 async function waitForPortsFree(ports: number[], timeout = 15000): Promise<boolean> {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    const free = await Promise.all(ports.map((port) => isPortFree(port)));
+    const free = await Promise.all(ports.map(async (port) => isPortFree(port)));
     if (free.every(Boolean)) {
       return true;
     }
@@ -289,7 +301,7 @@ export function createAppOrchestrator(repoPath: string, logDir?: string): AppOrc
         const startTime = Date.now();
 
         while (Date.now() - startTime < maxWaitTime) {
-          const free = await Promise.all(portsToFree.map((port) => isPortFree(port)));
+          const free = await Promise.all(portsToFree.map(async (port) => isPortFree(port)));
           if (free.every(Boolean)) {
             break;
           }
@@ -335,18 +347,16 @@ export function createAppOrchestrator(repoPath: string, logDir?: string): AppOrc
  * Ensure no VxSuite apps are running (useful for cleanup)
  */
 export async function ensureNoAppsRunning(): Promise<void> {
-  const execFileAsync = promisify(execFile);
-
   try {
     // Find any processes using our ports
     for (const port of Object.values(APP_PORTS)) {
       try {
-        const { stdout } = await execFileAsync('lsof', [`-ti:${port}`]);
+        const { stdout } = await execCommand('lsof', [`-ti:${port}`]);
         const pids = stdout.trim().split('\n').filter(Boolean);
 
         for (const pid of pids) {
           try {
-            await killProcessTree(parseInt(pid, 10));
+            await killProcessTree(Math.trunc(Number(pid)));
             logger.debug(`Killed process ${pid} on port ${port}`);
           } catch {
             // Ignore errors killing processes

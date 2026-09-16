@@ -2,7 +2,8 @@
  * Git repository cloning and checkout operations
  */
 
-import { simpleGit, type SimpleGit } from 'simple-git';
+import { simpleGit } from 'simple-git';
+import type { SimpleGit } from 'simple-git';
 import { existsSync } from 'node:fs';
 import { logger } from '../utils/logger.ts';
 import { ensureDir, resolvePath } from '../utils/paths.ts';
@@ -114,7 +115,7 @@ async function checkoutTag(repoPath: string, tag: string): Promise<void> {
 export async function getCurrentCommit(repoPath: string): Promise<string> {
   const git: SimpleGit = simpleGit(repoPath);
   const log = await git.log({ maxCount: 1 });
-  return log.latest?.hash || 'unknown';
+  return log.latest?.hash ?? 'unknown';
 }
 
 /**

@@ -11,7 +11,8 @@ import { logger, printHeader } from './utils/logger.ts';
 import { validateConfig, safeValidateConfig } from './config/schema.ts';
 import { resolvePath, generateTimestampedDir, ensureDir } from './utils/paths.ts';
 import { runQAWorkflow } from './cli/config-runner.ts';
-import { TALLY_MODES, type QARunConfig, type WebhookConfig } from './config/types.ts';
+import { TALLY_MODES } from './config/types.ts';
+import type { QARunConfig, WebhookConfig } from './config/types.ts';
 import { SUPPORTED_VERSIONS } from './config/versions.ts';
 import { dirname, join } from 'node:path';
 import { regenerateHtmlReportFromRawData } from './report/html-generator.ts';
@@ -26,8 +27,8 @@ import { readFile, writeFile } from 'node:fs/promises';
  * option value is used as the radix (e.g. `parseInt('9100', 9000)` -> NaN).
  */
 function parseIntOption(value: string): number {
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed)) {
+  const parsed = value.trim() === '' ? Number.NaN : Math.trunc(Number(value));
+  if (!Number.isFinite(parsed)) {
     throw new InvalidArgumentError('Must be an integer.');
   }
   return parsed;
@@ -129,7 +130,7 @@ program
       // Build webhook config if URL is provided
       let webhook: WebhookConfig | undefined;
       if (options.webhookUrl) {
-        const secret = options.webhookSecret || process.env.CIRCLECI_WEBHOOK_SECRET;
+        const secret = options.webhookSecret ?? process.env.CIRCLECI_WEBHOOK_SECRET;
         if (!secret) {
           logger.error(
             'Webhook secret is required. Use --webhook-secret or set CIRCLECI_WEBHOOK_SECRET.',

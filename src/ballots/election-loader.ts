@@ -299,7 +299,7 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
 
   const ballots: BallotPdfInfo[] = [];
   const ballotsFile = zip.file('ballots.jsonl');
-  assert(ballotsFile, `ballots.jsonl missing in ${sourcePath}`);
+  assert.ok(ballotsFile, `ballots.jsonl missing in ${sourcePath}`);
 
   const ballotsStream = ballotsFile.nodeStream('nodebuffer');
   const ballotsJsonLines = createInterface({
@@ -322,7 +322,7 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
   assertNoDuplicateBallotKeys(ballots);
 
   // Validate we have what we need
-  assert(ballots.length > 0, 'Election package contains no ballot PDFs.');
+  assert.ok(ballots.length > 0, 'Election package contains no ballot PDFs.');
 
   const systemSettingsFile = zip.file('systemSettings.json');
   if (!systemSettingsFile) {
@@ -461,7 +461,10 @@ export function normalizeYesNoContests(election: Election): void {
     }
 
     if ((!contest.yesOption || !contest.noOption) && contest.options) {
-      assert(contest.options.length >= 2, `yes/no contest ${contest.id} has fewer than 2 options`);
+      assert.ok(
+        contest.options.length >= 2,
+        `yes/no contest ${contest.id} has fewer than 2 options`,
+      );
       contest.yesOption = contest.options[0];
       contest.noOption = contest.options[1];
     }
@@ -553,7 +556,7 @@ export function assertNoDuplicateBallotKeys(ballots: readonly BallotPdfInfo[]): 
   const seenBallotKeys = new Set<string>();
   for (const ballot of ballots) {
     const key = `${ballot.ballotStyleId}|${ballot.precinctId}|${ballot.ballotType}|${ballot.ballotMode}`;
-    assert(
+    assert.ok(
       !seenBallotKeys.has(key),
       `Duplicate ballot entry in ballots.jsonl: ballotStyleId=${ballot.ballotStyleId}, ` +
         `precinctId=${ballot.precinctId}, ballotType=${ballot.ballotType}, ` +
@@ -650,7 +653,11 @@ export async function loadElectionPackage(
   }
 
   // Extract the election package ZIP
-  const electionPackageData = await zip.file(electionPackageFile)!.async('uint8array');
+  const electionPackageEntry = zip.file(electionPackageFile);
+  if (!electionPackageEntry) {
+    throw new Error(`Election package ${electionPackageFile} missing from the archive`);
+  }
+  const electionPackageData = await electionPackageEntry.async('uint8array');
   const electionPackagePath = join(outputDir, electionPackageFile);
   await writeFile(electionPackagePath, electionPackageData);
   logger.info(`Extracted election package: ${electionPackageFile}`);
@@ -685,7 +692,7 @@ export async function applySystemSettingsOverrides(
   const zipData = await readFile(electionPackagePath);
   const zip = await JSZip.loadAsync(zipData);
   const systemSettingsFile = zip.file('systemSettings.json');
-  assert(systemSettingsFile, `systemSettings.json missing in ${electionPackagePath}`);
+  assert.ok(systemSettingsFile, `systemSettings.json missing in ${electionPackagePath}`);
 
   const current = JSON.parse(await systemSettingsFile.async('string')) as Record<string, unknown>;
   const merged = { ...current, ...definedOverrides };
@@ -719,6 +726,6 @@ export async function loadElectionPackageFromUrl(
 
 export function getBallotStylesForPrecinct(election: Election, id: string): BallotStyle[] {
   const precinct = election.precincts.find((p) => p.id === id);
-  assert(precinct, `No precinct with ID: ${id}`);
+  assert.ok(precinct, `No precinct with ID: ${id}`);
   return election.ballotStyles.filter((bs) => bs.precincts.includes(precinct.id));
 }

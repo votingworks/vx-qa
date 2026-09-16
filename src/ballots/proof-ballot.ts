@@ -3,7 +3,8 @@
  * for visual verification of bubble-to-contest mapping.
  */
 
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import type { PDFFont, PDFPage } from 'pdf-lib';
 import type {
   Election,
   GridPosition,

@@ -7,14 +7,8 @@
 
 import { join } from 'node:path';
 import { logger } from '../utils/logger.ts';
-import {
-  getContestsForBallotStyle,
-  type GridPosition,
-  type Vote,
-  type Candidate,
-  type Election,
-  type VotesDict,
-} from './election-loader.ts';
+import { getContestsForBallotStyle } from './election-loader.ts';
+import type { GridPosition, Vote, Candidate, Election, VotesDict } from './election-loader.ts';
 import type { BallotPattern } from '../config/types.ts';
 
 export interface MarkedBallot {
@@ -270,7 +264,7 @@ export function generateValidVotes(election: Election, ballotStyleId: string): V
       }
       default: {
         const _: never = contest;
-        throw new Error(`Unexpected contest type: ${(_ as any).type}`);
+        throw new Error(`Unexpected contest type: ${(_ as { type: string }).type}`);
       }
     }
   }
@@ -325,7 +319,7 @@ export function generateOvervoteVotes(
 
       default: {
         const _: never = contest;
-        throw new Error(`Unexpected contest type: ${(_ as any).type}`);
+        throw new Error(`Unexpected contest type: ${(_ as { type: string }).type}`);
       }
     }
   }
@@ -367,7 +361,7 @@ export function generateUndervoteVotes(
   // Preferred: under-vote every contest, anchoring the ballot as non-blank with
   // one multi-seat candidate contest kept partially marked.
   const anchor = contests.find(
-    (c) => c.type === 'candidate' && c.seats > 1 && c.candidates.length >= 1,
+    (c) => c.type === 'candidate' && c.seats > 1 && c.candidates.length > 0,
   );
   if (anchor && anchor.type === 'candidate') {
     // Keep one fewer than the seats (at least one selection): under-voted but
@@ -383,10 +377,10 @@ export function generateUndervoteVotes(
   // Fallback (no multi-seat contest): vote the ballot in full except one
   // contest left blank. Needs at least two contests, else the whole ballot
   // would be blank.
-  if (contests.length >= 2) {
+  const lastContest = contests.at(-1);
+  if (contests.length >= 2 && lastContest) {
     const votes = generateValidVotes(election, ballotStyleId);
-    delete votes[contests[contests.length - 1].id];
-    return votes;
+    return Object.fromEntries(Object.entries(votes).filter(([id]) => id !== lastContest.id));
   }
 
   return undefined;
@@ -423,7 +417,7 @@ export function generateValidWriteInVotes(
 
       default: {
         const _: never = contest;
-        throw new Error(`Unexpected contest type: ${(_ as any).type}`);
+        throw new Error(`Unexpected contest type: ${(_ as { type: string }).type}`);
       }
     }
   }

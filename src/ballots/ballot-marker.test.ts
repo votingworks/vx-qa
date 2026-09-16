@@ -16,7 +16,7 @@ import type { Candidate, Election, CandidateContest, YesNoContest } from './elec
 /**
  * Helper to create a minimal election for testing
  */
-function createTestElection(contests: (CandidateContest | YesNoContest)[]): Election {
+function createTestElection(contests: Array<CandidateContest | YesNoContest>): Election {
   return {
     title: 'Test Election',
     state: 'CA',
@@ -155,7 +155,7 @@ describe('generateValidVotes', () => {
   });
 
   test('generate votes for multiple contests', () => {
-    const contests: (CandidateContest | YesNoContest)[] = [
+    const contests: Array<CandidateContest | YesNoContest> = [
       {
         type: 'candidate',
         id: 'mayor',
@@ -326,7 +326,7 @@ describe('generateOvervoteVotes', () => {
 
 describe('generateUndervoteVotes', () => {
   test('under-vote every contest, anchoring non-blankness on a multi-seat contest', () => {
-    const contests: (CandidateContest | YesNoContest)[] = [
+    const contests: Array<CandidateContest | YesNoContest> = [
       {
         type: 'candidate',
         id: 'city-council',
@@ -364,7 +364,7 @@ describe('generateUndervoteVotes', () => {
   });
 
   test('leave one contest blank when all contests are single-winner', () => {
-    const contests: (CandidateContest | YesNoContest)[] = [
+    const contests: Array<CandidateContest | YesNoContest> = [
       {
         type: 'candidate',
         id: 'mayor',
@@ -457,7 +457,7 @@ describe('generateValidWriteInVotes', () => {
   });
 
   test('skip yes/no contests', () => {
-    const contests: (CandidateContest | YesNoContest)[] = [
+    const contests: Array<CandidateContest | YesNoContest> = [
       {
         type: 'candidate',
         id: 'mayor',

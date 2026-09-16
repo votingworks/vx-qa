@@ -75,10 +75,6 @@ async function prepareReportData(
   const ballotsDir = join(outputDir, 'ballots');
   const ballotFiles = await collectFilesInDir(ballotsDir, ['.pdf']);
 
-  async function makeBallotGalleryThumbnail(filePath: string): Promise<string | null> {
-    return await generatePdfThumbnail(filePath, { scale: 2 });
-  }
-
   const proofFileNames = new Set(
     ballotFiles.filter((f) => f.name.startsWith(PROOF_PREFIX)).map((f) => f.name),
   );
@@ -94,12 +90,14 @@ async function prepareReportData(
       base: {
         name: base.name,
         path: `ballots/${base.name}`,
-        thumbnail: await makeBallotGalleryThumbnail(base.path),
+        thumbnail: await generatePdfThumbnail(base.path, { scale: 2 }),
       },
       proof: {
         name: proofFileName,
         path: `ballots/${proofFileName}`,
-        thumbnail: await makeBallotGalleryThumbnail(join(dirname(base.path), proofFileName)),
+        thumbnail: await generatePdfThumbnail(join(dirname(base.path), proofFileName), {
+          scale: 2,
+        }),
       },
     });
   }
@@ -187,11 +185,17 @@ async function prepareReportData(
                 precinctId: output.precinctId,
                 ballotCount: output.ballotCount,
                 contestCount: Object.keys(output.contestResults).length,
-                validationMessages: contestsWithValidation.map((c) => ({
-                  contestId: c.contestId,
-                  type: c.validation!.type,
-                  message: c.validation!.message,
-                })),
+                validationMessages: contestsWithValidation.flatMap((c) =>
+                  c.validation
+                    ? [
+                        {
+                          contestId: c.contestId,
+                          type: c.validation.type,
+                          message: c.validation.message,
+                        },
+                      ]
+                    : [],
+                ),
                 hasWarnings,
                 hasErrors,
               },
@@ -244,7 +248,7 @@ async function prepareReportData(
     title: `VxSuite QA Report ${pass ? 'PASS' : 'FAIL'}`,
     runId: collection.runId,
     startTime: collection.startTime.toISOString(),
-    endTime: collection.endTime?.toISOString() || 'In Progress',
+    endTime: collection.endTime?.toISOString() ?? 'In Progress',
     duration: duration ? formatDuration(duration) : 'N/A',
     pass,
     config: {
@@ -263,7 +267,7 @@ async function prepareReportData(
         ballotMode: r.ballotMode,
         pattern: r.markPattern,
         status: r.accepted ? 'Accepted' : 'Rejected',
-        reason: r.rejectedReason || '-',
+        reason: r.rejectedReason ?? '-',
         statusClass: isExpected ? 'success' : 'error',
         isExpected,
         expectedStatus: expected ? 'Accepted' : 'Rejected',
@@ -291,20 +295,20 @@ interface ReportData {
     tag: string;
     election: string;
   };
-  steps: {
+  steps: Array<{
     id: string;
     name: string;
     description: string;
     duration: string;
-    inputs: {
+    inputs: Array<{
       type: string;
       label: string;
       description?: string;
       path?: string;
       data?: Record<string, unknown>;
       thumbnail?: string | null;
-    }[];
-    outputs: {
+    }>;
+    outputs: Array<{
       type: string;
       label: string;
       description?: string;
@@ -312,17 +316,17 @@ interface ReportData {
       data?: Record<string, unknown>;
       statusClass?: string;
       thumbnail?: string | null;
-    }[];
+    }>;
     screenshots: ScreenshotArtifact[];
     hasErrors: boolean;
-    errors: { step: string; message: string; timestamp: Date }[];
-  }[];
-  ballotPairs: {
+    errors: Array<{ step: string; message: string; timestamp: Date }>;
+  }>;
+  ballotPairs: Array<{
     name: string;
     base: { name: string; path: string; thumbnail: string | null };
     proof: { name: string; path: string; thumbnail: string | null };
-  }[];
-  scanResults: {
+  }>;
+  scanResults: Array<{
     ballotStyleId: string;
     ballotMode: string;
     pattern: string;
@@ -331,10 +335,10 @@ interface ReportData {
     statusClass: string;
     isExpected: boolean;
     expectedStatus: string;
-  }[];
-  errors: { step: string; message: string; timestamp: string }[];
+  }>;
+  errors: Array<{ step: string; message: string; timestamp: string }>;
   hasErrors: boolean;
-  validationFailures: { step: string; message: string; stepId: string }[];
+  validationFailures: Array<{ step: string; message: string; stepId: string }>;
   hasValidationFailures: boolean;
 }
 
@@ -355,13 +359,12 @@ function formatDuration(seconds: number): string {
  */
 function renderTemplate(data: ReportData): string {
   // Register Handlebars helpers
-  Handlebars.registerHelper('eq', function (this: any, a: any, b: any, options: any) {
-    if (a === b) {
-      return options.fn(this);
-    } else {
-      return options.inverse(this);
-    }
-  });
+  Handlebars.registerHelper(
+    'eq',
+    function (this: unknown, a: unknown, b: unknown, options: Handlebars.HelperOptions) {
+      return a === b ? options.fn(this) : options.inverse(this);
+    },
+  );
 
   const template = `<!DOCTYPE html>
 <html lang="en">

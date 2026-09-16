@@ -4,6 +4,7 @@
 
 import type { Page } from '@playwright/test';
 import { logger } from '../utils/logger.ts';
+import { findFilesRecursively } from '../utils/paths.ts';
 import { createMockUsbController } from '../mock-hardware/usb.ts';
 import { dipSystemAdministratorCardAndLogin, logOut } from './auth-helpers.ts';
 import {
@@ -15,8 +16,8 @@ import {
   toggleDevDock,
 } from './browser.ts';
 import type { StepCollector } from '../report/artifacts.ts';
-import { basename, join } from 'node:path';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { basename } from 'node:path';
+import { readFile, stat } from 'node:fs/promises';
 
 /**
  * Run the VxAdmin configuration workflow
@@ -206,29 +207,7 @@ export async function runAdminUnconfigureWorkflow(
  */
 async function getExportedPackagePath(usbDataPath: string): Promise<string> {
   // Look for ZIP files in the USB data directory
-  const findZipFiles = async (dir: string): Promise<string[]> => {
-    const results: string[] = [];
-
-    try {
-      const entries = await readdir(dir, { withFileTypes: true });
-
-      for (const entry of entries) {
-        const fullPath = join(dir, entry.name);
-
-        if (entry.isDirectory()) {
-          results.push(...(await findZipFiles(fullPath)));
-        } else if (entry.name.endsWith('.zip')) {
-          results.push(fullPath);
-        }
-      }
-    } catch {
-      // Directory might not exist
-    }
-
-    return results;
-  };
-
-  const zipFiles = await findZipFiles(usbDataPath);
+  const zipFiles = await findFilesRecursively(usbDataPath, (name) => name.endsWith('.zip'));
 
   if (zipFiles.length === 0) {
     throw new Error('No election package found on USB drive');
@@ -237,7 +216,7 @@ async function getExportedPackagePath(usbDataPath: string): Promise<string> {
   // Return the most recently modified ZIP file
   const sorted = (
     await Promise.all(zipFiles.map(async (path) => ({ path, mtime: (await stat(path)).mtime })))
-  ).sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+  ).toSorted((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
   return sorted[0].path;
 }

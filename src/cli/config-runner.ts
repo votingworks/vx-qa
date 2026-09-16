@@ -5,10 +5,11 @@
 import { logger, formatDuration, printDivider } from '../utils/logger.ts';
 import { resolvePath } from '../utils/paths.ts';
 import type { QARunConfig, WebhookConfig } from '../config/types.ts';
-import { getVersionSpec, type VxSuiteVersion } from '../config/versions.ts';
+import { getVersionSpec } from '../config/versions.ts';
+import type { VxSuiteVersion } from '../config/versions.ts';
 import { determineTallyMode } from '../config/tally-mode.ts';
 import { existsSync } from 'node:fs';
-import { relative } from 'node:path';
+import { relative, join, dirname } from 'node:path';
 
 // Repository management
 import { cloneOrUpdateRepo, getCurrentCommit, applyPatch } from '../repo/clone.ts';
@@ -32,11 +33,8 @@ import {
   runAdminConfigureWorkflow,
   runAdminUnconfigureWorkflow,
 } from '../automation/admin-workflow.ts';
-import {
-  runScanWorkflow,
-  scannerAcceptedPrecinctIds,
-  type BallotToScan,
-} from '../automation/scan-workflow.ts';
+import { runScanWorkflow, scannerAcceptedPrecinctIds } from '../automation/scan-workflow.ts';
+import type { BallotToScan } from '../automation/scan-workflow.ts';
 import { planBallotsToScan, scanExpectationsFromSystemSettings } from '../ballots/scan-plan.ts';
 import { runAdminTallyWorkflow } from '../automation/admin-tally-workflow.ts';
 import { createMockUsbController } from '../mock-hardware/usb.ts';
@@ -48,7 +46,6 @@ import type { Election, Precinct } from '../ballots/election-loader.ts';
 // Reporting
 import { createArtifactCollector, PROOF_PREFIX } from '../report/artifacts.ts';
 import { generateHtmlReport } from '../report/html-generator.ts';
-import { join, dirname } from 'node:path';
 import { sendWebhookUpdate } from '../webhook/client.ts';
 import { State } from '../repo/state.ts';
 import { writeFile } from 'node:fs/promises';
@@ -228,7 +225,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     logger.info(`Applying systemSettings overrides: ${JSON.stringify(systemSettingsOverrides)}`);
     electionPackage.systemSettings = await applySystemSettingsOverrides(
       electionPackagePath,
-      systemSettingsOverrides as Record<string, unknown>,
+      systemSettingsOverrides,
     );
 
     const { election } = electionPackage.electionDefinition;
@@ -287,7 +284,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
       );
 
       const pdfName =
-        `ballot-${ballot.ballotStyleId}-${ballot.precinctId}-${ballot.ballotMode}-${ballot.ballotType}.pdf`.replace(
+        `ballot-${ballot.ballotStyleId}-${ballot.precinctId}-${ballot.ballotMode}-${ballot.ballotType}.pdf`.replaceAll(
           /[/ ]/g,
           '_',
         );
@@ -346,9 +343,9 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     );
 
     try {
+      printDivider();
       if (tallyMode === 'consolidated') {
         // Phase 5: VxAdmin Configuration
-        printDivider();
         logger.step('Phase 5: VxAdmin Configuration');
         if (options.webhook) {
           await sendWebhookUpdate(
@@ -368,7 +365,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
         adminStep.addInput({
           type: 'election-package',
           label: 'Election Package',
-          description: `${election.title}`,
+          description: election.title,
           path: electionPackagePath,
         });
 
@@ -425,7 +422,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
             openingPollsStep.addInput({
               type: 'election-package',
               label: 'Election Package',
-              description: `${election.title}`,
+              description: election.title,
               path: adminExportedPackage.path,
             });
 
@@ -489,7 +486,6 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
         // own configure -> scan -> import -> tally -> report -> unconfigure
         // cycle, run sequentially, for elections where each precinct (e.g. an
         // NH city's ward) is its own reporting unit.
-        printDivider();
         logger.step('Phase 5-7: Per-Precinct VxAdmin/VxScan Cycles');
         if (options.webhook) {
           await sendWebhookUpdate(
@@ -522,7 +518,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
           adminStep.addInput({
             type: 'election-package',
             label: 'Election Package',
-            description: `${election.title}`,
+            description: election.title,
             path: electionPackagePath,
           });
 
@@ -559,7 +555,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
           openingPollsStep.addInput({
             type: 'election-package',
             label: 'Election Package',
-            description: `${election.title}`,
+            description: election.title,
             path: adminExportedPackage.path,
           });
 
@@ -718,7 +714,9 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     } catch (reportError) {
       logger.error(
         `Failed to generate partial report: ${
-          reportError instanceof Error ? (reportError.stack ?? reportError.message) : reportError
+          reportError instanceof Error
+            ? (reportError.stack ?? reportError.message)
+            : String(reportError)
         }`,
       );
     }

@@ -4,7 +4,8 @@
 
 import { basename, dirname, join } from 'node:path';
 import { cp, mkdir, writeFile } from 'node:fs/promises';
-import { createDevDockClient, type DevDockClient } from './client.ts';
+import { createDevDockClient } from './client.ts';
+import type { DevDockClient } from './client.ts';
 import { logger } from '../utils/logger.ts';
 
 export type UsbDriveStatus = 'inserted' | 'removed';
@@ -93,7 +94,7 @@ export function createMockUsbController({ dataPath }: { dataPath: string }): Moc
     },
 
     async getStatus(): Promise<UsbDriveStatus> {
-      return await client.call<UsbDriveStatus>('getUsbDriveStatus', {});
+      return client.call<UsbDriveStatus>('getUsbDriveStatus', {});
     },
 
     getDataPath(): string {
@@ -102,7 +103,7 @@ export function createMockUsbController({ dataPath }: { dataPath: string }): Moc
 
     async copyFile(sourcePath: string, destName?: string): Promise<string> {
       await ensureDriveExists();
-      const fileName = destName || basename(sourcePath);
+      const fileName = destName ?? basename(sourcePath);
       const destPath = join(dataPath, fileName);
       await mkdir(dirname(destPath), { recursive: true });
       await cp(sourcePath, destPath);
@@ -112,7 +113,7 @@ export function createMockUsbController({ dataPath }: { dataPath: string }): Moc
 
     async copyDirectory(sourcePath: string, destName?: string): Promise<string> {
       await ensureDriveExists();
-      const dirName = destName || basename(sourcePath);
+      const dirName = destName ?? basename(sourcePath);
       const destPath = join(dataPath, dirName);
       await mkdir(dirname(destPath), { recursive: true });
       await cp(sourcePath, destPath, { recursive: true });
