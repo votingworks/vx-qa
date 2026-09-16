@@ -20,6 +20,7 @@ import { ArtifactCollection, StepOutput, ValidationResult } from '../config/type
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
+  BallotStyle,
   Contest,
   Election,
   getContestsForBallotStyle,
@@ -83,6 +84,31 @@ export function parseCsvLine(line: string): string[] {
 }
 
 /**
+ * The (ballot style, precinct) pairs to enter manual tallies for.
+ *
+ * In per-precinct mode only this cycle's precinct is tallied: VxAdmin is still
+ * configured with the full multi-precinct election, but only this precinct's
+ * CVRs were imported and only its single-precinct report is validated, so a
+ * tally entered under any other precinct would go missing from that report.
+ * Otherwise each ballot style is tallied once, under its first precinct.
+ */
+export function manualTallyTargets(
+  election: Pick<Election, 'ballotStyles'>,
+  cyclePrecinctId?: string,
+): Array<{ ballotStyle: BallotStyle; precinctId: string }> {
+  if (cyclePrecinctId !== undefined) {
+    return election.ballotStyles
+      .filter((ballotStyle) => ballotStyle.precincts.includes(cyclePrecinctId))
+      .map((ballotStyle) => ({ ballotStyle, precinctId: cyclePrecinctId }));
+  }
+
+  return election.ballotStyles.map((ballotStyle) => ({
+    ballotStyle,
+    precinctId: ballotStyle.precincts[0],
+  }));
+}
+
+/**
  * Add manual tallies for all ballot styles
  */
 async function addManualTally(
@@ -90,17 +116,11 @@ async function addManualTally(
   election: Election,
   collector: ArtifactCollector,
   limitManualTallies?: number,
-  precinctId?: string,
+  cyclePrecinctId?: string,
 ): Promise<void> {
   logger.step('Adding manual tallies for all ballot styles');
 
-  // In per-precinct mode, only enter manual tallies for ballot styles that
-  // apply to this precinct — VxAdmin is still configured with the full
-  // multi-precinct election, but this cycle only imported this precinct's CVRs.
-  const ballotStyles =
-    precinctId !== undefined
-      ? election.ballotStyles.filter((bs) => bs.precincts.includes(precinctId))
-      : election.ballotStyles;
+  const ballotStyles = manualTallyTargets(election, cyclePrecinctId);
 
   logger.info(`Found ${ballotStyles.length} ballot styles`);
 
@@ -127,9 +147,8 @@ async function addManualTally(
 
   // Loop through each ballot style
   for (let styleIndex = 0; styleIndex < ballotStylesToProcess; styleIndex++) {
-    const ballotStyle = ballotStyles[styleIndex];
+    const { ballotStyle, precinctId } = ballotStyles[styleIndex];
     const ballotStyleGroupId = ballotStyle.id;
-    const precinctId = ballotStyle.precincts[0]; // Use first precinct
     const contests = getContestsForBallotStyle(election, ballotStyleGroupId);
 
     logger.info(
@@ -1094,22 +1113,13 @@ async function validateTallyCsv(
     }
   }
 
-  // Check for votes in CSV that weren't expected
+  // Check for votes in CSV that weren't expected in that contest. Selection
+  // IDs repeat across contests ('write-in' in particular), so the lookup must
+  // be scoped to the contest or a stray count is masked by a match elsewhere.
   for (const [contestId, candidates] of actualVotes) {
     for (const [selectionId, actualCount] of candidates) {
-      if (actualCount > 0) {
-        let found = false;
-        for (const candidates of expectedVotes.values()) {
-          if (candidates.get(selectionId)) {
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          mismatches.push(
-            `Unexpected votes in CSV for ${contestId}/${selectionId}: ${actualCount}`,
-          );
-        }
+      if (actualCount > 0 && !expectedVotes.get(contestId)?.has(selectionId)) {
+        mismatches.push(`Unexpected votes in CSV for ${contestId}/${selectionId}: ${actualCount}`);
       }
     }
   }

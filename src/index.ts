@@ -84,14 +84,9 @@ program
       const configPath = resolvePath(options.config);
       const configData = await readFile(configPath, 'utf-8');
       const parsedConfig = JSON.parse(configData);
-      config = validateConfig(parsedConfig, configPath);
-      config.basePath = dirname(configPath);
-      logger.info(`Loaded configuration from ${configPath}`);
 
-      // Apply command-line overrides
-      if (options.output) {
-        config.output.directory = options.output;
-      }
+      // Applied before validation so version-dependent checks (e.g. which
+      // adjudication reasons the version accepts) see the effective version.
       if (options.vxsuiteVersion) {
         if (!(SUPPORTED_VERSIONS as readonly string[]).includes(options.vxsuiteVersion)) {
           logger.error(
@@ -99,7 +94,16 @@ program
           );
           process.exit(1);
         }
-        config.vxsuite.version = options.vxsuiteVersion;
+        parsedConfig.vxsuite = { ...parsedConfig.vxsuite, version: options.vxsuiteVersion };
+      }
+
+      config = validateConfig(parsedConfig, configPath);
+      config.basePath = dirname(configPath);
+      logger.info(`Loaded configuration from ${configPath}`);
+
+      // Apply command-line overrides
+      if (options.output) {
+        config.output.directory = options.output;
       }
       if (options.tallyMode) {
         if (!(TALLY_MODES as readonly string[]).includes(options.tallyMode)) {

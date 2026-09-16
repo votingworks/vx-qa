@@ -36,6 +36,31 @@ export type BallotModel = 'gridLayouts' | 'ballotPositions';
  */
 export type LocationModel = 'precinct' | 'pollingPlace';
 
+/**
+ * VxSuite's `AdjudicationReason` values across the supported versions. Which
+ * ones a given version accepts is listed per version in {@link VERSION_SPECS}.
+ */
+export type AdjudicationReason =
+  | 'MarginalMark'
+  | 'Overvote'
+  | 'Undervote'
+  | 'BlankBallot'
+  | 'UnmarkedWriteIn'
+  /** Deprecated but still accepted by v4.0; removed in v4.1. */
+  | 'UninterpretableBallot'
+  /** Added in v4.1. */
+  | 'CrossoverVoting';
+
+export const ADJUDICATION_REASONS = [
+  'MarginalMark',
+  'Overvote',
+  'Undervote',
+  'BlankBallot',
+  'UnmarkedWriteIn',
+  'UninterpretableBallot',
+  'CrossoverVoting',
+] as const satisfies readonly AdjudicationReason[];
+
 export interface VersionSpec {
   /** Git tag/branch to check out in the VxSuite repo. */
   ref: string;
@@ -45,6 +70,11 @@ export interface VersionSpec {
   ballotModel: BallotModel;
   /** How VxScan's election manager screen scopes the machine to a location. */
   locationModel: LocationModel;
+  /**
+   * The adjudication reasons this version's `SystemSettingsSchema` accepts. A
+   * package whose settings name any other reason fails to load in VxAdmin.
+   */
+  adjudicationReasons: readonly AdjudicationReason[];
   /**
    * Mock USB drive data directory, relative to `<repo>/.mock-state/<NODE_ENV>`.
    * v4.1's simulated USB platform (libs/usb-drive/src/mocks/simulated_usb_platform.ts)
@@ -61,6 +91,14 @@ export const VERSION_SPECS: Record<VxSuiteVersion, VersionSpec> = {
     patchFile: 'vxsuite-v4.0.patch',
     ballotModel: 'gridLayouts',
     locationModel: 'precinct',
+    adjudicationReasons: [
+      'MarginalMark',
+      'Overvote',
+      'Undervote',
+      'BlankBallot',
+      'UnmarkedWriteIn',
+      'UninterpretableBallot',
+    ],
     mockUsbDataDir: 'usb-drive/mock-usb-data',
   },
   'v4.1': {
@@ -68,6 +106,14 @@ export const VERSION_SPECS: Record<VxSuiteVersion, VersionSpec> = {
     patchFile: 'vxsuite-v4.1.patch',
     ballotModel: 'ballotPositions',
     locationModel: 'pollingPlace',
+    adjudicationReasons: [
+      'MarginalMark',
+      'Overvote',
+      'Undervote',
+      'BlankBallot',
+      'UnmarkedWriteIn',
+      'CrossoverVoting',
+    ],
     mockUsbDataDir: 'usb-drive/storage/sdb',
   },
 };

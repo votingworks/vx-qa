@@ -5,7 +5,7 @@
 import { z } from 'zod/v4';
 import { resolvePath } from '../utils/paths.js';
 import { dirname } from 'node:path';
-import { SUPPORTED_VERSIONS } from './versions.js';
+import { ADJUDICATION_REASONS, getVersionSpec, SUPPORTED_VERSIONS } from './versions.js';
 import { TALLY_MODES } from './types.js';
 
 export const BallotPatternSchema = z.enum([
@@ -17,14 +17,7 @@ export const BallotPatternSchema = z.enum([
   'unmarked-write-in',
 ]);
 
-export const AdjudicationReasonSchema = z.enum([
-  'MarginalMark',
-  'Overvote',
-  'Undervote',
-  'BlankBallot',
-  'UnmarkedWriteIn',
-  'UninterpretableBallot',
-]);
+export const AdjudicationReasonSchema = z.enum(ADJUDICATION_REASONS);
 
 export const TallyModeSchema = z.enum(TALLY_MODES);
 
@@ -62,12 +55,31 @@ export const OutputConfigSchema = z.object({
   directory: z.string().min(1, 'Output directory is required'),
 });
 
-export const QARunConfigSchema = z.object({
-  vxsuite: VxSuiteConfigSchema,
-  election: ElectionConfigSchema,
-  output: OutputConfigSchema,
-  tallyMode: TallyModeSchema.optional(),
-});
+export const QARunConfigSchema = z
+  .object({
+    vxsuite: VxSuiteConfigSchema,
+    election: ElectionConfigSchema,
+    output: OutputConfigSchema,
+    tallyMode: TallyModeSchema.optional(),
+  })
+  .superRefine((config, ctx) => {
+    // The set of adjudication reasons changed between versions (v4.1 dropped
+    // `UninterpretableBallot` and added `CrossoverVoting`), and VxAdmin
+    // rejects a package naming one its schema lacks.
+    const supported = getVersionSpec(config.vxsuite.version).adjudicationReasons;
+    const overrides = config.election.systemSettingsOverrides?.precinctScanAdjudicationReasons;
+    for (const [index, reason] of (overrides ?? []).entries()) {
+      if (!supported.includes(reason)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['election', 'systemSettingsOverrides', 'precinctScanAdjudicationReasons', index],
+          message:
+            `Adjudication reason "${reason}" is not supported by VxSuite ` +
+            `${config.vxsuite.version}; supported: ${supported.join(', ')}`,
+        });
+      }
+    }
+  });
 
 export type QARunConfigOutput = z.output<typeof QARunConfigSchema>;
 
