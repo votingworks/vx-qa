@@ -2,9 +2,10 @@
  * Playwright browser setup and management
  */
 
-import { chromium, Browser, Page, BrowserContext } from '@playwright/test';
-import { logger } from '../utils/logger.js';
-import { APP_PORTS } from '../apps/env-config.js';
+import { chromium } from '@playwright/test';
+import type { Browser, Page, BrowserContext } from '@playwright/test';
+import { logger } from '../utils/logger.ts';
+import { APP_PORTS } from '../apps/env-config.ts';
 
 export interface BrowserSession {
   browser: Browser;
@@ -75,7 +76,7 @@ export async function navigateToApp(page: Page, attempts = 10): Promise<void> {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const isConnectionError =
-        /ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_EMPTY_RESPONSE|NS_ERROR/i.test(message);
+        /ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_EMPTY_RESPONSE|NS_ERROR/iu.test(message);
       if (!isConnectionError || attempt >= attempts) {
         throw error;
       }
@@ -107,11 +108,11 @@ export async function waitForText(
  * Debug helper - dump current page state to console and take a screenshot
  */
 export async function debugPageState(page: Page, label: string, outputDir?: string): Promise<void> {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const timestamp = new Date().toISOString().replaceAll(/[:.]/gu, '-');
 
   console.log(`\n${'='.repeat(60)}`);
   console.log(`DEBUG: ${label}`);
-  console.log(`${'='.repeat(60)}`);
+  console.log('='.repeat(60));
   console.log(`URL: ${page.url()}`);
   console.log(`Title: ${await page.title()}`);
 
@@ -156,8 +157,8 @@ export async function debugPageState(page: Page, label: string, outputDir?: stri
   console.log(`\nHeadings:\n${headingTexts.join('\n')}`);
 
   // Take debug screenshot
-  if (outputDir) {
-    const screenshotPath = `${outputDir}/debug-${timestamp}-${label.replace(/\s+/g, '-')}.png`;
+  if (outputDir !== undefined && outputDir !== '') {
+    const screenshotPath = `${outputDir}/debug-${timestamp}-${label.replaceAll(/\s+/gu, '-')}.png`;
     await page.screenshot({ path: screenshotPath, fullPage: true });
     console.log(`\nScreenshot saved: ${screenshotPath}`);
   }
@@ -178,7 +179,7 @@ export async function waitForTextWithDebug(
   try {
     await page.getByText(text).first().waitFor({ timeout });
   } catch (error) {
-    await debugPageState(page, label || `Timeout waiting for text: "${text}"`, outputDir);
+    await debugPageState(page, label ?? `Timeout waiting for text: "${text}"`, outputDir);
     throw error;
   }
 }
@@ -196,7 +197,7 @@ export async function clickButtonWithDebug(
   try {
     await page.getByRole('button', { name }).click({ timeout });
   } catch (error) {
-    await debugPageState(page, label || `Failed to click button: "${name}"`, outputDir);
+    await debugPageState(page, label ?? `Failed to click button: "${name}"`, outputDir);
     throw error;
   }
 }
@@ -238,7 +239,7 @@ export async function waitForTextInAppWithDebug(
   try {
     await mainContent.getByText(text).first().waitFor({ timeout });
   } catch (error) {
-    await debugPageState(page, label || `Timeout waiting for text in app: "${text}"`, outputDir);
+    await debugPageState(page, label ?? `Timeout waiting for text in app: "${text}"`, outputDir);
     throw error;
   }
 }
@@ -265,7 +266,7 @@ export async function clickTextInAppWithDebug(
   try {
     await mainContent.getByText(text).first().click({ timeout });
   } catch (error) {
-    await debugPageState(page, label || `Failed to click text in app: "${text}"`, outputDir);
+    await debugPageState(page, label ?? `Failed to click text in app: "${text}"`, outputDir);
     throw error;
   }
 }

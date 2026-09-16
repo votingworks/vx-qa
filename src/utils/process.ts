@@ -2,9 +2,10 @@
  * Process management utilities for spawning and killing child processes
  */
 
-import { spawn, ChildProcess, SpawnOptions } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import type { ChildProcess, SpawnOptions } from 'node:child_process';
 import treeKill from 'tree-kill';
-import { logger } from './logger.js';
+import { logger } from './logger.ts';
 
 export interface ProcessResult {
   code: number | null;
@@ -15,7 +16,7 @@ export interface ProcessResult {
 /**
  * Execute a command and wait for it to complete
  */
-export function execCommand(
+export async function execCommand(
   command: string,
   args: string[],
   options: SpawnOptions = {},
@@ -29,11 +30,11 @@ export function execCommand(
     let stdout = '';
     let stderr = '';
 
-    proc.stdout?.on('data', (data) => {
+    proc.stdout?.on('data', (data: Buffer) => {
       stdout += data.toString();
     });
 
-    proc.stderr?.on('data', (data) => {
+    proc.stderr?.on('data', (data: Buffer) => {
       stderr += data.toString();
     });
 
@@ -50,7 +51,7 @@ export function execCommand(
 /**
  * Execute a command with output streamed to console
  */
-export function execCommandWithOutput(
+export async function execCommandWithOutput(
   command: string,
   args: string[],
   options: SpawnOptions = {},
@@ -98,7 +99,7 @@ export function spawnBackground(
  * the child a group leader) and also runs tree-kill as a fallback for any
  * processes that escaped the group.
  */
-export function killProcessTree(pid: number): Promise<void> {
+export async function killProcessTree(pid: number): Promise<void> {
   // Kill the entire process group. The negative pid targets the group led by
   // the detached child.
   try {
@@ -146,6 +147,8 @@ export async function waitForPort(
 /**
  * Sleep for a specified number of milliseconds
  */
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+export async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }

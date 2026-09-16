@@ -3,14 +3,15 @@
  * for visual verification of bubble-to-contest mapping.
  */
 
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import type { PDFFont, PDFPage } from 'pdf-lib';
 import type {
   Election,
   GridPosition,
   GridPositionWriteIn,
   OptionBoundsFromTargetMark,
   Rect,
-} from './election-loader.js';
+} from './election-loader.ts';
 
 const IN = 72; // PDF points per inch
 
@@ -42,7 +43,7 @@ const PAPER_SIZES: Record<string, { width: number; height: number }> = {
 
 export function getPageGeometry(paperSize: string): PageGeometry {
   const size = PAPER_SIZES[paperSize];
-  if (!size) {
+  if (size === undefined) {
     throw new Error(`Unsupported paper size: ${paperSize}`);
   }
 

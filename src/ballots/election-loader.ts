@@ -9,10 +9,12 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { tmpdir } from 'node:os';
 import JSZip from 'jszip';
-import { logger } from '../utils/logger.js';
+import { logger } from '../utils/logger.ts';
 import assert from 'node:assert';
 import { createInterface } from 'node:readline/promises';
 import { z } from 'zod/v4';
+import { errorMessage } from '../utils/errors.ts';
+import { parseJsonAs, parseJsonObject } from '../utils/json.ts';
 
 /**
  * VotesDict maps contest ID to array of votes
@@ -276,7 +278,7 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
   }
 
   const electionData = await electionFile.async('string');
-  const election = JSON.parse(electionData) as Election;
+  const election = parseJsonAs<Election>(electionData);
   const ballotHash = await calculateHash(electionData);
 
   // v4.1+ elections differ from v4.0 in a few shapes the tool reads. Normalize
@@ -291,7 +293,7 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
   const metadataFile = zip.file('metadata.json');
   if (metadataFile) {
     const metadataData = await metadataFile.async('string');
-    metadata = JSON.parse(metadataData);
+    metadata = parseJsonAs<ElectionPackage['metadata']>(metadataData);
   }
 
   // Load ballots if present (from ballots.jsonl)
@@ -299,7 +301,7 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
 
   const ballots: BallotPdfInfo[] = [];
   const ballotsFile = zip.file('ballots.jsonl');
-  assert(ballotsFile, `ballots.jsonl missing in ${sourcePath}`);
+  assert.ok(ballotsFile, `ballots.jsonl missing in ${sourcePath}`);
 
   const ballotsStream = ballotsFile.nodeStream('nodebuffer');
   const ballotsJsonLines = createInterface({
@@ -314,7 +316,7 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
       if (ballotMode === 'sample') continue;
       ballots.push({ ...props, ballotMode, pdfData });
     } catch (e) {
-      logger.warn(`Failed to parse ballot entry: ${(e as Error).message}`);
+      logger.warn(`Failed to parse ballot entry: ${errorMessage(e)}`);
     }
   }
   logger.debug(`Loaded ${ballots.length} ballot PDFs`);
@@ -322,7 +324,7 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
   assertNoDuplicateBallotKeys(ballots);
 
   // Validate we have what we need
-  assert(ballots.length > 0, 'Election package contains no ballot PDFs.');
+  assert.ok(ballots.length > 0, 'Election package contains no ballot PDFs.');
 
   const systemSettingsFile = zip.file('systemSettings.json');
   if (!systemSettingsFile) {
@@ -335,7 +337,7 @@ async function parseElectionPackageZip(zip: JSZip, sourcePath: string): Promise<
   }
 
   const systemSettingsJson = await systemSettingsFile.async('string');
-  const systemSettings = JSON.parse(systemSettingsJson);
+  const systemSettings = parseJsonObject(systemSettingsJson);
 
   return {
     electionDefinition: {
@@ -460,8 +462,14 @@ export function normalizeYesNoContests(election: Election): void {
       continue;
     }
 
-    if ((!contest.yesOption || !contest.noOption) && contest.options) {
-      assert(contest.options.length >= 2, `yes/no contest ${contest.id} has fewer than 2 options`);
+    if (
+      (contest.yesOption === undefined || contest.noOption === undefined) &&
+      contest.options !== undefined
+    ) {
+      assert.ok(
+        contest.options.length >= 2,
+        `yes/no contest ${contest.id} has fewer than 2 options`,
+      );
       contest.yesOption = contest.options[0];
       contest.noOption = contest.options[1];
     }
@@ -500,7 +508,7 @@ export function getContestsForBallotStyle(election: Election, ballotStyleId: str
     // matching party's ballot style. Yes/no contests (ballot measures) have no
     // party and appear on every ballot style whose districts include them.
     // General elections have no partyId on the ballot style, so this is a no-op.
-    if (ballotStyle.partyId && c.type === 'candidate' && c.partyId) {
+    if (ballotStyle.partyId !== undefined && c.type === 'candidate' && c.partyId !== undefined) {
       return c.partyId === ballotStyle.partyId;
     }
     return true;
@@ -553,7 +561,7 @@ export function assertNoDuplicateBallotKeys(ballots: readonly BallotPdfInfo[]): 
   const seenBallotKeys = new Set<string>();
   for (const ballot of ballots) {
     const key = `${ballot.ballotStyleId}|${ballot.precinctId}|${ballot.ballotType}|${ballot.ballotMode}`;
-    assert(
+    assert.ok(
       !seenBallotKeys.has(key),
       `Duplicate ballot entry in ballots.jsonl: ballotStyleId=${ballot.ballotStyleId}, ` +
         `precinctId=${ballot.precinctId}, ballotType=${ballot.ballotType}, ` +
@@ -641,7 +649,7 @@ export async function loadElectionPackage(
     (f) => f.startsWith('election-package-') && f.endsWith('.zip'),
   );
 
-  if (!electionPackageFile) {
+  if (electionPackageFile === undefined) {
     throw new Error(
       `No election-package-*.zip found in the archive and no election.json at top level.\n` +
         `Files found: ${fileNames.join(', ')}\n` +
@@ -650,7 +658,11 @@ export async function loadElectionPackage(
   }
 
   // Extract the election package ZIP
-  const electionPackageData = await zip.file(electionPackageFile)!.async('uint8array');
+  const electionPackageEntry = zip.file(electionPackageFile);
+  if (!electionPackageEntry) {
+    throw new Error(`Election package ${electionPackageFile} missing from the archive`);
+  }
+  const electionPackageData = await electionPackageEntry.async('uint8array');
   const electionPackagePath = join(outputDir, electionPackageFile);
   await writeFile(electionPackagePath, electionPackageData);
   logger.info(`Extracted election package: ${electionPackageFile}`);
@@ -685,9 +697,9 @@ export async function applySystemSettingsOverrides(
   const zipData = await readFile(electionPackagePath);
   const zip = await JSZip.loadAsync(zipData);
   const systemSettingsFile = zip.file('systemSettings.json');
-  assert(systemSettingsFile, `systemSettings.json missing in ${electionPackagePath}`);
+  assert.ok(systemSettingsFile, `systemSettings.json missing in ${electionPackagePath}`);
 
-  const current = JSON.parse(await systemSettingsFile.async('string')) as Record<string, unknown>;
+  const current = parseJsonObject(await systemSettingsFile.async('string'));
   const merged = { ...current, ...definedOverrides };
 
   zip.file('systemSettings.json', JSON.stringify(merged, null, 2));
@@ -719,6 +731,6 @@ export async function loadElectionPackageFromUrl(
 
 export function getBallotStylesForPrecinct(election: Election, id: string): BallotStyle[] {
   const precinct = election.precincts.find((p) => p.id === id);
-  assert(precinct, `No precinct with ID: ${id}`);
+  assert.ok(precinct, `No precinct with ID: ${id}`);
   return election.ballotStyles.filter((bs) => bs.precincts.includes(precinct.id));
 }

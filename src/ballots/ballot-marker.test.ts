@@ -10,13 +10,13 @@ import {
   generateValidWriteInVotes,
   generateUnmarkedWriteInVotes,
   generateMarkedWriteInVotes,
-} from './ballot-marker.js';
-import type { Candidate, Election, CandidateContest, YesNoContest } from './election-loader.js';
+} from './ballot-marker.ts';
+import type { Election, CandidateContest, YesNoContest, Vote } from './election-loader.ts';
 
 /**
  * Helper to create a minimal election for testing
  */
-function createTestElection(contests: (CandidateContest | YesNoContest)[]): Election {
+function createTestElection(contests: Array<CandidateContest | YesNoContest>): Election {
   return {
     title: 'Test Election',
     state: 'CA',
@@ -130,11 +130,7 @@ describe('generateValidVotes', () => {
 
     const votes = generateValidVotes(createTestElection([contest]), 'test-ballot-style');
 
-    expect(votes['school-board'].map((vote) => (vote as Candidate).writeInIndex)).toEqual([
-      undefined,
-      0,
-      1,
-    ]);
+    expect(writeInIndexes(votes['school-board'])).toEqual([undefined, 0, 1]);
   });
 
   test('generate yes vote for yes/no contest', () => {
@@ -155,7 +151,7 @@ describe('generateValidVotes', () => {
   });
 
   test('generate votes for multiple contests', () => {
-    const contests: (CandidateContest | YesNoContest)[] = [
+    const contests: Array<CandidateContest | YesNoContest> = [
       {
         type: 'candidate',
         id: 'mayor',
@@ -326,7 +322,7 @@ describe('generateOvervoteVotes', () => {
 
 describe('generateUndervoteVotes', () => {
   test('under-vote every contest, anchoring non-blankness on a multi-seat contest', () => {
-    const contests: (CandidateContest | YesNoContest)[] = [
+    const contests: Array<CandidateContest | YesNoContest> = [
       {
         type: 'candidate',
         id: 'city-council',
@@ -364,7 +360,7 @@ describe('generateUndervoteVotes', () => {
   });
 
   test('leave one contest blank when all contests are single-winner', () => {
-    const contests: (CandidateContest | YesNoContest)[] = [
+    const contests: Array<CandidateContest | YesNoContest> = [
       {
         type: 'candidate',
         id: 'mayor',
@@ -457,7 +453,7 @@ describe('generateValidWriteInVotes', () => {
   });
 
   test('skip yes/no contests', () => {
-    const contests: (CandidateContest | YesNoContest)[] = [
+    const contests: Array<CandidateContest | YesNoContest> = [
       {
         type: 'candidate',
         id: 'mayor',
@@ -552,3 +548,8 @@ describe('generateMarkedWriteInVotes', () => {
     });
   });
 });
+
+/** Returns each vote's write-in index, or `undefined` for votes given as ids. */
+function writeInIndexes(votes: Vote[]): Array<number | undefined> {
+  return votes.map((vote) => (typeof vote === 'string' ? undefined : vote.writeInIndex));
+}

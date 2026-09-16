@@ -7,17 +7,18 @@
  */
 
 import { Command, InvalidArgumentError } from 'commander';
-import { logger, printHeader } from './utils/logger.js';
-import { validateConfig, safeValidateConfig } from './config/schema.js';
-import { resolvePath, generateTimestampedDir, ensureDir } from './utils/paths.js';
-import { runQAWorkflow } from './cli/config-runner.js';
-import { TALLY_MODES, type QARunConfig, type WebhookConfig } from './config/types.js';
-import { SUPPORTED_VERSIONS } from './config/versions.js';
+import { logger, printHeader } from './utils/logger.ts';
+import { validateConfig, safeValidateConfig, parseRawConfig } from './config/schema.ts';
+import { resolvePath, generateTimestampedDir, ensureDir } from './utils/paths.ts';
+import { runQAWorkflow } from './cli/config-runner.ts';
+import { TALLY_MODES } from './config/types.ts';
+import type { QARunConfig, WebhookConfig } from './config/types.ts';
+import { SUPPORTED_VERSIONS } from './config/versions.ts';
 import { dirname, join } from 'node:path';
-import { regenerateHtmlReportFromRawData } from './report/html-generator.js';
-import { revalidateTallyResults } from './automation/admin-tally-workflow.js';
-import { downloadFile } from './ballots/election-loader.js';
-import { startServe } from './cli/serve.js';
+import { regenerateHtmlReportFromRawData } from './report/html-generator.ts';
+import { revalidateTallyResults } from './automation/admin-tally-workflow.ts';
+import { downloadFile } from './ballots/election-loader.ts';
+import { startServe } from './cli/serve.ts';
 import { readFile, writeFile } from 'node:fs/promises';
 
 /**
@@ -26,11 +27,37 @@ import { readFile, writeFile } from 'node:fs/promises';
  * option value is used as the radix (e.g. `parseInt('9100', 9000)` -> NaN).
  */
 function parseIntOption(value: string): number {
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed)) {
+  const parsed = value.trim() === '' ? Number.NaN : Math.trunc(Number(value));
+  if (!Number.isFinite(parsed)) {
     throw new InvalidArgumentError('Must be an integer.');
   }
   return parsed;
+}
+
+interface RunOptions {
+  config?: string;
+  output?: string;
+  vxsuiteVersion?: string;
+  tallyMode?: string;
+  election?: string;
+  headless?: boolean;
+  limitBallots?: number;
+  limitManualTallies?: number;
+  webhookUrl?: string;
+  webhookSecret?: string;
+}
+
+interface InitOptions {
+  output: string;
+}
+
+interface ServeOptions {
+  config: string;
+  port: number;
+  webhookSecret: string;
+  headless?: boolean;
+  limitBallots?: number;
+  limitManualTallies?: number;
 }
 
 const program = new Command();
@@ -68,33 +95,36 @@ program
     '--webhook-secret <secret>',
     'Secret for webhook auth (default: $CIRCLECI_WEBHOOK_SECRET env var)',
   )
-  .action(async (options) => {
+  .action(async (options: RunOptions) => {
     printHeader('VxSuite QA Automation');
 
     let config: QARunConfig;
 
     try {
       // Load config from file
-      if (!options.config) {
+      if (options.config === undefined || options.config === '') {
         logger.error(
           'No configuration file specified. Use --config <path> to specify a config file.',
         );
         process.exit(1);
       }
       const configPath = resolvePath(options.config);
-      const configData = await readFile(configPath, 'utf-8');
-      const parsedConfig = JSON.parse(configData);
+      const parsedConfig = parseRawConfig(await readFile(configPath, 'utf-8'));
 
       // Applied before validation so version-dependent checks (e.g. which
       // adjudication reasons the version accepts) see the effective version.
-      if (options.vxsuiteVersion) {
-        if (!(SUPPORTED_VERSIONS as readonly string[]).includes(options.vxsuiteVersion)) {
+      if (options.vxsuiteVersion !== undefined) {
+        const version = SUPPORTED_VERSIONS.find(
+          (supported) => supported === options.vxsuiteVersion,
+        );
+        if (version === undefined) {
           logger.error(
             `Invalid --vxsuite-version "${options.vxsuiteVersion}". Supported: ${SUPPORTED_VERSIONS.join(', ')}`,
           );
           process.exit(1);
         }
-        parsedConfig.vxsuite = { ...parsedConfig.vxsuite, version: options.vxsuiteVersion };
+        const vxsuite = parsedConfig.vxsuite ?? {};
+        parsedConfig.vxsuite = { ...vxsuite, version };
       }
 
       config = validateConfig(parsedConfig, configPath);
@@ -102,19 +132,20 @@ program
       logger.info(`Loaded configuration from ${configPath}`);
 
       // Apply command-line overrides
-      if (options.output) {
+      if (options.output !== undefined) {
         config.output.directory = options.output;
       }
-      if (options.tallyMode) {
-        if (!(TALLY_MODES as readonly string[]).includes(options.tallyMode)) {
+      if (options.tallyMode !== undefined) {
+        const tallyMode = TALLY_MODES.find((mode) => mode === options.tallyMode);
+        if (tallyMode === undefined) {
           logger.error(
             `Invalid --tally-mode "${options.tallyMode}". Supported: ${TALLY_MODES.join(', ')}`,
           );
           process.exit(1);
         }
-        config.tallyMode = options.tallyMode;
+        config.tallyMode = tallyMode;
       }
-      if (options.election) {
+      if (options.election !== undefined) {
         config.election.source = options.election;
       }
 
@@ -125,9 +156,9 @@ program
 
       // Build webhook config if URL is provided
       let webhook: WebhookConfig | undefined;
-      if (options.webhookUrl) {
-        const secret = options.webhookSecret || process.env.CIRCLECI_WEBHOOK_SECRET;
-        if (!secret) {
+      if (options.webhookUrl !== undefined) {
+        const secret = options.webhookSecret ?? process.env.CIRCLECI_WEBHOOK_SECRET;
+        if (secret === undefined || secret === '') {
           logger.error(
             'Webhook secret is required. Use --webhook-secret or set CIRCLECI_WEBHOOK_SECRET.',
           );
@@ -158,7 +189,7 @@ program
     } catch (error) {
       if (error instanceof Error) {
         logger.error(error.message);
-        if (process.env.DEBUG) {
+        if (process.env.DEBUG !== undefined && process.env.DEBUG !== '') {
           console.error(error.stack);
         }
       }
@@ -170,12 +201,10 @@ program
   .command('validate')
   .description('Validate a configuration file')
   .argument('<config>', 'Path to configuration file')
-  .action(async (configPath) => {
+  .action(async (configPath: string) => {
     try {
       const resolved = resolvePath(configPath);
-      const configData = await readFile(resolved, 'utf-8');
-      const parsedConfig = JSON.parse(configData);
-      const result = safeValidateConfig(parsedConfig);
+      const result = safeValidateConfig(parseRawConfig(await readFile(resolved, 'utf-8')));
 
       if (result.success) {
         logger.success('Configuration is valid');
@@ -197,7 +226,7 @@ program
   .command('validate-tally')
   .description('Validates the vote tally from a prior run')
   .argument('<outputDir>', 'Path to output from prior run')
-  .action(async (outputDir) => {
+  .action(async (outputDir: string) => {
     const result = await revalidateTallyResults(outputDir);
     if (result.isValid) {
       logger.info(result.message);
@@ -212,7 +241,7 @@ program
   .command('rebuild-report')
   .description('Rebuild the report from a prior run')
   .argument('<outputDir>', 'Path to output from prior run')
-  .action(async (outputDir) => {
+  .action(async (outputDir: string) => {
     await regenerateHtmlReportFromRawData(outputDir);
   });
 
@@ -220,7 +249,7 @@ program
   .command('init')
   .description('Create a sample configuration file')
   .option('-o, --output <path>', 'Output path for config file', './vx-qa-config.json')
-  .action(async (options) => {
+  .action(async (options: InitOptions) => {
     const sampleConfig: QARunConfig = {
       vxsuite: {
         repoPath: '~/.vx-qa/vxsuite',
@@ -258,7 +287,7 @@ program
     'Limit the number of ballot styles with manual tallies (for testing)',
     parseIntOption,
   )
-  .action((options) => {
+  .action((options: ServeOptions) => {
     startServe({
       port: options.port,
       configPath: options.config,

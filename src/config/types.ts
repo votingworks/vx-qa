@@ -2,9 +2,9 @@
  * Configuration types for VxSuite QA automation tool
  */
 
-import { BallotToScan } from '../automation/scan-workflow.js';
-import { BallotMode, BallotType, VotesDict } from '../ballots/election-loader.js';
-import type { AdjudicationReason, VxSuiteVersion } from './versions.js';
+import type { BallotToScan } from '../automation/scan-workflow.ts';
+import type { BallotMode, BallotType, VotesDict } from '../ballots/election-loader.ts';
+import type { AdjudicationReason, VxSuiteVersion } from './versions.ts';
 
 export type BallotPattern =
   | 'blank'
@@ -14,7 +14,7 @@ export type BallotPattern =
   | 'marked-write-in'
   | 'unmarked-write-in';
 
-export type { AdjudicationReason } from './versions.js';
+export type { AdjudicationReason } from './versions.ts';
 
 export interface VxSuiteConfig {
   /** Path where VxSuite repo should be cloned */

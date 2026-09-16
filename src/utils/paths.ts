@@ -5,7 +5,7 @@
 import { homedir } from 'node:os';
 import { join, resolve, isAbsolute } from 'node:path';
 import assert from 'node:assert';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readdir } from 'node:fs/promises';
 
 /**
  * Expand ~ to home directory
@@ -25,7 +25,7 @@ export function expandHome(path: string): string {
  */
 export function resolvePath(path: string, basePath?: string): string {
   const expanded = expandHome(path);
-  if (basePath) {
+  if (basePath !== undefined && basePath !== '') {
     return resolve(basePath, expanded);
   }
   return resolve(expanded);
@@ -44,7 +44,7 @@ export async function ensureDir(path: string): Promise<string> {
  * Generate a timestamped output directory name
  */
 export function generateTimestampedDir(baseDir: string, prefix = 'run'): string {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const timestamp = new Date().toISOString().replaceAll(/[:.]/gu, '-').slice(0, 19);
   return join(resolvePath(baseDir), `${prefix}-${timestamp}`);
 }
 
@@ -54,8 +54,34 @@ export function generateTimestampedDir(baseDir: string, prefix = 'run'): string 
  * absolute.
  */
 export function pathsEqual(a: string, b: string, baseDir = process.cwd()): boolean {
-  assert(isAbsolute(baseDir), 'baseDir must be absolute');
+  assert.ok(isAbsolute(baseDir), 'baseDir must be absolute');
   const aNormalized = isAbsolute(a) ? a : join(baseDir, a);
   const bNormalized = isAbsolute(b) ? b : join(baseDir, b);
   return aNormalized === bNormalized;
+}
+
+/** Recursively collects files under `dir` whose name matches `matches`. */
+export async function findFilesRecursively(
+  dir: string,
+  matches: (fileName: string) => boolean,
+): Promise<string[]> {
+  const results: string[] = [];
+
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        results.push(...(await findFilesRecursively(fullPath, matches)));
+      } else if (matches(entry.name)) {
+        results.push(fullPath);
+      }
+    }
+  } catch {
+    // Directory might not exist
+  }
+
+  return results;
 }

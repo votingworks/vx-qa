@@ -6,22 +6,37 @@
  */
 
 import { join } from 'node:path';
-import { logger } from '../utils/logger.js';
-import {
-  getContestsForBallotStyle,
-  GridPosition,
-  Vote,
-  type Candidate,
-  type Election,
-  type VotesDict,
-} from './election-loader.js';
-import type { BallotPattern } from '../config/types.js';
+import { logger } from '../utils/logger.ts';
+import { getContestsForBallotStyle } from './election-loader.ts';
+import type { GridPosition, Vote, Candidate, Election, VotesDict } from './election-loader.ts';
+import type { BallotPattern } from '../config/types.ts';
 
 export interface MarkedBallot {
   ballotStyleId: string;
   pattern: BallotPattern;
   pdfBytes: Uint8Array;
   votes: VotesDict;
+}
+
+interface MarkingModule {
+  generateMarkOverlay: (
+    election: Election,
+    ballotStyleId: string,
+    votes: VotesDict,
+    offset: { offsetMmX: number; offsetMmY: number },
+    baseBallotPdf: Uint8Array,
+    onDraw?: (
+      type: 'bubble' | 'write-in-text',
+      gridPosition: GridPosition,
+      vote: Vote,
+    ) => 'draw' | 'ignore',
+  ) => Promise<Uint8Array>;
+}
+
+/** Loads VxSuite's compiled marking library from the checkout at `repoPath`. */
+async function importMarkingModule(repoPath: string): Promise<MarkingModule> {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- built JS from the VxSuite checkout, no types available
+  return (await import(join(repoPath, 'libs/hmpb/build/marking.js'))) as MarkingModule;
 }
 
 /**
@@ -41,8 +56,8 @@ export async function generateMarkedBallot(
 ): Promise<Uint8Array> {
   logger.debug(`Generating marked ballot for style ${ballotStyleId}`);
 
-  const { generateMarkOverlay } = await import(join(repoPath, 'libs/hmpb/build/marking.js'));
-  return await generateMarkOverlay(
+  const { generateMarkOverlay } = await importMarkingModule(repoPath);
+  return generateMarkOverlay(
     election,
     ballotStyleId,
     votes,
@@ -270,7 +285,7 @@ export function generateValidVotes(election: Election, ballotStyleId: string): V
       }
       default: {
         const _: never = contest;
-        throw new Error(`Unexpected contest type: ${(_ as any).type}`);
+        throw new Error(`Unexpected contest type: ${(_ as { type: string }).type}`);
       }
     }
   }
@@ -325,7 +340,7 @@ export function generateOvervoteVotes(
 
       default: {
         const _: never = contest;
-        throw new Error(`Unexpected contest type: ${(_ as any).type}`);
+        throw new Error(`Unexpected contest type: ${(_ as { type: string }).type}`);
       }
     }
   }
@@ -367,7 +382,7 @@ export function generateUndervoteVotes(
   // Preferred: under-vote every contest, anchoring the ballot as non-blank with
   // one multi-seat candidate contest kept partially marked.
   const anchor = contests.find(
-    (c) => c.type === 'candidate' && c.seats > 1 && c.candidates.length >= 1,
+    (c) => c.type === 'candidate' && c.seats > 1 && c.candidates.length > 0,
   );
   if (anchor && anchor.type === 'candidate') {
     // Keep one fewer than the seats (at least one selection): under-voted but
@@ -383,10 +398,10 @@ export function generateUndervoteVotes(
   // Fallback (no multi-seat contest): vote the ballot in full except one
   // contest left blank. Needs at least two contests, else the whole ballot
   // would be blank.
-  if (contests.length >= 2) {
+  const lastContest = contests.at(-1);
+  if (contests.length >= 2 && lastContest) {
     const votes = generateValidVotes(election, ballotStyleId);
-    delete votes[contests[contests.length - 1].id];
-    return votes;
+    return Object.fromEntries(Object.entries(votes).filter(([id]) => id !== lastContest.id));
   }
 
   return undefined;
@@ -423,7 +438,7 @@ export function generateValidWriteInVotes(
 
       default: {
         const _: never = contest;
-        throw new Error(`Unexpected contest type: ${(_ as any).type}`);
+        throw new Error(`Unexpected contest type: ${(_ as { type: string }).type}`);
       }
     }
   }

@@ -5,8 +5,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { logger } from '../utils/logger.js';
-import { execCommandWithOutput, execCommand } from '../utils/process.js';
+import { logger } from '../utils/logger.ts';
+import { execCommandWithOutput, execCommand } from '../utils/process.ts';
+import { getVxSuiteEnvironment, readVxSuiteNodeVersion } from './vxsuite-env.ts';
+import { parseJsonObject } from '../utils/json.ts';
 
 /**
  * Marker file recording the commit that was last successfully bootstrapped in
@@ -71,17 +73,17 @@ export async function bootstrapRepo(repoPath: string, commit: string): Promise<v
 
   logger.step('Bootstrapping admin and scan apps (this may take several minutes)...');
 
-  // Use the pnpm version VxSuite pins in its `packageManager` field. Different
-  // VxSuite versions pin different pnpm versions (e.g. v4.0 -> 8.15.5, v4.1 ->
-  // 9.15.9), and building under the wrong pnpm can mis-resolve optional native
-  // deps (e.g. v4.1's Vite/rolldown binding fails to install under pnpm 10).
-  await useVxSuitePinnedPnpm(repoPath);
+  // pnpm switches to the version VxSuite pins in `packageManager` on its own
+  // (see `getVxSuiteEnvironment`), so nothing is installed globally here.
+  logger.info(
+    `Using VxSuite's pinned Node.js ${readVxSuiteNodeVersion(repoPath)} and ${await readVxSuitePinnedPnpm(repoPath)}`,
+  );
 
   // First, run pnpm install at the root to set up all workspace symlinks
   logger.info('Installing workspace dependencies...');
   const installCode = await execCommandWithOutput('pnpm', ['install'], {
     cwd: repoPath,
-    env: { ...process.env },
+    env: getVxSuiteEnvironment(repoPath),
   });
 
   if (installCode !== 0) {
@@ -105,7 +107,7 @@ export async function bootstrapRepo(repoPath: string, commit: string): Promise<v
 
   const bootstrapCode = await execCommandWithOutput(bootstrapScriptPath, [], {
     cwd: repoPath,
-    env: { ...process.env, IS_CI: 'true' },
+    env: getVxSuiteEnvironment(repoPath, { IS_CI: 'true' }),
   });
 
   if (bootstrapCode !== 0) {
@@ -117,34 +119,14 @@ export async function bootstrapRepo(repoPath: string, commit: string): Promise<v
   logger.success('Admin and scan apps bootstrapped successfully');
 }
 
-/**
- * Install (globally) the pnpm version VxSuite pins in its `packageManager`
- * field, so the workspace is built with the pnpm it was locked and tested with.
- * No-op if the field is missing/unparseable.
- */
-async function useVxSuitePinnedPnpm(repoPath: string): Promise<void> {
-  let packageManager: string | undefined;
-  try {
-    const pkg = JSON.parse(await readFile(join(repoPath, 'package.json'), 'utf-8'));
-    packageManager = pkg.packageManager;
-  } catch {
-    return;
+/** Reads the `packageManager` pin from VxSuite's package.json, e.g. `pnpm@9.15.9`. */
+async function readVxSuitePinnedPnpm(repoPath: string): Promise<string> {
+  const pkg = parseJsonObject(await readFile(join(repoPath, 'package.json'), 'utf-8'));
+  const packageManager = pkg['packageManager'];
+  if (typeof packageManager !== 'string' || !packageManager.startsWith('pnpm@')) {
+    throw new Error(`VxSuite package.json does not pin pnpm in "packageManager"`);
   }
-
-  // e.g. "pnpm@9.15.9" or "pnpm@9.15.9+sha512.abc..."
-  const match = packageManager?.match(/^pnpm@(\d+\.\d+\.\d+)/);
-  if (!match) {
-    return;
-  }
-
-  const version = match[1];
-  logger.info(`Installing VxSuite's pinned pnpm@${version}...`);
-  const code = await execCommandWithOutput('npm', ['install', '-g', `pnpm@${version}`], {
-    env: { ...process.env },
-  });
-  if (code !== 0) {
-    logger.warn(`Failed to install pnpm@${version} (code ${code}); continuing with current pnpm`);
-  }
+  return packageManager.split('+')[0];
 }
 
 /**
@@ -190,7 +172,7 @@ export async function installPlaywrightBrowsers(repoPath: string): Promise<void>
     ['exec', 'playwright', 'install'],
     {
       cwd: join(repoPath, 'libs/printing'),
-      env: { ...process.env },
+      env: getVxSuiteEnvironment(repoPath),
     },
   );
 
@@ -199,36 +181,57 @@ export async function installPlaywrightBrowsers(repoPath: string): Promise<void>
   }
 }
 
-/**
- * Check if pnpm is available
- */
-export async function checkPnpmAvailable(): Promise<boolean> {
+/** Oldest pnpm that switches to a project's `packageManager` version by default. */
+export const REQUIRED_PNPM_VERSION = '10.0.0';
+
+/** Check the pnpm running vx-qa itself. Returns `undefined` when pnpm is missing. */
+export async function checkPnpmVersion(): Promise<
+  { current: string; required: string; compatible: boolean } | undefined
+> {
+  let current: string;
   try {
     const result = await execCommand('pnpm', ['--version']);
-    return result.code === 0;
+    if (result.code !== 0) {
+      return undefined;
+    }
+    current = result.stdout.trim();
   } catch {
-    return false;
+    return undefined;
   }
+  return {
+    current,
+    required: REQUIRED_PNPM_VERSION,
+    compatible: compareVersions(current, REQUIRED_PNPM_VERSION) >= 0,
+  };
 }
 
+/** Oldest Node.js that runs vx-qa's TypeScript sources directly. */
+export const REQUIRED_NODE_VERSION = '22.18.0';
+
 /**
- * Check if node version matches requirements
+ * Check the Node.js running vx-qa itself. VxSuite's Node.js is chosen
+ * separately from its checkout (see `getVxSuiteEnvironment`).
  */
-export async function checkNodeVersion(): Promise<{
+export function checkNodeVersion(current = process.versions.node): {
   current: string;
   required: string;
   compatible: boolean;
-}> {
-  const result = await execCommand('node', ['--version']);
-  const current = result.stdout.trim().replace('v', '');
-  const required = '20.0.0';
-
-  const [currentMajor] = current.split('.');
-  const [requiredMajor] = required.split('.');
-
+} {
   return {
     current,
-    required,
-    compatible: parseInt(currentMajor) >= parseInt(requiredMajor),
+    required: REQUIRED_NODE_VERSION,
+    compatible: compareVersions(current, REQUIRED_NODE_VERSION) >= 0,
   };
+}
+
+function compareVersions(a: string, b: string): number {
+  const as = a.split('.').map(Number);
+  const bs = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(as.length, bs.length); i += 1) {
+    const diff = (as[i] ?? 0) - (bs[i] ?? 0);
+    if (diff !== 0) {
+      return diff;
+    }
+  }
+  return 0;
 }

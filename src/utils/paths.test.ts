@@ -6,7 +6,7 @@ import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
-import { expandHome, resolvePath, ensureDir, generateTimestampedDir, pathsEqual } from './paths.js';
+import { expandHome, resolvePath, ensureDir, generateTimestampedDir, pathsEqual } from './paths.ts';
 import { mkdir, rm } from 'node:fs/promises';
 
 describe('expandHome', () => {
@@ -39,7 +39,7 @@ describe('expandHome', () => {
 describe('resolvePath', () => {
   test('resolves relative paths to absolute', () => {
     const result = resolvePath('test/path');
-    expect(result).toMatch(/^\/.*test\/path$/);
+    expect(result).toMatch(/^\/.*test\/path$/u);
   });
 
   test('expands ~ before resolving', () => {
@@ -133,14 +133,14 @@ describe('generateTimestampedDir', () => {
     const baseDir = '/test/output';
     const result = generateTimestampedDir(baseDir);
 
-    expect(result).toMatch(/^\/test\/output\/run-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$/);
+    expect(result).toMatch(/^\/test\/output\/run-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$/u);
   });
 
   test('generates directory with custom prefix', () => {
     const baseDir = '/test/output';
     const result = generateTimestampedDir(baseDir, 'custom');
 
-    expect(result).toMatch(/^\/test\/output\/custom-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$/);
+    expect(result).toMatch(/^\/test\/output\/custom-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$/u);
   });
 
   test('expands ~ in base directory', () => {
@@ -159,8 +159,8 @@ describe('generateTimestampedDir', () => {
     const result2 = generateTimestampedDir(baseDir);
 
     // Timestamps should be very close but directory structure should be valid
-    expect(result1).toMatch(/^\/test\/output\/run-/);
-    expect(result2).toMatch(/^\/test\/output\/run-/);
+    expect(result1).toMatch(/^\/test\/output\/run-/u);
+    expect(result2).toMatch(/^\/test\/output\/run-/u);
   });
 });
 

@@ -4,7 +4,7 @@
 
 import { existsSync } from 'node:fs';
 import { join, basename, extname, isAbsolute } from 'node:path';
-import { logger } from '../utils/logger.js';
+import { logger } from '../utils/logger.ts';
 import type {
   ArtifactCollection,
   BallotArtifact,
@@ -14,11 +14,12 @@ import type {
   StepInput,
   StepOutput,
   ScreenshotArtifact,
-} from '../config/types.js';
+} from '../config/types.ts';
 import { copyFile, mkdir, readdir, readFile, stat } from 'node:fs/promises';
 import assert from 'node:assert';
-import { Page } from '@playwright/test';
-import { createScreenshotManager } from '../automation/screenshot.js';
+import type { Page } from '@playwright/test';
+import { createScreenshotManager } from '../automation/screenshot.ts';
+import { parseJsonAs } from '../utils/json.ts';
 
 export const PROOF_PREFIX = 'PROOF-';
 
@@ -98,7 +99,7 @@ export async function createArtifactCollector(
   outputDir: string,
   config: QARunConfig,
 ): Promise<ArtifactCollector> {
-  assert(isAbsolute(outputDir), 'outputDir must be absolute');
+  assert.ok(isAbsolute(outputDir), 'outputDir must be absolute');
   const runId = basename(outputDir);
   const startTime = new Date();
 
@@ -117,7 +118,7 @@ export async function createArtifactCollector(
     ballots: join(outputDir, 'ballots'),
   };
 
-  await Promise.all(Object.values(dirs).map((dir) => mkdir(dir, { recursive: true })));
+  await Promise.all(Object.values(dirs).map(async (dir) => mkdir(dir, { recursive: true })));
 
   return {
     addBallot(artifact: BallotArtifact): void {
@@ -158,7 +159,11 @@ export async function createArtifactCollector(
 
       const stepIndex = collection.steps.length - 1;
       const stepIndexStr = stepIndex.toString().padStart(2, '0');
-      const stepDir = join(outputDir, 'steps', `${stepIndexStr}-${id.replace(/[^a-z0-9]+/g, '-')}`);
+      const stepDir = join(
+        outputDir,
+        'steps',
+        `${stepIndexStr}-${id.replaceAll(/[^a-z0-9]+/gu, '-')}`,
+      );
       await mkdir(stepDir, { recursive: true });
 
       const screenshots = await createScreenshotManager(page, stepDir);
@@ -188,8 +193,8 @@ export async function createArtifactCollector(
           return step.outputs;
         },
 
-        async captureScreenshot(name, label): Promise<ScreenshotArtifact> {
-          const screenshot = await screenshots.capture(name, label);
+        async captureScreenshot(screenshotName, label): Promise<ScreenshotArtifact> {
+          const screenshot = await screenshots.capture(screenshotName, label);
           step.screenshots.push(screenshot);
           return screenshot;
         },
@@ -235,7 +240,7 @@ export async function createArtifactCollector(
  * Loads a serialized collection as a
  */
 export async function loadCollection(path: string): Promise<ArtifactCollection> {
-  return JSON.parse(await readFile(path, 'utf8'), (key, value) => {
+  return parseJsonAs<ArtifactCollection>(await readFile(path, 'utf8'), (key, value) => {
     switch (key) {
       case 'startTime':
       case 'endTime':
@@ -255,7 +260,7 @@ export async function loadCollection(path: string): Promise<ArtifactCollection> 
 export async function collectFilesInDir(
   dir: string,
   extensions?: string[],
-): Promise<{ name: string; path: string; size: number; mtime?: Date }[]> {
+): Promise<Array<{ name: string; path: string; size: number; mtime?: Date }>> {
   if (!existsSync(dir)) {
     return [];
   }
@@ -279,7 +284,7 @@ export async function collectFilesInDir(
       }),
   );
 
-  return results.sort((a, b) => a.name.localeCompare(b.name));
+  return results.toSorted((a, b) => a.name.localeCompare(b.name));
 }
 
 /**

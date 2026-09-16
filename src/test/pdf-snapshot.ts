@@ -22,9 +22,10 @@ export async function expectToMatchPdfSnapshot(
 
   for await (const pageImage of pages) {
     pageNumber += 1;
-    const identifier = options.customSnapshotIdentifier
-      ? `${options.customSnapshotIdentifier}-page-${pageNumber}`
-      : undefined;
+    const identifier =
+      options.customSnapshotIdentifier !== undefined && options.customSnapshotIdentifier !== ''
+        ? `${options.customSnapshotIdentifier}-page-${pageNumber}`
+        : undefined;
 
     expect(pageImage).toMatchImageSnapshot({
       failureThreshold: options.failureThreshold ?? 0,

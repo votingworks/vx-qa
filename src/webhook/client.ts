@@ -2,11 +2,12 @@
  * Webhook client for sending status updates back to VxDesign.
  */
 
-import { logger } from '../utils/logger.js';
-import type { WebhookConfig } from '../config/types.js';
+import { logger } from '../utils/logger.ts';
+import type { WebhookConfig } from '../config/types.ts';
+import { errorMessage } from '../utils/errors.ts';
 
 // eslint-disable-next-line no-control-regex
-const ANSI_REGEX = /\x1b\[[0-9;]*[a-zA-Z]/g;
+const ANSI_REGEX = /\u001B\[[0-9;]*[a-zA-Z]/gu;
 
 function stripAnsi(text: string): string {
   return text.replace(ANSI_REGEX, '');
@@ -27,7 +28,10 @@ export async function sendWebhookUpdate(
       },
       body: JSON.stringify({
         status,
-        statusMessage: statusMessage ? stripAnsi(statusMessage) : statusMessage,
+        statusMessage:
+          statusMessage !== undefined && statusMessage !== ''
+            ? stripAnsi(statusMessage)
+            : statusMessage,
         resultsUrl,
         jobUrl: process.env.CIRCLE_BUILD_URL,
       }),
@@ -39,6 +43,6 @@ export async function sendWebhookUpdate(
       logger.debug(`Webhook update sent: status=${status}`);
     }
   } catch (error) {
-    logger.warn(`Webhook request error: ${(error as Error).message}`);
+    logger.warn(`Webhook request error: ${errorMessage(error)}`);
   }
 }

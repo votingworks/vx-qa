@@ -3,10 +3,10 @@
  */
 
 import { z } from 'zod/v4';
-import { resolvePath } from '../utils/paths.js';
+import { resolvePath } from '../utils/paths.ts';
 import { dirname } from 'node:path';
-import { ADJUDICATION_REASONS, getVersionSpec, SUPPORTED_VERSIONS } from './versions.js';
-import { TALLY_MODES } from './types.js';
+import { ADJUDICATION_REASONS, getVersionSpec, SUPPORTED_VERSIONS } from './versions.ts';
+import { TALLY_MODES } from './types.ts';
 
 export const BallotPatternSchema = z.enum([
   'blank',
@@ -62,16 +62,18 @@ export const QARunConfigSchema = z
     output: OutputConfigSchema,
     tallyMode: TallyModeSchema.optional(),
   })
-  .superRefine((config, ctx) => {
+  .check((ctx) => {
     // The set of adjudication reasons changed between versions (v4.1 dropped
     // `UninterpretableBallot` and added `CrossoverVoting`), and VxAdmin
     // rejects a package naming one its schema lacks.
+    const config = ctx.value;
     const supported = getVersionSpec(config.vxsuite.version).adjudicationReasons;
     const overrides = config.election.systemSettingsOverrides?.precinctScanAdjudicationReasons;
     for (const [index, reason] of (overrides ?? []).entries()) {
       if (!supported.includes(reason)) {
-        ctx.addIssue({
+        ctx.issues.push({
           code: 'custom',
+          input: config,
           path: ['election', 'systemSettingsOverrides', 'precinctScanAdjudicationReasons', index],
           message:
             `Adjudication reason "${reason}" is not supported by VxSuite ` +
@@ -82,6 +84,16 @@ export const QARunConfigSchema = z
   });
 
 export type QARunConfigOutput = z.output<typeof QARunConfigSchema>;
+
+/**
+ * Parses raw configuration JSON ahead of validation, so command-line overrides
+ * can be applied before version-dependent checks run.
+ */
+export function parseRawConfig(contents: string): Record<string, unknown> {
+  return z
+    .looseObject({ vxsuite: z.record(z.string(), z.unknown()).optional() })
+    .parse(JSON.parse(contents) as unknown);
+}
 
 /**
  * Validate a configuration object

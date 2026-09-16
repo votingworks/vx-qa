@@ -1,0 +1,115 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "promise", "node", "vitest"],
+  "categories": {
+    "correctness": "error",
+    "perf": "error",
+    "suspicious": "error",
+    "pedantic": "error"
+  },
+  "env": {
+    "builtin": true,
+    "es2024": true,
+    "node": true
+  },
+  "rules": {
+    // Sources must run directly under Node's type stripping.
+    "typescript/consistent-type-imports": [
+      "error",
+      {
+        "prefer": "type-imports",
+        "fixStyle": "separate-type-imports",
+        "disallowTypeAnnotations": true
+      }
+    ],
+    "import/consistent-type-specifier-style": ["error", "prefer-top-level"],
+    "typescript/no-import-type-side-effects": "error",
+    "import/extensions": ["error", "ignorePackages"],
+    "import/no-commonjs": "error",
+    "typescript/no-require-imports": "error",
+    "typescript/no-namespace": "error",
+    "import/no-cycle": "error",
+    "import/first": "error",
+    "import/no-duplicates": "error",
+    "import/no-absolute-path": "error",
+    "import/no-empty-named-blocks": "error",
+    "import/no-mutable-exports": "error",
+    "import/no-anonymous-default-export": "error",
+    "unicorn/prefer-node-protocol": "error",
+
+    // Type strictness beyond the enabled categories.
+    "typescript/no-explicit-any": "error",
+    "typescript/strict-boolean-expressions": "error",
+    "typescript/no-unsafe-argument": "error",
+    "typescript/no-unsafe-assignment": "error",
+    "typescript/no-unsafe-call": "error",
+    "typescript/no-unsafe-member-access": "error",
+    "typescript/no-unsafe-return": "error",
+    "typescript/no-unsafe-type-assertion": "error",
+    "typescript/no-non-null-assertion": "error",
+    "typescript/no-non-null-asserted-nullish-coalescing": "error",
+    "typescript/non-nullable-type-assertion-style": "error",
+    "typescript/no-dynamic-delete": "error",
+    "typescript/no-empty-object-type": "error",
+    "typescript/use-unknown-in-catch-callback-variable": "error",
+    "typescript/promise-function-async": "error",
+    "typescript/array-type": ["error", { "default": "array-simple" }],
+    "typescript/prefer-for-of": "error",
+    "typescript/prefer-function-type": "error",
+    "typescript/no-inferrable-types": "error",
+
+    // Idioms worth enforcing.
+    "eqeqeq": ["error", "always"],
+    "prefer-const": "error",
+    "no-var": "error",
+    "object-shorthand": "error",
+    "prefer-template": "error",
+    "prefer-object-spread": "error",
+    "no-useless-concat": "error",
+    "default-param-last": "error",
+    "radix": "error",
+    "no-lonely-if": "error",
+    "symbol-description": "error",
+    "grouped-accessor-pairs": "error",
+    "promise/prefer-await-to-then": "error",
+    "promise/no-return-wrap": "error",
+    "promise/param-names": "error",
+    "vitest/no-standalone-expect": ["error", { "additionalTestBlockFunctions": ["prooftest"] }],
+    "node/no-exports-assign": "error",
+    "unicorn/prefer-string-slice": "error",
+    "unicorn/throw-new-error": "error",
+    "unicorn/error-message": "error",
+    "unicorn/prefer-type-error": "error",
+
+    // Size and shape metrics that do not fit this codebase.
+    "no-await-in-loop": "off",
+    "max-lines": "off",
+    "max-lines-per-function": "off",
+    "max-depth": "off",
+    "max-nested-callbacks": "off",
+    "max-params": "off",
+    "import/max-dependencies": "off",
+    "no-negated-condition": "off",
+    "no-else-return": "off",
+    "no-warning-comments": "off",
+    "no-inline-comments": "off",
+    "unicorn/no-negated-condition": "off",
+    "typescript/prefer-readonly-parameter-types": "off",
+    "require-unicode-regexp": "error",
+
+    // Conflicts with `promise-function-async`, which marks promise-returning
+    // wrappers async without introducing an await.
+    "require-await": "off",
+    "typescript/require-await": "off"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "src/test/**"],
+      "rules": {
+        "typescript/no-non-null-assertion": "off",
+        "typescript/no-explicit-any": "off"
+      }
+    }
+  ],
+  "ignorePatterns": ["dist", "test-fixtures", "templates"]
+}

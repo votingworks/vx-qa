@@ -2,12 +2,13 @@
  * Git repository cloning and checkout operations
  */
 
-import { simpleGit, SimpleGit } from 'simple-git';
+import { simpleGit } from 'simple-git';
+import type { SimpleGit } from 'simple-git';
 import { existsSync } from 'node:fs';
-import { logger } from '../utils/logger.js';
-import { ensureDir, resolvePath } from '../utils/paths.js';
-import type { VxSuiteConfig } from '../config/types.js';
-import { refForVersion } from '../config/versions.js';
+import { logger } from '../utils/logger.ts';
+import { ensureDir, resolvePath } from '../utils/paths.ts';
+import type { VxSuiteConfig } from '../config/types.ts';
+import { refForVersion } from '../config/versions.ts';
 import { rm, readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 
@@ -19,7 +20,7 @@ const VXSUITE_REPO_URL = 'https://github.com/votingworks/vxsuite.git';
 export async function cloneOrUpdateRepo(config: VxSuiteConfig): Promise<string> {
   const repoPath = resolvePath(config.repoPath);
 
-  if (config.forceClone && existsSync(repoPath)) {
+  if (config.forceClone === true && existsSync(repoPath)) {
     logger.info('Force clone requested, removing existing repository...');
     await rm(repoPath, { recursive: true, force: true });
   }
@@ -114,7 +115,7 @@ async function checkoutTag(repoPath: string, tag: string): Promise<void> {
 export async function getCurrentCommit(repoPath: string): Promise<string> {
   const git: SimpleGit = simpleGit(repoPath);
   const log = await git.log({ maxCount: 1 });
-  return log.latest?.hash || 'unknown';
+  return log.latest?.hash ?? 'unknown';
 }
 
 /**
@@ -139,11 +140,11 @@ async function runPatchCommand(
     let stdout = '';
     let stderr = '';
 
-    patchProcess.stdout?.on('data', (data) => {
+    patchProcess.stdout?.on('data', (data: Buffer) => {
       stdout += data.toString();
     });
 
-    patchProcess.stderr?.on('data', (data) => {
+    patchProcess.stderr?.on('data', (data: Buffer) => {
       stderr += data.toString();
     });
 

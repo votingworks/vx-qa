@@ -4,20 +4,17 @@
  * Based on patterns from apps/admin/integration-testing/e2e/support/auth.ts
  */
 
-import { Page } from '@playwright/test';
-import { logger } from '../utils/logger.js';
-import {
-  createMockCardController,
-  DEFAULT_PIN,
-  MockCardController,
-} from '../mock-hardware/cards.js';
+import type { Page } from '@playwright/test';
+import { logger } from '../utils/logger.ts';
+import { createMockCardController, DEFAULT_PIN } from '../mock-hardware/cards.ts';
+import type { MockCardController } from '../mock-hardware/cards.ts';
 import {
   clickTextInApp,
   waitForTextInAppWithDebug,
   waitForTextInApp,
   getMainContent,
   debugPageState,
-} from './browser.js';
+} from './browser.ts';
 
 /**
  * Enter the PIN on the PIN pad screen
@@ -61,7 +58,7 @@ export async function dipSystemAdministratorCardAndLogin(
   const cardController = createMockCardController();
 
   // Set election if provided
-  if (electionPath) {
+  if (electionPath !== undefined && electionPath !== '') {
     await cardController.setElection(electionPath);
   }
 
@@ -94,7 +91,7 @@ export async function dipElectionManagerCardAndLogin(
   const cardController = createMockCardController();
 
   // Set election if provided
-  if (electionPath) {
+  if (electionPath !== undefined && electionPath !== '') {
     await cardController.setElection(electionPath);
   }
 
@@ -124,7 +121,7 @@ export async function insertElectionManagerCardAndLogin(
   const cardController = createMockCardController();
 
   // Set election if provided
-  if (electionPath) {
+  if (electionPath !== undefined && electionPath !== '') {
     await cardController.setElection(electionPath);
   }
 
@@ -151,7 +148,7 @@ export async function insertPollWorkerCardAndLogin(
   const cardController = createMockCardController();
 
   // Set election if provided
-  if (electionPath) {
+  if (electionPath !== undefined && electionPath !== '') {
     await cardController.setElection(electionPath);
   }
 

@@ -1,9 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import {
-  planBallotsToScan,
-  scanExpectationsFromSystemSettings,
-  type ScanExpectations,
-} from './scan-plan.js';
+import { planBallotsToScan, scanExpectationsFromSystemSettings } from './scan-plan.ts';
+import type { ScanExpectations } from './scan-plan.ts';
 
 const officialBallot = {
   ballotStyleId: '1',

@@ -2,8 +2,8 @@
  * Heuristic for auto-detecting tallyMode from election data
  */
 
-import type { Election } from '../ballots/election-loader.js';
-import type { TallyMode } from './types.js';
+import type { Election } from '../ballots/election-loader.ts';
+import type { TallyMode } from './types.ts';
 
 /**
  * NH "city" elections generate one election package per city with each ward

@@ -6,7 +6,8 @@
  * through the Vite frontend proxy at http://localhost:3000/dock.
  */
 
-import { logger } from '../utils/logger.js';
+import { logger } from '../utils/logger.ts';
+import { sleep } from '../utils/process.ts';
 
 export interface DevDockClient {
   baseUrl: string;
@@ -31,7 +32,7 @@ export function createDevDockClient(port = 3000): DevDockClient {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(params || {}),
+          body: JSON.stringify(params ?? {}),
         });
 
         if (!response.ok) {
@@ -39,12 +40,14 @@ export function createDevDockClient(port = 3000): DevDockClient {
           throw new Error(`Dev-dock call failed: ${response.status} ${text}`);
         }
 
-        const data = await response.json();
+        const data: unknown = await response.json();
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- dev-dock responses are unvalidated
         return data as T;
       } catch (error) {
         if (error instanceof Error && error.message.includes('ECONNREFUSED')) {
           throw new Error(
             `Cannot connect to dev-dock at ${baseUrl}. Is the app running with mock hardware enabled?`,
+            { cause: error },
           );
         }
         throw error;
@@ -75,7 +78,7 @@ export async function waitForDevDock(port: number, timeout = 30000): Promise<boo
       // Not ready yet
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await sleep(500);
   }
 
   return false;

@@ -2,10 +2,11 @@
  * VxAdmin tally workflow - imports CVRs and generates reports
  */
 
-import { Page, Locator } from '@playwright/test';
-import { logger } from '../utils/logger.js';
-import { createMockUsbController } from '../mock-hardware/usb.js';
-import { dipElectionManagerCardAndLogin, logOut } from './auth-helpers.js';
+import type { Page, Locator } from '@playwright/test';
+import { logger } from '../utils/logger.ts';
+import { findFilesRecursively } from '../utils/paths.ts';
+import { createMockUsbController } from '../mock-hardware/usb.ts';
+import { dipElectionManagerCardAndLogin, logOut } from './auth-helpers.ts';
 import {
   navigateToApp,
   waitForTextWithDebug,
@@ -14,19 +15,20 @@ import {
   toggleDevDock,
   debugPageState,
   getMainContent,
-} from './browser.js';
-import { loadCollection, type StepCollector, type ArtifactCollector } from '../report/artifacts.js';
-import { ArtifactCollection, StepOutput, ValidationResult } from '../config/types.js';
-import { readdir, readFile, stat } from 'node:fs/promises';
+} from './browser.ts';
+import { loadCollection } from '../report/artifacts.ts';
+import type { StepCollector, ArtifactCollector } from '../report/artifacts.ts';
+import type { ArtifactCollection, StepOutput, ValidationResult } from '../config/types.ts';
+import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import {
+import { getContestsForBallotStyle } from '../ballots/election-loader.ts';
+import type {
   BallotStyle,
   Contest,
   Election,
-  getContestsForBallotStyle,
   Precinct,
   PrecinctSplit,
-} from '../ballots/election-loader.js';
+} from '../ballots/election-loader.ts';
 
 /**
  * Contest result tallies for manual data entry
@@ -225,7 +227,9 @@ export function manualTallyOptionName(
     name = split.name;
   }
 
-  return ballotStyle.partyName ? `${name} - ${ballotStyle.partyName}` : name;
+  return ballotStyle.partyName !== undefined && ballotStyle.partyName !== ''
+    ? `${name} - ${ballotStyle.partyName}`
+    : name;
 }
 
 /**
@@ -237,10 +241,10 @@ async function processBallotStyle(
   election: Election,
   ballotStyleGroupId: string,
   precinctId: string,
-  contests: Array<Contest>,
+  contests: Contest[],
   styleIndex: number,
 ): Promise<void> {
-  const votingMethod = 'precinct' as const;
+  const votingMethod = 'precinct';
 
   // Calculate ballot count: give 1 vote to each option in the contest with most options
   const maxOptionsPerContest = Math.max(
@@ -288,7 +292,7 @@ async function processBallotStyle(
       districts: ballotStyleInfo?.districts ?? [],
       partyName: party?.name,
     },
-    { name: precinctInfo?.name || precinctId, splits: precinctInfo?.splits },
+    { name: precinctInfo?.name ?? precinctId, splits: precinctInfo?.splits },
   );
 
   logger.debug(`Looking for ballot style option containing "${displayName}"`);
@@ -330,6 +334,7 @@ async function processBallotStyle(
       `Ballot style option "${displayName}" not available to manually tally -- its ` +
         `precinct/district data likely doesn't match the other ballot style(s) for this ` +
         `precinct (as with a bad election conversion). Check the election definition: ${String(error)}`,
+      { cause: error },
     );
   }
 
@@ -417,7 +422,7 @@ async function fillContest(
   // Get contest ID from URL
   const contestUrl = page.url();
   const urlParts = contestUrl.split('/');
-  const contestId = urlParts[urlParts.length - 1] || contest.id;
+  const contestId = urlParts.at(-1) ?? contest.id;
 
   // Wait for form to load
   await page.locator('input#undervotes').waitFor({ state: 'visible' });
@@ -447,13 +452,13 @@ async function fillContest(
   for (const input of allInputs) {
     const inputId = await input.getAttribute('id');
     if (
-      inputId &&
+      inputId !== null &&
       inputId !== 'undervotes' &&
       inputId !== 'overvotes' &&
       inputId !== 'ballotCount'
     ) {
       await input.fill('0');
-      const optionId = inputIdToOptionId.get(inputId) || inputId;
+      const optionId = inputIdToOptionId.get(inputId) ?? inputId;
       candidateInputs.push({ input, id: inputId, optionId });
       await page.waitForTimeout(50);
     }
@@ -564,7 +569,7 @@ async function captureValidationMessage(
     for (const validationText of validationTexts) {
       try {
         const element = page.getByText(validationText, { exact: false });
-        if (await element.isVisible({ timeout: 1000 })) {
+        if (await element.isVisible()) {
           const text = validationText;
           const type = text.includes('valid')
             ? 'success'
@@ -841,7 +846,7 @@ async function generateReports(
 
   const reportScope = precinct ? `Single Precinct (${precinct.name}) Tally` : 'Full Election Tally';
 
-  if (exportedPdfPath) {
+  if (exportedPdfPath !== undefined) {
     await stepCollector.addOutput({
       type: 'report',
       label: 'Tally Report PDF',
@@ -850,7 +855,7 @@ async function generateReports(
     });
   }
 
-  if (exportedCsvPath) {
+  if (exportedCsvPath !== undefined) {
     await stepCollector.addOutput({
       type: 'report',
       label: 'Tally Report CSV',
@@ -874,8 +879,9 @@ export async function runAdminTallyWorkflow(
 ): Promise<void> {
   logger.step('Running VxAdmin tally workflow');
 
-  const precinct = precinctId ? election.precincts.find((p) => p.id === precinctId) : undefined;
-  if (precinctId && !precinct) {
+  const precinct =
+    precinctId !== undefined ? election.precincts.find((p) => p.id === precinctId) : undefined;
+  if (precinctId !== undefined && precinct === undefined) {
     throw new Error(`Precinct ${precinctId} not found in election`);
   }
 
@@ -938,33 +944,27 @@ export async function runAdminTallyWorkflow(
   await usbController.remove();
 }
 
+/** Returns the per-contest tally map, creating it if absent. */
+function contestTallies(
+  votes: Map<string, Map<string, number>>,
+  contestId: string,
+): Map<string, number> {
+  let tallies = votes.get(contestId);
+  if (!tallies) {
+    tallies = new Map();
+    votes.set(contestId, tallies);
+  }
+  return tallies;
+}
+
 /**
  * Find the most recently exported tally report PDF on the USB drive
  */
 async function findExportedTallyReport(usbDataPath: string): Promise<string | undefined> {
-  const findPdfFiles = async (dir: string): Promise<string[]> => {
-    const results: string[] = [];
-
-    try {
-      const entries = await readdir(dir, { withFileTypes: true });
-
-      for (const entry of entries) {
-        const fullPath = join(dir, entry.name);
-
-        if (entry.isDirectory()) {
-          results.push(...(await findPdfFiles(fullPath)));
-        } else if (entry.name.includes('tally-report') && entry.name.endsWith('.pdf')) {
-          results.push(fullPath);
-        }
-      }
-    } catch {
-      // Directory might not exist
-    }
-
-    return results;
-  };
-
-  const pdfFiles = await findPdfFiles(usbDataPath);
+  const pdfFiles = await findFilesRecursively(
+    usbDataPath,
+    (name) => name.includes('tally-report') && name.endsWith('.pdf'),
+  );
 
   if (pdfFiles.length === 0) {
     return undefined;
@@ -973,7 +973,7 @@ async function findExportedTallyReport(usbDataPath: string): Promise<string | un
   // Return the most recently modified PDF file
   const sorted = (
     await Promise.all(pdfFiles.map(async (path) => ({ path, mtime: (await stat(path)).mtime })))
-  ).sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+  ).toSorted((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
   return sorted[0].path;
 }
@@ -982,29 +982,10 @@ async function findExportedTallyReport(usbDataPath: string): Promise<string | un
  * Find the most recently exported tally CSV on the USB drive
  */
 async function findExportedTallyCsv(usbDataPath: string): Promise<string | undefined> {
-  const findCsvFiles = async (dir: string): Promise<string[]> => {
-    const results: string[] = [];
-
-    try {
-      const entries = await readdir(dir, { withFileTypes: true });
-
-      for (const entry of entries) {
-        const fullPath = join(dir, entry.name);
-
-        if (entry.isDirectory()) {
-          results.push(...(await findCsvFiles(fullPath)));
-        } else if (entry.name.includes('tally-report') && entry.name.endsWith('.csv')) {
-          results.push(fullPath);
-        }
-      }
-    } catch {
-      // Directory might not exist
-    }
-
-    return results;
-  };
-
-  const csvFiles = await findCsvFiles(usbDataPath);
+  const csvFiles = await findFilesRecursively(
+    usbDataPath,
+    (name) => name.includes('tally-report') && name.endsWith('.csv'),
+  );
 
   if (csvFiles.length === 0) {
     return undefined;
@@ -1013,7 +994,7 @@ async function findExportedTallyCsv(usbDataPath: string): Promise<string | undef
   // Return the most recently modified CSV file
   const sorted = (
     await Promise.all(csvFiles.map(async (path) => ({ path, mtime: (await stat(path)).mtime })))
-  ).sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+  ).toSorted((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
   return sorted[0].path;
 }
@@ -1072,17 +1053,14 @@ async function validateTallyCsv(
     if (contestIdIndex !== undefined && selectionIdIndex !== undefined) {
       const contestId = fields[contestIdIndex];
       const selectionId = fields[selectionIdIndex];
-      const votes = parseInt(fields[totalVotesColumnIndex] || '0', 10);
+      const votes = Math.trunc(Number(fields[totalVotesColumnIndex] || '0'));
 
       // Skip non-candidate metric rows. v4.1's tally CSV adds a per-contest
       // 'ballots-cast' selection alongside 'overvotes'/'undervotes'; none are
       // candidate votes.
       const metricSelectionIds = ['overvotes', 'undervotes', 'ballots-cast'];
       if (!isNaN(votes) && !metricSelectionIds.includes(selectionId)) {
-        if (!actualVotes.has(contestId)) {
-          actualVotes.set(contestId, new Map());
-        }
-        const contestMap = actualVotes.get(contestId) as Map<string, number>;
+        const contestMap = contestTallies(actualVotes, contestId);
         contestMap.set(selectionId, (contestMap.get(selectionId) ?? 0) + votes);
 
         if (votes > 0) {
@@ -1118,7 +1096,7 @@ async function validateTallyCsv(
   // be scoped to the contest or a stray count is masked by a match elsewhere.
   for (const [contestId, candidates] of actualVotes) {
     for (const [selectionId, actualCount] of candidates) {
-      if (actualCount > 0 && !expectedVotes.get(contestId)?.has(selectionId)) {
+      if (actualCount > 0 && expectedVotes.get(contestId)?.has(selectionId) !== true) {
         mismatches.push(`Unexpected votes in CSV for ${contestId}/${selectionId}: ${actualCount}`);
       }
     }
@@ -1167,19 +1145,16 @@ export async function validateTallyResults(
         if (
           output.type === 'scan-result' &&
           output.accepted &&
-          output.votes &&
+          output.votes !== undefined &&
           output.markPattern !== 'unmarked-write-in'
         ) {
           totalOutputs++;
 
           const votes = output.votes;
           for (const [contestId, contestVotes] of Object.entries(votes)) {
-            if (!expectedVotes.has(contestId)) {
-              expectedVotes.set(contestId, new Map());
-            }
+            const contestMap = contestTallies(expectedVotes, contestId);
             for (const vote of contestVotes) {
               const optionId = typeof vote === 'string' ? vote : vote.id;
-              const contestMap = expectedVotes.get(contestId) as Map<string, number>;
               if (optionId.startsWith('write-in')) {
                 contestMap.set('write-in', (contestMap.get('write-in') ?? 0) + 1);
               } else {
@@ -1194,10 +1169,7 @@ export async function validateTallyResults(
           manualTallyCount++;
 
           for (const [contestId, contestTally] of Object.entries(output.contestResults)) {
-            if (!expectedVotes.has(contestId)) {
-              expectedVotes.set(contestId, new Map());
-            }
-            const contestMap = expectedVotes.get(contestId) as Map<string, number>;
+            const contestMap = contestTallies(expectedVotes, contestId);
 
             // Add the manual tally votes to expected votes
             for (const [optionId, count] of Object.entries(contestTally.tallies)) {
@@ -1239,6 +1211,7 @@ export async function validateTallyResults(
   } catch (error) {
     throw new Error(
       `Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      { cause: error },
     );
   }
 }

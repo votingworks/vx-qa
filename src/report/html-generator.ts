@@ -4,14 +4,14 @@
 
 import Handlebars from 'handlebars';
 import { dirname, join, relative } from 'node:path';
-import { logger } from '../utils/logger.js';
-import type { ArtifactCollection, ScreenshotArtifact } from '../config/types.js';
-import { refForVersion } from '../config/versions.js';
-import { collectFilesInDir, loadCollection, PROOF_PREFIX } from './artifacts.js';
-import { generatePdfThumbnail } from './pdf-thumbnail.js';
+import { logger } from '../utils/logger.ts';
+import type { ArtifactCollection, ScreenshotArtifact } from '../config/types.ts';
+import { refForVersion } from '../config/versions.ts';
+import { collectFilesInDir, loadCollection, PROOF_PREFIX } from './artifacts.ts';
+import { generatePdfThumbnail } from './pdf-thumbnail.ts';
 import { writeFile } from 'node:fs/promises';
-import { resolvePath } from '../utils/paths.js';
-import { validateTallyResults } from '../automation/admin-tally-workflow.js';
+import { resolvePath } from '../utils/paths.ts';
+import { validateTallyResults } from '../automation/admin-tally-workflow.ts';
 
 /**
  * Generate an HTML report from the artifact collection
@@ -75,10 +75,6 @@ async function prepareReportData(
   const ballotsDir = join(outputDir, 'ballots');
   const ballotFiles = await collectFilesInDir(ballotsDir, ['.pdf']);
 
-  async function makeBallotGalleryThumbnail(filePath: string): Promise<string | null> {
-    return await generatePdfThumbnail(filePath, { scale: 2 });
-  }
-
   const proofFileNames = new Set(
     ballotFiles.filter((f) => f.name.startsWith(PROOF_PREFIX)).map((f) => f.name),
   );
@@ -90,16 +86,18 @@ async function prepareReportData(
     const proofFileName = `${PROOF_PREFIX}${base.name}`;
 
     ballotPairs.push({
-      name: base.name.replace(/\.pdf$/, '').replace(/^ballot-/, ''),
+      name: base.name.replace(/\.pdf$/u, '').replace(/^ballot-/u, ''),
       base: {
         name: base.name,
         path: `ballots/${base.name}`,
-        thumbnail: await makeBallotGalleryThumbnail(base.path),
+        thumbnail: await generatePdfThumbnail(base.path, { scale: 2 }),
       },
       proof: {
         name: proofFileName,
         path: `ballots/${proofFileName}`,
-        thumbnail: await makeBallotGalleryThumbnail(join(dirname(base.path), proofFileName)),
+        thumbnail: await generatePdfThumbnail(join(dirname(base.path), proofFileName), {
+          scale: 2,
+        }),
       },
     });
   }
@@ -138,10 +136,15 @@ async function prepareReportData(
           type: input.type,
           label: input.label,
           description: input.description,
-          path: input.path ? relative(outputDir, resolvePath(input.path, outputDir)) : undefined,
+          path:
+            input.path !== undefined && input.path !== ''
+              ? relative(outputDir, resolvePath(input.path, outputDir))
+              : undefined,
           data: input.data,
           thumbnail:
-            input.type === 'ballot' && input.path ? await generatePdfThumbnail(input.path) : null,
+            input.type === 'ballot' && input.path !== undefined && input.path !== ''
+              ? await generatePdfThumbnail(input.path)
+              : null,
         })),
       ),
       outputs: await Promise.all(
@@ -187,11 +190,17 @@ async function prepareReportData(
                 precinctId: output.precinctId,
                 ballotCount: output.ballotCount,
                 contestCount: Object.keys(output.contestResults).length,
-                validationMessages: contestsWithValidation.map((c) => ({
-                  contestId: c.contestId,
-                  type: c.validation!.type,
-                  message: c.validation!.message,
-                })),
+                validationMessages: contestsWithValidation.flatMap((c) =>
+                  c.validation
+                    ? [
+                        {
+                          contestId: c.contestId,
+                          type: c.validation.type,
+                          message: c.validation.message,
+                        },
+                      ]
+                    : [],
+                ),
                 hasWarnings,
                 hasErrors,
               },
@@ -233,7 +242,7 @@ async function prepareReportData(
 
   // Calculate duration
   const duration =
-    collection.endTime && collection.startTime
+    collection.endTime !== undefined && collection.startTime !== undefined
       ? Math.round((collection.endTime.getTime() - collection.startTime.getTime()) / 1000)
       : null;
   const hasErrors = collection.errors.length > 0;
@@ -244,8 +253,8 @@ async function prepareReportData(
     title: `VxSuite QA Report ${pass ? 'PASS' : 'FAIL'}`,
     runId: collection.runId,
     startTime: collection.startTime.toISOString(),
-    endTime: collection.endTime?.toISOString() || 'In Progress',
-    duration: duration ? formatDuration(duration) : 'N/A',
+    endTime: collection.endTime?.toISOString() ?? 'In Progress',
+    duration: duration !== null ? formatDuration(duration) : 'N/A',
     pass,
     config: {
       tag: `${collection.config.vxsuite.version} (${refForVersion(collection.config.vxsuite.version)})`,
@@ -263,7 +272,7 @@ async function prepareReportData(
         ballotMode: r.ballotMode,
         pattern: r.markPattern,
         status: r.accepted ? 'Accepted' : 'Rejected',
-        reason: r.rejectedReason || '-',
+        reason: r.rejectedReason ?? '-',
         statusClass: isExpected ? 'success' : 'error',
         isExpected,
         expectedStatus: expected ? 'Accepted' : 'Rejected',
@@ -291,20 +300,20 @@ interface ReportData {
     tag: string;
     election: string;
   };
-  steps: {
+  steps: Array<{
     id: string;
     name: string;
     description: string;
     duration: string;
-    inputs: {
+    inputs: Array<{
       type: string;
       label: string;
       description?: string;
       path?: string;
       data?: Record<string, unknown>;
       thumbnail?: string | null;
-    }[];
-    outputs: {
+    }>;
+    outputs: Array<{
       type: string;
       label: string;
       description?: string;
@@ -312,17 +321,17 @@ interface ReportData {
       data?: Record<string, unknown>;
       statusClass?: string;
       thumbnail?: string | null;
-    }[];
+    }>;
     screenshots: ScreenshotArtifact[];
     hasErrors: boolean;
-    errors: { step: string; message: string; timestamp: Date }[];
-  }[];
-  ballotPairs: {
+    errors: Array<{ step: string; message: string; timestamp: Date }>;
+  }>;
+  ballotPairs: Array<{
     name: string;
     base: { name: string; path: string; thumbnail: string | null };
     proof: { name: string; path: string; thumbnail: string | null };
-  }[];
-  scanResults: {
+  }>;
+  scanResults: Array<{
     ballotStyleId: string;
     ballotMode: string;
     pattern: string;
@@ -331,10 +340,10 @@ interface ReportData {
     statusClass: string;
     isExpected: boolean;
     expectedStatus: string;
-  }[];
-  errors: { step: string; message: string; timestamp: string }[];
+  }>;
+  errors: Array<{ step: string; message: string; timestamp: string }>;
   hasErrors: boolean;
-  validationFailures: { step: string; message: string; stepId: string }[];
+  validationFailures: Array<{ step: string; message: string; stepId: string }>;
   hasValidationFailures: boolean;
 }
 
@@ -355,13 +364,12 @@ function formatDuration(seconds: number): string {
  */
 function renderTemplate(data: ReportData): string {
   // Register Handlebars helpers
-  Handlebars.registerHelper('eq', function (this: any, a: any, b: any, options: any) {
-    if (a === b) {
-      return options.fn(this);
-    } else {
-      return options.inverse(this);
-    }
-  });
+  Handlebars.registerHelper(
+    'eq',
+    function (this: unknown, a: unknown, b: unknown, options: Handlebars.HelperOptions) {
+      return a === b ? options.fn(this) : options.inverse(this);
+    },
+  );
 
   const template = `<!DOCTYPE html>
 <html lang="en">

@@ -12,7 +12,7 @@ export default defineConfig({
     include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
 
     // Exclude patterns
-    exclude: ['node_modules', 'dist', 'output'],
+    exclude: ['node_modules', 'output'],
 
     // Coverage configuration
     coverage: {
@@ -20,7 +20,6 @@ export default defineConfig({
       reporter: ['text', 'json', 'html'],
       exclude: [
         'node_modules/',
-        'dist/',
         'output/',
         '**/*.test.ts',
         '**/*.spec.ts',

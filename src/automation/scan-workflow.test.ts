@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import type { Election, PollingPlace } from '../ballots/election-loader.js';
-import { scannerAcceptedPrecinctIds, scannerLocationSelection } from './scan-workflow.js';
+import type { Election, PollingPlace } from '../ballots/election-loader.ts';
+import { scannerAcceptedPrecinctIds, scannerLocationSelection } from './scan-workflow.ts';
 
 function election(precinctIds: string[], pollingPlaces?: PollingPlace[]): Election {
   return {
@@ -45,7 +45,7 @@ describe('v4.1 (polling place location model)', () => {
   test('a single polling place is auto-selected and accepts all its precincts', () => {
     const e = election(['a', 'b'], [place('pp', 'election_day', 'a', 'b')]);
     expect(scannerLocationSelection('v4.1', e, 'a')).toBeUndefined();
-    expect([...scannerAcceptedPrecinctIds('v4.1', e, 'a')].sort()).toEqual(['a', 'b']);
+    expect([...scannerAcceptedPrecinctIds('v4.1', e, 'a')].toSorted()).toEqual(['a', 'b']);
   });
 
   test('picks the election day polling place covering the precinct', () => {
@@ -69,17 +69,19 @@ describe('v4.1 (polling place location model)', () => {
       ['a', 'b', 'c'],
       [place('pab', 'election_day', 'a', 'b'), place('pc', 'election_day', 'c')],
     );
-    expect([...scannerAcceptedPrecinctIds('v4.1', e, 'a')].sort()).toEqual(['a', 'b']);
+    expect([...scannerAcceptedPrecinctIds('v4.1', e, 'a')].toSorted()).toEqual(['a', 'b']);
     expect([...scannerAcceptedPrecinctIds('v4.1', e, 'c')]).toEqual(['c']);
   });
 
   test('rejects a precinct with no election day polling place', () => {
     const e = election(['a', 'b'], [place('pa', 'election_day', 'a'), place('x', 'absentee', 'b')]);
-    expect(() => scannerLocationSelection('v4.1', e, 'b')).toThrow(/No election day polling place/);
+    expect(() => scannerLocationSelection('v4.1', e, 'b')).toThrow(
+      /No election day polling place/u,
+    );
   });
 
   test('rejects a lone polling place that does not cover the precinct', () => {
     const e = election(['a', 'b'], [place('pa', 'election_day', 'a')]);
-    expect(() => scannerAcceptedPrecinctIds('v4.1', e, 'b')).toThrow(/does not cover precinct b/);
+    expect(() => scannerAcceptedPrecinctIds('v4.1', e, 'b')).toThrow(/does not cover precinct b/u);
   });
 });
