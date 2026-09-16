@@ -219,6 +219,7 @@ export interface GridPositionWriteIn {
   contestId: string;
   writeInIndex: number;
   writeInArea: Rect;
+  bounds?: Rect;
 }
 
 export interface GridPositionOption {
@@ -231,6 +232,7 @@ export interface GridPositionOption {
   optionId: string;
   /** Set for a cross-endorsed candidate: one position per endorsing party. */
   partyIds?: string[];
+  bounds?: Rect;
 }
 
 export interface Rect {
@@ -403,6 +405,7 @@ export function normalizeGridLayouts(election: Election): void {
               contestId: contest.contestId,
               column: option.bubbleCenter.column,
               row: option.bubbleCenter.row,
+              bounds: gridRectToRect(option.bounds),
             } as const;
 
             optionBoundsFromTargetMark ??= boundsFromTargetMark(option.bounds, option.bubbleCenter);
