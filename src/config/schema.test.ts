@@ -185,14 +185,16 @@ describe('precinctScanAdjudicationReasons per version', () => {
 
     const result = safeValidateConfig(configWith('v4.1', ['Overvote', 'UninterpretableBallot']));
     expect(result.success).toBe(false);
-    expect(result.error?.issues).toEqual([
-      expect.objectContaining({
-        path: ['election', 'systemSettingsOverrides', 'precinctScanAdjudicationReasons', 1],
-        message: expect.stringContaining(
-          '"UninterpretableBallot" is not supported by VxSuite v4.1',
-        ),
-      }),
+    expect(result.error?.issues).toHaveLength(1);
+    expect(result.error?.issues[0]?.path).toEqual([
+      'election',
+      'systemSettingsOverrides',
+      'precinctScanAdjudicationReasons',
+      1,
     ]);
+    expect(result.error?.issues[0]?.message).toContain(
+      '"UninterpretableBallot" is not supported by VxSuite v4.1',
+    );
   });
 
   test('accepts CrossoverVoting only on v4.1', () => {

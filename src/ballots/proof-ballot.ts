@@ -43,7 +43,7 @@ const PAPER_SIZES: Record<string, { width: number; height: number }> = {
 
 export function getPageGeometry(paperSize: string): PageGeometry {
   const size = PAPER_SIZES[paperSize];
-  if (!size) {
+  if (size === undefined) {
     throw new Error(`Unsupported paper size: ${paperSize}`);
   }
 

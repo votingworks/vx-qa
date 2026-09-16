@@ -86,7 +86,7 @@ async function prepareReportData(
     const proofFileName = `${PROOF_PREFIX}${base.name}`;
 
     ballotPairs.push({
-      name: base.name.replace(/\.pdf$/, '').replace(/^ballot-/, ''),
+      name: base.name.replace(/\.pdf$/u, '').replace(/^ballot-/u, ''),
       base: {
         name: base.name,
         path: `ballots/${base.name}`,
@@ -136,10 +136,15 @@ async function prepareReportData(
           type: input.type,
           label: input.label,
           description: input.description,
-          path: input.path ? relative(outputDir, resolvePath(input.path, outputDir)) : undefined,
+          path:
+            input.path !== undefined && input.path !== ''
+              ? relative(outputDir, resolvePath(input.path, outputDir))
+              : undefined,
           data: input.data,
           thumbnail:
-            input.type === 'ballot' && input.path ? await generatePdfThumbnail(input.path) : null,
+            input.type === 'ballot' && input.path !== undefined && input.path !== ''
+              ? await generatePdfThumbnail(input.path)
+              : null,
         })),
       ),
       outputs: await Promise.all(
@@ -237,7 +242,7 @@ async function prepareReportData(
 
   // Calculate duration
   const duration =
-    collection.endTime && collection.startTime
+    collection.endTime !== undefined && collection.startTime !== undefined
       ? Math.round((collection.endTime.getTime() - collection.startTime.getTime()) / 1000)
       : null;
   const hasErrors = collection.errors.length > 0;
@@ -249,7 +254,7 @@ async function prepareReportData(
     runId: collection.runId,
     startTime: collection.startTime.toISOString(),
     endTime: collection.endTime?.toISOString() ?? 'In Progress',
-    duration: duration ? formatDuration(duration) : 'N/A',
+    duration: duration !== null ? formatDuration(duration) : 'N/A',
     pass,
     config: {
       tag: `${collection.config.vxsuite.version} (${refForVersion(collection.config.vxsuite.version)})`,

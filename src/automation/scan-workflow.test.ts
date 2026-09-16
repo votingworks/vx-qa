@@ -75,11 +75,13 @@ describe('v4.1 (polling place location model)', () => {
 
   test('rejects a precinct with no election day polling place', () => {
     const e = election(['a', 'b'], [place('pa', 'election_day', 'a'), place('x', 'absentee', 'b')]);
-    expect(() => scannerLocationSelection('v4.1', e, 'b')).toThrow(/No election day polling place/);
+    expect(() => scannerLocationSelection('v4.1', e, 'b')).toThrow(
+      /No election day polling place/u,
+    );
   });
 
   test('rejects a lone polling place that does not cover the precinct', () => {
     const e = election(['a', 'b'], [place('pa', 'election_day', 'a')]);
-    expect(() => scannerAcceptedPrecinctIds('v4.1', e, 'b')).toThrow(/does not cover precinct b/);
+    expect(() => scannerAcceptedPrecinctIds('v4.1', e, 'b')).toThrow(/does not cover precinct b/u);
   });
 });

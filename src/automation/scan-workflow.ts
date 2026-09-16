@@ -29,11 +29,13 @@ import type {
   Election,
   ElectionPackage,
   PollingPlace,
+  Vote,
   VotesDict,
 } from '../ballots/election-loader.ts';
 import { copyFile, readdir, readFile, writeFile } from 'node:fs/promises';
 import assert from 'node:assert';
 import { PDFDocument } from 'pdf-lib';
+import { errorMessage } from '../utils/errors.ts';
 
 export interface BallotToScan {
   ballotStyleId: string;
@@ -355,7 +357,7 @@ export function scannerLocationSelection(
     if (election.precincts.length <= 1) return undefined;
 
     const precinct = election.precincts.find(({ id }) => id === precinctId)?.name;
-    assert.ok(precinct, `Invalid precinct selection: ${precinctId}`);
+    assert.ok(precinct !== undefined, `Invalid precinct selection: ${precinctId}`);
 
     return { placeholder: 'Select a precinct…', optionName: precinct };
   }
@@ -433,7 +435,7 @@ async function scanBallot(
 
   // Create descriptive filename: ballot-styleId-mode-pattern.pdf
   const markedBallotPdfPath = ballot.pdfPath.replace(
-    /\.pdf$/i,
+    /\.pdf$/iu,
     `-${ballot.ballotMode}-${markPattern}.pdf`,
   );
   await writeFile(markedBallotPdfPath, markedBallotPdf.pdfBytes);
@@ -453,11 +455,11 @@ async function scanBallot(
 
     const sheetVotes: VotesDict = Object.fromEntries(
       Object.entries(markedBallotPdf.votes)
-        .map(([contestId, votes]) => [
+        .map(([contestId, votes]): [string, Vote[]] => [
           contestId,
           votes.filter((vote) => {
             // Handle write-in votes
-            if (typeof vote !== 'string' && vote.isWriteIn) {
+            if (typeof vote !== 'string' && vote.isWriteIn === true) {
               return gridLayout.gridPositions.some(
                 (p) =>
                   p.sheetNumber === sheetIndex + 1 &&
@@ -516,7 +518,7 @@ async function scanBallot(
     const sheetPdfBytes = await sheetDoc.save();
 
     // Write the sheet PDF
-    const sheetPdfPath = markedBallotPdfPath.replace(/\.pdf$/i, `-sheet${sheetIndex + 1}.pdf`);
+    const sheetPdfPath = markedBallotPdfPath.replace(/\.pdf$/iu, `-sheet${sheetIndex + 1}.pdf`);
     await writeFile(sheetPdfPath, sheetPdfBytes);
 
     stepCollector.addInput({
@@ -750,6 +752,6 @@ async function addThermalPrinterReports(
       }
     }
   } catch (error) {
-    logger.warn(`Failed to add thermal printer reports: ${(error as Error).message}`);
+    logger.warn(`Failed to add thermal printer reports: ${errorMessage(error)}`);
   }
 }

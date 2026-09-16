@@ -89,10 +89,8 @@ describe('validateTallyResults', () => {
     const result = await validateTallyResults(
       collection([scanResult({ mayor: ['alice'] }), report(csv)]),
     );
-    expect(result).toEqual({
-      isValid: true,
-      message: expect.stringContaining('1 vote(s) match'),
-    });
+    expect(result.isValid).toBe(true);
+    expect(result.message).toContain('1 vote(s) match');
   });
 
   test('flags a count that is short of the scanned votes', async () => {

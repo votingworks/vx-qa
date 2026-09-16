@@ -19,6 +19,7 @@ import { copyFile, mkdir, readdir, readFile, stat } from 'node:fs/promises';
 import assert from 'node:assert';
 import type { Page } from '@playwright/test';
 import { createScreenshotManager } from '../automation/screenshot.ts';
+import { parseJsonAs } from '../utils/json.ts';
 
 export const PROOF_PREFIX = 'PROOF-';
 
@@ -161,7 +162,7 @@ export async function createArtifactCollector(
       const stepDir = join(
         outputDir,
         'steps',
-        `${stepIndexStr}-${id.replaceAll(/[^a-z0-9]+/g, '-')}`,
+        `${stepIndexStr}-${id.replaceAll(/[^a-z0-9]+/gu, '-')}`,
       );
       await mkdir(stepDir, { recursive: true });
 
@@ -239,7 +240,7 @@ export async function createArtifactCollector(
  * Loads a serialized collection as a
  */
 export async function loadCollection(path: string): Promise<ArtifactCollection> {
-  return JSON.parse(await readFile(path, 'utf8'), (key, value) => {
+  return parseJsonAs<ArtifactCollection>(await readFile(path, 'utf8'), (key, value) => {
     switch (key) {
       case 'startTime':
       case 'endTime':

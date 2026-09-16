@@ -25,12 +25,12 @@ describe('readVxSuiteNodeVersion', () => {
   });
 
   test('throws when .node-version is missing', () => {
-    expect(() => readVxSuiteNodeVersion(repoPath)).toThrow(/no \.node-version/);
+    expect(() => readVxSuiteNodeVersion(repoPath)).toThrow(/no \.node-version/u);
   });
 
   test('throws when .node-version is not an exact version', () => {
     writeFileSync(join(repoPath, '.node-version'), 'lts/iron\n');
-    expect(() => readVxSuiteNodeVersion(repoPath)).toThrow(/Unexpected Node\.js version/);
+    expect(() => readVxSuiteNodeVersion(repoPath)).toThrow(/Unexpected Node\.js version/u);
   });
 
   test('getVxSuiteEnvironment applies the pinned version and extra vars', () => {

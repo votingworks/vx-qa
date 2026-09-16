@@ -4,6 +4,7 @@
 
 import { pdf } from 'pdf-to-img';
 import { logger } from '../utils/logger.ts';
+import { errorMessage } from '../utils/errors.ts';
 
 /**
  * Generate a thumbnail of the first page of a PDF
@@ -28,7 +29,7 @@ export async function generatePdfThumbnail(
 
     return null;
   } catch (error) {
-    logger.warn(`Failed to generate thumbnail for PDF ${pdfPath}: ${(error as Error).message}`);
+    logger.warn(`Failed to generate thumbnail for PDF ${pdfPath}: ${errorMessage(error)}`);
     return null;
   }
 }

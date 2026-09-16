@@ -24,8 +24,8 @@ export function readVxSuiteNodeVersion(repoPath: string): string {
     throw new Error(`VxSuite checkout has no ${NODE_VERSION_FILE} at ${filePath}`);
   }
 
-  const version = contents.trim().replace(/^v/, '');
-  if (!/^\d+\.\d+\.\d+$/.test(version)) {
+  const version = contents.trim().replace(/^v/u, '');
+  if (!/^\d+\.\d+\.\d+$/u.test(version)) {
     throw new Error(`Unexpected Node.js version "${contents.trim()}" in ${filePath}`);
   }
   return version;

@@ -18,12 +18,16 @@ export interface Logger {
   setLogFile(path: string | null): void;
 }
 
-const isDebug = process.env.DEBUG && process.env.DEBUG !== 'false' && process.env.DEBUG !== '0';
+const isDebug =
+  process.env.DEBUG !== undefined &&
+  process.env.DEBUG !== '' &&
+  process.env.DEBUG !== 'false' &&
+  process.env.DEBUG !== '0';
 
 let logFilePath: string | null = null;
 
 function writeToLog(level: string, message: string): void {
-  if (logFilePath) {
+  if (logFilePath !== null) {
     const timestamp = new Date().toISOString();
     const logLine = `[${timestamp}] ${level.padEnd(7)} ${message}\n`;
     try {
@@ -60,7 +64,7 @@ export const logger: Logger = {
     if (isDebug) {
       console.log(chalk.gray('debug'), message);
       writeToLog('debug', message);
-    } else if (logFilePath) {
+    } else if (logFilePath !== null) {
       // Always write debug messages to log file even if not shown on console
       writeToLog('debug', message);
     }
@@ -81,7 +85,7 @@ export const logger: Logger = {
 
   setLogFile(path: string | null): void {
     logFilePath = path;
-    if (path) {
+    if (path !== null) {
       writeToLog('info', `Logging to file: ${path}`);
     }
   },

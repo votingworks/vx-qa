@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { logger } from '../utils/logger.ts';
 import { execCommandWithOutput, execCommand } from '../utils/process.ts';
 import { getVxSuiteEnvironment, readVxSuiteNodeVersion } from './vxsuite-env.ts';
+import { parseJsonObject } from '../utils/json.ts';
 
 /**
  * Marker file recording the commit that was last successfully bootstrapped in
@@ -120,8 +121,8 @@ export async function bootstrapRepo(repoPath: string, commit: string): Promise<v
 
 /** Reads the `packageManager` pin from VxSuite's package.json, e.g. `pnpm@9.15.9`. */
 async function readVxSuitePinnedPnpm(repoPath: string): Promise<string> {
-  const pkg = JSON.parse(await readFile(join(repoPath, 'package.json'), 'utf-8'));
-  const packageManager: unknown = pkg.packageManager;
+  const pkg = parseJsonObject(await readFile(join(repoPath, 'package.json'), 'utf-8'));
+  const packageManager = pkg['packageManager'];
   if (typeof packageManager !== 'string' || !packageManager.startsWith('pnpm@')) {
     throw new Error(`VxSuite package.json does not pin pnpm in "packageManager"`);
   }

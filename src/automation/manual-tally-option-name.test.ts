@@ -78,7 +78,7 @@ describe('manualTallyOptionName', () => {
     };
 
     expect(() => manualTallyOptionName(unmatched, splitPrecinct)).toThrow(
-      /No split of precinct "Precinct 1" has the same districts as ballot style bs-c/,
+      /No split of precinct "Precinct 1" has the same districts as ballot style bs-c/u,
     );
   });
 
@@ -88,6 +88,6 @@ describe('manualTallyOptionName', () => {
       districts: ['shared-1', 'shared-2', 'only-a', 'only-b'],
     };
 
-    expect(() => manualTallyOptionName(superset, splitPrecinct)).toThrow(/cannot be identified/);
+    expect(() => manualTallyOptionName(superset, splitPrecinct)).toThrow(/cannot be identified/u);
   });
 });

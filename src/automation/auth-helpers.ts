@@ -58,7 +58,7 @@ export async function dipSystemAdministratorCardAndLogin(
   const cardController = createMockCardController();
 
   // Set election if provided
-  if (electionPath) {
+  if (electionPath !== undefined && electionPath !== '') {
     await cardController.setElection(electionPath);
   }
 
@@ -91,7 +91,7 @@ export async function dipElectionManagerCardAndLogin(
   const cardController = createMockCardController();
 
   // Set election if provided
-  if (electionPath) {
+  if (electionPath !== undefined && electionPath !== '') {
     await cardController.setElection(electionPath);
   }
 
@@ -121,7 +121,7 @@ export async function insertElectionManagerCardAndLogin(
   const cardController = createMockCardController();
 
   // Set election if provided
-  if (electionPath) {
+  if (electionPath !== undefined && electionPath !== '') {
     await cardController.setElection(electionPath);
   }
 
@@ -148,7 +148,7 @@ export async function insertPollWorkerCardAndLogin(
   const cardController = createMockCardController();
 
   // Set election if provided
-  if (electionPath) {
+  if (electionPath !== undefined && electionPath !== '') {
     await cardController.setElection(electionPath);
   }
 

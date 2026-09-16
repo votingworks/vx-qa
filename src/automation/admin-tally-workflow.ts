@@ -227,7 +227,9 @@ export function manualTallyOptionName(
     name = split.name;
   }
 
-  return ballotStyle.partyName ? `${name} - ${ballotStyle.partyName}` : name;
+  return ballotStyle.partyName !== undefined && ballotStyle.partyName !== ''
+    ? `${name} - ${ballotStyle.partyName}`
+    : name;
 }
 
 /**
@@ -450,7 +452,7 @@ async function fillContest(
   for (const input of allInputs) {
     const inputId = await input.getAttribute('id');
     if (
-      inputId &&
+      inputId !== null &&
       inputId !== 'undervotes' &&
       inputId !== 'overvotes' &&
       inputId !== 'ballotCount'
@@ -844,7 +846,7 @@ async function generateReports(
 
   const reportScope = precinct ? `Single Precinct (${precinct.name}) Tally` : 'Full Election Tally';
 
-  if (exportedPdfPath) {
+  if (exportedPdfPath !== undefined) {
     await stepCollector.addOutput({
       type: 'report',
       label: 'Tally Report PDF',
@@ -853,7 +855,7 @@ async function generateReports(
     });
   }
 
-  if (exportedCsvPath) {
+  if (exportedCsvPath !== undefined) {
     await stepCollector.addOutput({
       type: 'report',
       label: 'Tally Report CSV',
@@ -877,8 +879,9 @@ export async function runAdminTallyWorkflow(
 ): Promise<void> {
   logger.step('Running VxAdmin tally workflow');
 
-  const precinct = precinctId ? election.precincts.find((p) => p.id === precinctId) : undefined;
-  if (precinctId && !precinct) {
+  const precinct =
+    precinctId !== undefined ? election.precincts.find((p) => p.id === precinctId) : undefined;
+  if (precinctId !== undefined && precinct === undefined) {
     throw new Error(`Precinct ${precinctId} not found in election`);
   }
 
@@ -1093,7 +1096,7 @@ async function validateTallyCsv(
   // be scoped to the contest or a stray count is masked by a match elsewhere.
   for (const [contestId, candidates] of actualVotes) {
     for (const [selectionId, actualCount] of candidates) {
-      if (actualCount > 0 && !expectedVotes.get(contestId)?.has(selectionId)) {
+      if (actualCount > 0 && expectedVotes.get(contestId)?.has(selectionId) !== true) {
         mismatches.push(`Unexpected votes in CSV for ${contestId}/${selectionId}: ${actualCount}`);
       }
     }
@@ -1142,7 +1145,7 @@ export async function validateTallyResults(
         if (
           output.type === 'scan-result' &&
           output.accepted &&
-          output.votes &&
+          output.votes !== undefined &&
           output.markPattern !== 'unmarked-write-in'
         ) {
           totalOutputs++;

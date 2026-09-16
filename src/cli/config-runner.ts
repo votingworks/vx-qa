@@ -52,6 +52,8 @@ import { writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import type { AppOrchestrator } from '../apps/orchestrator.ts';
 import { fileURLToPath } from 'node:url';
+import { errorMessage } from '../utils/errors.ts';
+import { stringArray } from '../utils/json.ts';
 
 export interface RunOptions {
   headless?: boolean;
@@ -65,7 +67,7 @@ export interface RunOptions {
  */
 function buildResultsUrl(reportPath: string): string | undefined {
   const jobId = process.env.CIRCLE_WORKFLOW_JOB_ID;
-  if (!jobId) {
+  if (jobId === undefined || jobId === '') {
     return undefined;
   }
   const projectRoot = getProjectRoot();
@@ -129,14 +131,14 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
   const handleShutdown = async (signal: string) => {
     logger.info(`\nReceived ${signal}, cleaning up...`);
     try {
-      if (orchestrator?.isRunning()) {
+      if (orchestrator?.isRunning() === true) {
         await orchestrator.stopApp();
       }
       if (browser) {
         await browser.close();
       }
     } catch (error) {
-      logger.error(`Error during cleanup: ${(error as Error).message}`);
+      logger.error(`Error during cleanup: ${errorMessage(error)}`);
     }
     process.exit(1);
   };
@@ -235,11 +237,9 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     // overvotes may be cast. This drives which marked variants of each ballot
     // we scan and the outcome we expect for each.
     const scanExpectations = scanExpectationsFromSystemSettings(electionPackage.systemSettings);
-    const precinctScanAdjudicationReasons = Array.isArray(
+    const precinctScanAdjudicationReasons = stringArray(
       electionPackage.systemSettings['precinctScanAdjudicationReasons'],
-    )
-      ? (electionPackage.systemSettings['precinctScanAdjudicationReasons'] as string[])
-      : [];
+    );
 
     if (scanExpectations.disallowCastingOvervotes && !scanExpectations.overvoteRequiresReview) {
       logger.warn(
@@ -285,7 +285,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
 
       const pdfName =
         `ballot-${ballot.ballotStyleId}-${ballot.precinctId}-${ballot.ballotMode}-${ballot.ballotType}.pdf`.replaceAll(
-          /[/ ]/g,
+          /[/ ]/gu,
           '_',
         );
       const pdfPath = join(ballotsPath, pdfName);
@@ -313,7 +313,7 @@ export async function runQAWorkflow(config: QARunConfig, options: RunOptions = {
     }
 
     // Apply ballot limit if specified
-    if (options.limitBallots && options.limitBallots > 0) {
+    if (options.limitBallots !== undefined && options.limitBallots > 0) {
       const originalCount = ballotsToScan.length;
       ballotsToScan.splice(options.limitBallots);
       logger.info(`Limited ballots from ${originalCount} to ${ballotsToScan.length} for testing`);

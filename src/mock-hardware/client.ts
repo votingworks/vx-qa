@@ -40,7 +40,8 @@ export function createDevDockClient(port = 3000): DevDockClient {
           throw new Error(`Dev-dock call failed: ${response.status} ${text}`);
         }
 
-        const data = await response.json();
+        const data: unknown = await response.json();
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- dev-dock responses are unvalidated
         return data as T;
       } catch (error) {
         if (error instanceof Error && error.message.includes('ECONNREFUSED')) {

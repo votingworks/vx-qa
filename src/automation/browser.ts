@@ -76,7 +76,7 @@ export async function navigateToApp(page: Page, attempts = 10): Promise<void> {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const isConnectionError =
-        /ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_EMPTY_RESPONSE|NS_ERROR/i.test(message);
+        /ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_EMPTY_RESPONSE|NS_ERROR/iu.test(message);
       if (!isConnectionError || attempt >= attempts) {
         throw error;
       }
@@ -108,7 +108,7 @@ export async function waitForText(
  * Debug helper - dump current page state to console and take a screenshot
  */
 export async function debugPageState(page: Page, label: string, outputDir?: string): Promise<void> {
-  const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
+  const timestamp = new Date().toISOString().replaceAll(/[:.]/gu, '-');
 
   console.log(`\n${'='.repeat(60)}`);
   console.log(`DEBUG: ${label}`);
@@ -157,8 +157,8 @@ export async function debugPageState(page: Page, label: string, outputDir?: stri
   console.log(`\nHeadings:\n${headingTexts.join('\n')}`);
 
   // Take debug screenshot
-  if (outputDir) {
-    const screenshotPath = `${outputDir}/debug-${timestamp}-${label.replaceAll(/\s+/g, '-')}.png`;
+  if (outputDir !== undefined && outputDir !== '') {
+    const screenshotPath = `${outputDir}/debug-${timestamp}-${label.replaceAll(/\s+/gu, '-')}.png`;
     await page.screenshot({ path: screenshotPath, fullPage: true });
     console.log(`\nScreenshot saved: ${screenshotPath}`);
   }

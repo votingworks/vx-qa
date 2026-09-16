@@ -10,13 +10,26 @@ import { readFile } from 'node:fs/promises';
 import http from 'node:http';
 import { dirname, join } from 'node:path';
 import { logger, printHeader } from '../utils/logger.ts';
-import { validateConfig } from '../config/schema.ts';
+import { validateConfig, parseRawConfig } from '../config/schema.ts';
 import { resolvePath, generateTimestampedDir, ensureDir } from '../utils/paths.ts';
 import { runQAWorkflow } from './config-runner.ts';
 import { downloadFile } from '../ballots/election-loader.ts';
 import type { QARunConfig } from '../config/types.ts';
 import { SUPPORTED_VERSIONS } from '../config/versions.ts';
 import type { VxSuiteVersion } from '../config/versions.ts';
+import { z } from 'zod/v4';
+
+const PipelineRequestSchema = z.object({
+  parameters: z
+    .object({
+      export_package_url: z.string().optional(),
+      webhook_url: z.string().optional(),
+      qa_run_id: z.string().optional(),
+      election_id: z.string().optional(),
+      vxsuite_version: z.string().optional(),
+    })
+    .optional(),
+});
 
 export interface ServeOptions {
   port: number;
@@ -35,7 +48,7 @@ export function startServe(options: ServeOptions): void {
   let pipelineCounter = 0;
 
   const server = http.createServer((req, res) => {
-    if (req.method === 'POST' && req.url?.match(/\/api\/v2\/project\/.*\/pipeline/)) {
+    if (req.method === 'POST' && req.url?.match(/\/api\/v2\/project\/.*\/pipeline/u)) {
       let body = '';
       req.setEncoding('utf8');
 
@@ -50,29 +63,29 @@ export function startServe(options: ServeOptions): void {
           return;
         }
 
-        let data: {
-          parameters?: {
-            export_package_url?: string;
-            webhook_url?: string;
-            qa_run_id?: string;
-            election_id?: string;
-            vxsuite_version?: string;
-          };
-        };
-        try {
-          data = JSON.parse(body) as typeof data;
-        } catch {
+        const parsed = PipelineRequestSchema.safeParse(
+          ((): unknown => {
+            try {
+              return JSON.parse(body) as unknown;
+            } catch {
+              return undefined;
+            }
+          })(),
+        );
+        if (!parsed.success) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid request body' }));
           return;
         }
 
-        const params = data.parameters ?? {};
+        const params = parsed.data.parameters ?? {};
         const exportPackageUrl = params.export_package_url;
         const webhookUrl = params.webhook_url;
-        const vxsuiteVersion = params.vxsuite_version;
+        const vxsuiteVersion = SUPPORTED_VERSIONS.find(
+          (supported) => supported === params.vxsuite_version,
+        );
 
-        if (!exportPackageUrl) {
+        if (exportPackageUrl === undefined || exportPackageUrl === '') {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(
             JSON.stringify({
@@ -82,11 +95,11 @@ export function startServe(options: ServeOptions): void {
           return;
         }
 
-        if (vxsuiteVersion && !(SUPPORTED_VERSIONS as readonly string[]).includes(vxsuiteVersion)) {
+        if (params.vxsuite_version !== undefined && vxsuiteVersion === undefined) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(
             JSON.stringify({
-              error: `Invalid vxsuite_version "${vxsuiteVersion}". Supported: ${SUPPORTED_VERSIONS.join(', ')}`,
+              error: `Invalid vxsuite_version "${params.vxsuite_version}". Supported: ${SUPPORTED_VERSIONS.join(', ')}`,
             }),
           );
           return;
@@ -117,12 +130,7 @@ export function startServe(options: ServeOptions): void {
         running = true;
         void (async () => {
           try {
-            await runPipeline(
-              options,
-              exportPackageUrl,
-              webhookUrl,
-              vxsuiteVersion as VxSuiteVersion | undefined,
-            );
+            await runPipeline(options, exportPackageUrl, webhookUrl, vxsuiteVersion);
           } finally {
             running = false;
           }
@@ -166,8 +174,7 @@ async function runPipeline(
   try {
     // Load the config
     const configPath = resolvePath(options.configPath);
-    const configData = await readFile(configPath, 'utf-8');
-    const parsedConfig = JSON.parse(configData);
+    const parsedConfig = parseRawConfig(await readFile(configPath, 'utf-8'));
     const config: QARunConfig = validateConfig(parsedConfig, configPath);
     config.basePath = dirname(configPath);
 
@@ -196,7 +203,10 @@ async function runPipeline(
       headless: options.headless,
       limitBallots: options.limitBallots,
       limitManualTallies: options.limitManualTallies,
-      webhook: webhookUrl ? { url: webhookUrl, secret: options.webhookSecret } : undefined,
+      webhook:
+        webhookUrl !== undefined && webhookUrl !== ''
+          ? { url: webhookUrl, secret: options.webhookSecret }
+          : undefined,
     });
 
     logger.success('QA run complete');

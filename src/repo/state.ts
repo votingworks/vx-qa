@@ -7,6 +7,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { logger } from '../utils/logger.ts';
 import { resolvePath } from '../utils/paths.ts';
+import { errorMessage } from '../utils/errors.ts';
 
 export class State {
   static defaultFor(repoPath: string): State {
@@ -93,6 +94,6 @@ async function clearDirectory(dirPath: string): Promise<void> {
     await rm(resolved, { recursive: true, force: true });
     logger.debug(`Cleared ${resolved}`);
   } catch (error) {
-    logger.warn(`Failed to clear ${resolved}: ${(error as Error).message}`);
+    logger.warn(`Failed to clear ${resolved}: ${errorMessage(error)}`);
   }
 }

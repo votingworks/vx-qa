@@ -20,7 +20,7 @@ const VXSUITE_REPO_URL = 'https://github.com/votingworks/vxsuite.git';
 export async function cloneOrUpdateRepo(config: VxSuiteConfig): Promise<string> {
   const repoPath = resolvePath(config.repoPath);
 
-  if (config.forceClone && existsSync(repoPath)) {
+  if (config.forceClone === true && existsSync(repoPath)) {
     logger.info('Force clone requested, removing existing repository...');
     await rm(repoPath, { recursive: true, force: true });
   }
@@ -140,11 +140,11 @@ async function runPatchCommand(
     let stdout = '';
     let stderr = '';
 
-    patchProcess.stdout?.on('data', (data) => {
+    patchProcess.stdout?.on('data', (data: Buffer) => {
       stdout += data.toString();
     });
 
-    patchProcess.stderr?.on('data', (data) => {
+    patchProcess.stderr?.on('data', (data: Buffer) => {
       stderr += data.toString();
     });
 

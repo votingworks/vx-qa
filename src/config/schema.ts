@@ -86,6 +86,16 @@ export const QARunConfigSchema = z
 export type QARunConfigOutput = z.output<typeof QARunConfigSchema>;
 
 /**
+ * Parses raw configuration JSON ahead of validation, so command-line overrides
+ * can be applied before version-dependent checks run.
+ */
+export function parseRawConfig(contents: string): Record<string, unknown> {
+  return z
+    .looseObject({ vxsuite: z.record(z.string(), z.unknown()).optional() })
+    .parse(JSON.parse(contents) as unknown);
+}
+
+/**
  * Validate a configuration object
  */
 export function validateConfig(config: unknown, configPath: string): QARunConfigOutput {

@@ -18,6 +18,7 @@ import { waitForDevDock } from '../mock-hardware/client.ts';
 import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import net from 'node:net';
+import { errorMessage } from '../utils/errors.ts';
 
 /**
  * Check if a port is free (not in use). Uses a TCP connection attempt rather
@@ -133,7 +134,7 @@ export function createAppOrchestrator(repoPath: string, logDir?: string): AppOrc
         logger.debug(`Starting ${app} with mock environment`);
 
         // Set up app log file
-        if (logDir) {
+        if (logDir !== undefined && logDir !== '') {
           state.appLogPath = join(logDir, `${app}-app.log`);
           state.appOutput = [];
         }
@@ -154,7 +155,7 @@ export function createAppOrchestrator(repoPath: string, logDir?: string): AppOrc
               logger.debug(`[${app}] ${trimmedLine}`);
 
               // Write to app log file
-              if (state.appLogPath) {
+              if (state.appLogPath !== null) {
                 const timestamp = new Date().toISOString();
                 const logLine = `[${timestamp}] [stdout] ${trimmedLine}\n`;
                 try {
@@ -180,7 +181,7 @@ export function createAppOrchestrator(repoPath: string, logDir?: string): AppOrc
               logger.debug(`[${app}:err] ${trimmedLine}`);
 
               // Write to app log file
-              if (state.appLogPath) {
+              if (state.appLogPath !== null) {
                 const timestamp = new Date().toISOString();
                 const logLine = `[${timestamp}] [stderr] ${trimmedLine}\n`;
                 try {
@@ -243,7 +244,7 @@ export function createAppOrchestrator(repoPath: string, logDir?: string): AppOrc
         }
 
         // Inform user about log file location
-        if (state.appLogPath) {
+        if (state.appLogPath !== null) {
           logger.error(`Full app output saved to: ${state.appLogPath}`);
         }
 
@@ -267,7 +268,7 @@ export function createAppOrchestrator(repoPath: string, logDir?: string): AppOrc
 
       try {
         const pid = state.process.pid;
-        if (pid) {
+        if (pid !== undefined) {
           await killProcessTree(pid);
         }
 
@@ -313,7 +314,7 @@ export function createAppOrchestrator(repoPath: string, logDir?: string): AppOrc
 
         spinner.succeed(`${appName} app stopped`);
       } catch (error) {
-        spinner.fail(`Error stopping app: ${(error as Error).message}`);
+        spinner.fail(`Error stopping app: ${errorMessage(error)}`);
         state.process = null;
         state.currentApp = null;
         state.appLogPath = null;

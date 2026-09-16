@@ -5,6 +5,7 @@
 
 import type { BallotToScan } from '../automation/scan-workflow.ts';
 import type { BallotPdfInfo } from './election-loader.ts';
+import { stringArray } from '../utils/json.ts';
 
 /**
  * The election settings that decide whether VxScan counts a ballot outright or
@@ -24,9 +25,7 @@ export interface ScanExpectations {
 export function scanExpectationsFromSystemSettings(
   systemSettings: Record<string, unknown>,
 ): ScanExpectations {
-  const reasons = Array.isArray(systemSettings['precinctScanAdjudicationReasons'])
-    ? (systemSettings['precinctScanAdjudicationReasons'] as string[])
-    : [];
+  const reasons = stringArray(systemSettings['precinctScanAdjudicationReasons']);
 
   return {
     blankBallotRequiresReview: reasons.includes('BlankBallot'),

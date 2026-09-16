@@ -3,6 +3,7 @@
  */
 
 import { describe, test, expect } from 'vitest';
+import assert from 'node:assert';
 import { ZodError } from 'zod/v4';
 import {
   getContestsForBallotStyle,
@@ -405,6 +406,9 @@ describe('normalizeGridLayouts', () => {
 
 describe('normalizeYesNoContests', () => {
   test('derives yesOption/noOption from a v4.1 options[] array', () => {
+    // The v4.1 wire shape has no yesOption/noOption, which is what this
+    // normalizes; the v4.0-style type cannot describe it.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     const yesno = {
       type: 'yesno',
       id: 'measure-1',
@@ -423,7 +427,8 @@ describe('normalizeYesNoContests', () => {
 
     normalizeYesNoContests(election);
 
-    const result = election.contests[0] as YesNoContest;
+    const [result] = election.contests;
+    assert.ok(result?.type === 'yesno');
     expect(result.yesOption).toEqual({ id: 'measure-1-yes', label: 'Yes' });
     expect(result.noOption).toEqual({ id: 'measure-1-no', label: 'No' });
   });
@@ -445,7 +450,8 @@ describe('normalizeYesNoContests', () => {
 
     normalizeYesNoContests(election);
 
-    const result = election.contests[0] as YesNoContest;
+    const [result] = election.contests;
+    assert.ok(result?.type === 'yesno');
     expect(result.yesOption).toEqual({ id: 'y', label: 'Yes' });
     expect(result.noOption).toEqual({ id: 'n', label: 'No' });
   });
@@ -516,7 +522,7 @@ describe('assertNoDuplicateBallotKeys', () => {
   test('throws when two entries share the same key', () => {
     expect(() => {
       assertNoDuplicateBallotKeys([ballot(), ballot()]);
-    }).toThrow(/Duplicate ballot entry/);
+    }).toThrow(/Duplicate ballot entry/u);
   });
 
   test('does not confuse entries that differ only in one field', () => {

@@ -11,7 +11,7 @@ import {
   generateUnmarkedWriteInVotes,
   generateMarkedWriteInVotes,
 } from './ballot-marker.ts';
-import type { Candidate, Election, CandidateContest, YesNoContest } from './election-loader.ts';
+import type { Election, CandidateContest, YesNoContest, Vote } from './election-loader.ts';
 
 /**
  * Helper to create a minimal election for testing
@@ -130,11 +130,7 @@ describe('generateValidVotes', () => {
 
     const votes = generateValidVotes(createTestElection([contest]), 'test-ballot-style');
 
-    expect(votes['school-board'].map((vote) => (vote as Candidate).writeInIndex)).toEqual([
-      undefined,
-      0,
-      1,
-    ]);
+    expect(writeInIndexes(votes['school-board'])).toEqual([undefined, 0, 1]);
   });
 
   test('generate yes vote for yes/no contest', () => {
@@ -552,3 +548,8 @@ describe('generateMarkedWriteInVotes', () => {
     });
   });
 });
+
+/** Returns each vote's write-in index, or `undefined` for votes given as ids. */
+function writeInIndexes(votes: Vote[]): Array<number | undefined> {
+  return votes.map((vote) => (typeof vote === 'string' ? undefined : vote.writeInIndex));
+}

@@ -39,6 +39,13 @@
 
     // Type strictness beyond the enabled categories.
     "typescript/no-explicit-any": "error",
+    "typescript/strict-boolean-expressions": "error",
+    "typescript/no-unsafe-argument": "error",
+    "typescript/no-unsafe-assignment": "error",
+    "typescript/no-unsafe-call": "error",
+    "typescript/no-unsafe-member-access": "error",
+    "typescript/no-unsafe-return": "error",
+    "typescript/no-unsafe-type-assertion": "error",
     "typescript/no-non-null-assertion": "error",
     "typescript/no-non-null-asserted-nullish-coalescing": "error",
     "typescript/non-nullable-type-assertion-style": "error",
@@ -74,15 +81,6 @@
     "unicorn/error-message": "error",
     "unicorn/prefer-type-error": "error",
 
-    // Existing backlog: keep visible, do not block.
-    "typescript/strict-boolean-expressions": "warn",
-    "typescript/no-unsafe-argument": "warn",
-    "typescript/no-unsafe-assignment": "warn",
-    "typescript/no-unsafe-call": "warn",
-    "typescript/no-unsafe-member-access": "warn",
-    "typescript/no-unsafe-return": "warn",
-    "typescript/no-unsafe-type-assertion": "warn",
-
     // Size and shape metrics that do not fit this codebase.
     "no-await-in-loop": "off",
     "max-lines": "off",
@@ -97,7 +95,7 @@
     "no-inline-comments": "off",
     "unicorn/no-negated-condition": "off",
     "typescript/prefer-readonly-parameter-types": "off",
-    "require-unicode-regexp": "warn",
+    "require-unicode-regexp": "error",
 
     // Conflicts with `promise-function-async`, which marks promise-returning
     // wrappers async without introducing an await.

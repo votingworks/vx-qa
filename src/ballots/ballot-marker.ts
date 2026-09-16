@@ -18,6 +18,27 @@ export interface MarkedBallot {
   votes: VotesDict;
 }
 
+interface MarkingModule {
+  generateMarkOverlay: (
+    election: Election,
+    ballotStyleId: string,
+    votes: VotesDict,
+    offset: { offsetMmX: number; offsetMmY: number },
+    baseBallotPdf: Uint8Array,
+    onDraw?: (
+      type: 'bubble' | 'write-in-text',
+      gridPosition: GridPosition,
+      vote: Vote,
+    ) => 'draw' | 'ignore',
+  ) => Promise<Uint8Array>;
+}
+
+/** Loads VxSuite's compiled marking library from the checkout at `repoPath`. */
+async function importMarkingModule(repoPath: string): Promise<MarkingModule> {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- built JS from the VxSuite checkout, no types available
+  return (await import(join(repoPath, 'libs/hmpb/build/marking.js'))) as MarkingModule;
+}
+
 /**
  * Generate a marked ballot PDF using VxSuite's marking library
  */
@@ -35,8 +56,8 @@ export async function generateMarkedBallot(
 ): Promise<Uint8Array> {
   logger.debug(`Generating marked ballot for style ${ballotStyleId}`);
 
-  const { generateMarkOverlay } = await import(join(repoPath, 'libs/hmpb/build/marking.js'));
-  return await generateMarkOverlay(
+  const { generateMarkOverlay } = await importMarkingModule(repoPath);
+  return generateMarkOverlay(
     election,
     ballotStyleId,
     votes,
