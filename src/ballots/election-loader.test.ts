@@ -311,6 +311,7 @@ describe('normalizeGridLayouts', () => {
       row: 5,
       contestId: 'mayor',
       optionId: 'alice',
+      bounds: { x: 3, y: 4, width: 2, height: 2 },
     });
 
     expect(layout.gridPositions[1]).toEqual({
@@ -323,6 +324,7 @@ describe('normalizeGridLayouts', () => {
       writeInIndex: 0,
       // grid rect (row/column/width/height) converted to Rect (x/y/width/height)
       writeInArea: { x: 8, y: 6, width: 12, height: 3 },
+      bounds: { x: 3, y: 6, width: 2, height: 2 },
     });
 
     // Bubble at column 4 in an option box spanning columns 3-5: 1 to its left,

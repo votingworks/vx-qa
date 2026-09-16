@@ -4,7 +4,13 @@
  */
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
-import type { Election, GridPosition, OptionBoundsFromTargetMark } from './election-loader.js';
+import type {
+  Election,
+  GridPosition,
+  GridPositionWriteIn,
+  OptionBoundsFromTargetMark,
+  Rect,
+} from './election-loader.js';
 
 const IN = 72; // PDF points per inch
 
@@ -73,6 +79,37 @@ export function gridToPdf(
   const topDownY = geometry.originY + (row / (geometry.markCountY - 1)) * geometry.gridHeight;
   const y = geometry.pageHeight - topDownY;
   return { x, y };
+}
+
+export function gridRectToPdfRect(
+  rect: Rect,
+  geometry: PageGeometry,
+): { x: number; y: number; width: number; height: number } {
+  const topLeft = gridToPdf(rect.x, rect.y, geometry);
+  const bottomRight = gridToPdf(rect.x + rect.width, rect.y + rect.height, geometry);
+  return {
+    x: topLeft.x,
+    y: bottomRight.y,
+    width: bottomRight.x - topLeft.x,
+    height: topLeft.y - bottomRight.y,
+  };
+}
+
+export function writeInCropArea(
+  gridPosition: GridPosition,
+  optionBoundsFromTargetMark: OptionBoundsFromTargetMark,
+): Rect {
+  if (gridPosition.bounds) {
+    return gridPosition.bounds;
+  }
+
+  const { top, right, bottom, left } = optionBoundsFromTargetMark;
+  return {
+    x: gridPosition.column - left,
+    y: gridPosition.row - top,
+    width: left + right,
+    height: top + bottom,
+  };
 }
 
 function fitText(
@@ -217,48 +254,72 @@ function addProofAnnotationsToPage(
         color: rgb(0.3, 0.3, 0.3),
       });
     } else {
-      // Draw write-in area overlay
-      const writeInArea = gp.writeInArea;
-      const topLeft = gridToPdf(writeInArea.x, writeInArea.y, geometry);
-      const bottomRight = gridToPdf(
-        writeInArea.x + writeInArea.width,
-        writeInArea.y + writeInArea.height,
-        geometry,
-      );
-
-      const rectX = topLeft.x;
-      const rectY = bottomRight.y;
-      const rectWidth = bottomRight.x - topLeft.x;
-      const rectHeight = topLeft.y - bottomRight.y;
-
-      page.drawRectangle({
-        x: rectX,
-        y: rectY,
-        width: rectWidth,
-        height: rectHeight,
-        color: rgb(0.96, 0.87, 0.7),
-        opacity: 0.5,
-        borderColor: rgb(0.7, 0.5, 0.2),
-        borderWidth: 0.5,
-      });
-
-      const wiLabel = fitText(
-        `Write-in #${gp.writeInIndex + 1} — ${contestTitle}`,
-        rectWidth - 4,
-        fonts.regular,
-        6,
-        3.5,
-      );
-
-      page.drawText(wiLabel.text, {
-        x: rectX + 2,
-        y: rectY + rectHeight - wiLabel.fontSize - 2,
-        size: wiLabel.fontSize,
-        font: fonts.regular,
-        color: rgb(0.4, 0.3, 0.1),
-      });
+      drawUnmarkedWriteInArea(page, gp, geometry, fonts, contestTitle);
+      drawWriteInCropArea(page, gp, geometry, fonts, contestTitle, optionBoundsFromTargetMark);
     }
   }
+}
+
+const UNMARKED_WRITE_IN_AREA_FILL = rgb(0.96, 0.87, 0.7);
+const UNMARKED_WRITE_IN_AREA_BORDER = rgb(0.7, 0.5, 0.2);
+const UNMARKED_WRITE_IN_AREA_TEXT = rgb(0.4, 0.3, 0.1);
+const WRITE_IN_CROP_AREA_BORDER = rgb(0.1, 0.3, 0.75);
+const WRITE_IN_CROP_AREA_TEXT = rgb(0.1, 0.25, 0.6);
+
+function writeInLabel(gp: GridPositionWriteIn, contestTitle: string): string {
+  return `Write-in #${gp.writeInIndex + 1} — ${contestTitle}`;
+}
+
+function drawUnmarkedWriteInArea(
+  page: PDFPage,
+  gp: GridPositionWriteIn,
+  geometry: PageGeometry,
+  fonts: Fonts,
+  contestTitle: string,
+): void {
+  const rect = gridRectToPdfRect(gp.writeInArea, geometry);
+  page.drawRectangle({
+    ...rect,
+    color: UNMARKED_WRITE_IN_AREA_FILL,
+    opacity: 0.5,
+    borderColor: UNMARKED_WRITE_IN_AREA_BORDER,
+    borderWidth: 0.5,
+  });
+
+  const label = fitText(writeInLabel(gp, contestTitle), rect.width - 4, fonts.regular, 6, 3.5);
+  page.drawText(label.text, {
+    x: rect.x + 2,
+    y: rect.y + rect.height - label.fontSize - 2,
+    size: label.fontSize,
+    font: fonts.regular,
+    color: UNMARKED_WRITE_IN_AREA_TEXT,
+  });
+}
+
+function drawWriteInCropArea(
+  page: PDFPage,
+  gp: GridPositionWriteIn,
+  geometry: PageGeometry,
+  fonts: Fonts,
+  contestTitle: string,
+  optionBoundsFromTargetMark: OptionBoundsFromTargetMark,
+): void {
+  const rect = gridRectToPdfRect(writeInCropArea(gp, optionBoundsFromTargetMark), geometry);
+  page.drawRectangle({
+    ...rect,
+    borderColor: WRITE_IN_CROP_AREA_BORDER,
+    borderWidth: 0.75,
+    borderDashArray: [3, 2],
+  });
+
+  const label = fitText(writeInLabel(gp, contestTitle), rect.width - 4, fonts.bold, 5.5, 3.5);
+  page.drawText(label.text, {
+    x: rect.x + 2,
+    y: rect.y + 2,
+    size: label.fontSize,
+    font: fonts.bold,
+    color: WRITE_IN_CROP_AREA_TEXT,
+  });
 }
 
 export async function generateProofBallot(

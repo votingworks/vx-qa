@@ -9,6 +9,7 @@ import {
   gridToPdf,
   getOptionLabel,
   labelSide,
+  writeInCropArea,
 } from './proof-ballot.js';
 import { loadElectionPackage } from './election-loader.js';
 import { expectToMatchPdfSnapshot } from '../test/pdf-snapshot.js';
@@ -141,6 +142,63 @@ describe('gridToPdf', () => {
 
     expect(x).toBeCloseTo(geo.originX + geo.gridWidth / 2);
     expect(y).toBeCloseTo(geo.pageHeight - geo.originY - geo.gridHeight / 2);
+  });
+});
+
+describe('writeInCropArea', () => {
+  const outset = { top: 0.98, right: 0.76, bottom: 1.17, left: 9.2 };
+
+  const writeIn: GridPositionWriteIn = {
+    type: 'write-in',
+    sheetNumber: 1,
+    side: 'front',
+    column: 10,
+    row: 16,
+    contestId: 'mayor',
+    writeInIndex: 0,
+    writeInArea: { x: 1.45, y: 15.6, width: 7.8, height: 1 },
+  };
+
+  test('uses the shared outset when the option has no bounds (v4.0)', () => {
+    expect(writeInCropArea(writeIn, outset)).toEqual({
+      x: 10 - 9.2,
+      y: 16 - 0.98,
+      width: 9.2 + 0.76,
+      height: 0.98 + 1.17,
+    });
+  });
+
+  test("prefers the option's own bounds when present (v4.1+)", () => {
+    const bounds = { x: 0.95, y: 15.43, width: 9.96, height: 2.15 };
+
+    expect(writeInCropArea({ ...writeIn, bounds }, outset)).toEqual(bounds);
+  });
+
+  test('crop area encloses the scored write-in area', () => {
+    const crop = writeInCropArea(writeIn, outset);
+    const { writeInArea } = writeIn;
+
+    expect(crop.x).toBeLessThanOrEqual(writeInArea.x);
+    expect(crop.y).toBeLessThanOrEqual(writeInArea.y);
+    expect(crop.x + crop.width).toBeGreaterThanOrEqual(writeInArea.x + writeInArea.width);
+    expect(crop.y + crop.height).toBeGreaterThanOrEqual(writeInArea.y + writeInArea.height);
+  });
+
+  test('crop area contains the target mark', () => {
+    const crop = writeInCropArea(writeIn, outset);
+
+    expect(writeIn.column).toBeGreaterThanOrEqual(crop.x);
+    expect(writeIn.column).toBeLessThanOrEqual(crop.x + crop.width);
+    expect(writeIn.row).toBeGreaterThanOrEqual(crop.y);
+    expect(writeIn.row).toBeLessThanOrEqual(crop.y + crop.height);
+  });
+
+  test('grows to the right when the mark sits left of the option text', () => {
+    const alternateOutset = { top: 0.98, right: 9.2, bottom: 1.17, left: 0.76 };
+    const crop = writeInCropArea({ ...writeIn, column: 1.7 }, alternateOutset);
+
+    expect(crop.x).toBeCloseTo(1.7 - 0.76);
+    expect(crop.width).toBeCloseTo(0.76 + 9.2);
   });
 });
 
