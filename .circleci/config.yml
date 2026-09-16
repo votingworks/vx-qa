@@ -115,7 +115,7 @@ jobs:
             fi
             echo "Config: vx-qa-config-${CONFIG}.json"
             cd test-fixtures
-            DEBUG=1 node ../dist/index.js run --config "vx-qa-config-${CONFIG}.json"
+            DEBUG=1 node ../src/index.ts run --config "vx-qa-config-${CONFIG}.json"
           no_output_timeout: 30m
       - save_cache:
           name: Save VxSuite Repository Cache
@@ -171,7 +171,7 @@ jobs:
             if [ -n "<< pipeline.parameters.vxsuite_version >>" ]; then
               VERSION_ARG="--vxsuite-version << pipeline.parameters.vxsuite_version >>"
             fi
-            node dist/index.js run \
+            node src/index.ts run \
               --config test-fixtures/vx-qa-config-vxdesign.json \
               --election "<< pipeline.parameters.export_package_url >>" \
               --webhook-url "<< pipeline.parameters.webhook_url >>" \
