@@ -42,36 +42,15 @@ describe('readVxSuiteNodeVersion', () => {
 });
 
 describe('buildVxSuiteEnvironment', () => {
-  test('sets use-node-version and drops the running Node from PATH', () => {
+  test('sets the pnpm version pins and preserves the base environment', () => {
     const env = buildVxSuiteEnvironment({
       base: { PATH: '/managers/node/24.19.0/bin:/usr/local/bin:/usr/bin', HOME: '/home/vx' },
       nodeVersion: '20.19.0',
-      execPath: '/managers/node/24.19.0/bin/node',
     });
 
-    expect(env.PATH).toBe('/usr/local/bin:/usr/bin');
+    expect(env.PATH).toBe('/managers/node/24.19.0/bin:/usr/local/bin:/usr/bin');
     expect(env.npm_config_use_node_version).toBe('20.19.0');
     expect(env.npm_config_manage_package_manager_versions).toBe('true');
     expect(env.HOME).toBe('/home/vx');
-  });
-
-  test('leaves PATH alone when the running Node is not on it', () => {
-    const env = buildVxSuiteEnvironment({
-      base: { PATH: '/usr/local/bin:/usr/bin' },
-      nodeVersion: '20.19.0',
-      execPath: '/nix/store/abc/bin/node',
-    });
-
-    expect(env.PATH).toBe('/usr/local/bin:/usr/bin');
-  });
-
-  test('tolerates a missing PATH', () => {
-    const env = buildVxSuiteEnvironment({
-      base: {},
-      nodeVersion: '20.19.0',
-      execPath: '/usr/bin/node',
-    });
-
-    expect(env.PATH).toBe('');
   });
 });

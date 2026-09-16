@@ -10,7 +10,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { delimiter, dirname, join } from 'node:path';
+import { join } from 'node:path';
 
 export const NODE_VERSION_FILE = '.node-version';
 
@@ -36,29 +36,19 @@ export interface VxSuiteEnvironmentOptions {
   base: NodeJS.ProcessEnv;
   /** Node.js version VxSuite should run under. */
   nodeVersion: string;
-  /** Path to the Node.js binary running vx-qa. Its directory is removed from PATH. */
-  execPath: string;
 }
 
 /**
- * Builds a VxSuite environment from explicit inputs. Version managers that
- * launch vx-qa often prepend its Node's `bin` directory to PATH, which would
- * otherwise shadow the pinned version for any direct `node` invocation.
+ * Builds a VxSuite environment from explicit inputs. Every VxSuite command runs
+ * through `pnpm`, which puts the pinned Node ahead of the host's on PATH, so
+ * the host PATH is left untouched and `pnpm` itself stays reachable.
  */
 export function buildVxSuiteEnvironment({
   base,
   nodeVersion,
-  execPath,
 }: VxSuiteEnvironmentOptions): NodeJS.ProcessEnv {
-  const ownBinDir = dirname(execPath);
-  const path = (base.PATH ?? '')
-    .split(delimiter)
-    .filter((entry) => entry !== '' && entry !== ownBinDir)
-    .join(delimiter);
-
   return {
     ...base,
-    PATH: path,
     npm_config_use_node_version: nodeVersion,
     npm_config_manage_package_manager_versions: 'true',
   };
@@ -73,7 +63,6 @@ export function getVxSuiteEnvironment(
     ...buildVxSuiteEnvironment({
       base: process.env,
       nodeVersion: readVxSuiteNodeVersion(repoPath),
-      execPath: process.execPath,
     }),
     ...extra,
   };
